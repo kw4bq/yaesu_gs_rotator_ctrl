@@ -46,8 +46,7 @@
 #include "rotator_language.h"
 #include "rotator_debug.h"
 
-
-/*----------------------- variables -------------------------------------*/
+SERIAL_PORT_CLASS * control_port;
 
 byte incoming_serial_byte = 0;
 
@@ -103,19 +102,14 @@ struct config_t {
   byte el_stepper_motor_last_pin_state;
   byte az_stepper_motor_last_direction;
   byte el_stepper_motor_last_direction;
-
   int azimuth_starting_point;
   int azimuth_rotation_capability;
-  
   byte brake_az_disabled;
   float clock_timezone_offset;
   byte autopark_active;
   unsigned int autopark_time_minutes;
   byte azimuth_display_mode;
 } configuration;
-
-
-
 
 #ifdef FEATURE_TIMED_BUFFER
   int timed_buffer_azimuths[TIMED_INTERVAL_ARRAY_SIZE];
@@ -165,40 +159,6 @@ byte current_az_speed_voltage = 0;
   float average_loop_time = 0;
 #endif // DEBUG_PROFILE_LOOP_TIME
 
-#if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_MASTER_WITH_SERIAL_SLAVE) 
-  byte serial_read_event_flag[] = { 0, 0, 0, 0, 0 };
-  byte control_port_buffer_carriage_return_flag = 0;
-#endif
-
-#if defined(FEATURE_MASTER_WITH_SERIAL_SLAVE) || defined(FEATURE_MASTER_WITH_ETHERNET_SLAVE)
-  byte remote_unit_port_buffer[COMMAND_BUFFER_SIZE];
-  int remote_unit_port_buffer_index = 0;
-  byte remote_unit_port_buffer_carriage_return_flag = 0;
-  unsigned long serial1_last_receive_time = 0;
-  byte remote_unit_command_submitted = 0;
-  unsigned long last_remote_unit_command_time = 0;
-  unsigned int remote_unit_command_timeouts = 0;
-  unsigned int remote_unit_bad_results = 0;
-  unsigned long remote_unit_good_results = 0;
-  unsigned int remote_unit_incoming_buffer_timeouts = 0;
-  byte remote_unit_command_results_available = 0;
-  float remote_unit_command_result_float = 0;
-  byte remote_port_rx_sniff = 0;
-  byte remote_port_tx_sniff = 0;
-  byte suspend_remote_commands = 0;
-  #if defined(OPTION_SYNC_MASTER_CLOCK_TO_SLAVE) && defined(FEATURE_CLOCK)
-    byte clock_synced_to_remote = 0;
-  #endif
-#endif //FEATURE_MASTER_WITH_SERIAL_SLAVE
-
-#if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(CONTROL_PROTOCOL_EMULATION) || defined(FEATURE_CLOCK) || defined(UNDER_DEVELOPMENT_REMOTE_UNIT_COMMANDS)
-  SERIAL_PORT_CLASS * control_port;
-#endif
-
-#if defined(FEATURE_MASTER_WITH_SERIAL_SLAVE)
-  SERIAL_PORT_CLASS * remote_unit_port;
-#endif
-
 #if defined(FEATURE_GPS)
   SERIAL_PORT_CLASS * gps_port;
   #ifdef GPS_MIRROR_PORT
@@ -206,12 +166,10 @@ byte current_az_speed_voltage = 0;
   #endif //GPS_MIRROR_PORT
 #endif //defined(FEATURE_GPS)
 
-
 #if defined(FEATURE_MOON_TRACKING) || defined(FEATURE_SUN_TRACKING) || defined(FEATURE_CLOCK) || defined(FEATURE_GPS) || defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(OPTION_DISPLAY_ALT_HHMM_CLOCK_AND_MAIDENHEAD) || defined(OPTION_DISPLAY_CONSTANT_HHMMSS_CLOCK_AND_MAIDENHEAD)
   double latitude = DEFAULT_LATITUDE;
   double longitude = DEFAULT_LONGITUDE;
 #endif
-
 
 #ifdef FEATURE_MOON_TRACKING
   byte moon_tracking_active = 0;
@@ -332,57 +290,20 @@ DebugClass debug;
   PCF8583 rtc(0xA0);
 #endif //FEATURE_RTC_PCF8583
 
-#ifdef FEATURE_AZ_POSITION_A2_ABSOLUTE_ENCODER
-  #define AZ_A2_ENCODER_RESOLUTION 32767 /*36000*/
-  #define AZ_A2_ENCODER_ADDRESS 0x00
-  #define AZ_QUERY_FREQUENCY_MS 250
-  #define AZ_A2_ENCODER_MODE MODE_TWO_BYTE_POSITION /*|MODE_MULTITURN*/
-#endif  //FEATURE_AZ_POSITION_A2_ABSOLUTE_ENCODER
-
-#ifdef FEATURE_EL_POSITION_A2_ABSOLUTE_ENCODER
-  #define EL_A2_ENCODER_RESOLUTION 32767 /*36000*/
-  #define EL_A2_ENCODER_ADDRESS 0x00
-  #define EL_QUERY_FREQUENCY_MS 250
-  #define EL_A2_ENCODER_MODE MODE_MULTITURN /*|MODE_TWO_BYTE_POSITION*/
-#endif  //FEATURE_EL_POSITION_A2_ABSOLUTE_ENCODER
-
-#if defined(FEATURE_AZ_POSITION_A2_ABSOLUTE_ENCODER) || defined(FEATURE_EL_POSITION_A2_ABSOLUTE_ENCODER)
-  #include "sei_bus.h"
-  SEIbus SEIbus1(&Serial1,9600,pin_sei_bus_busy,pin_sei_bus_send_receive);
-  //             (Serial Port,Baud Rate,Busy Pin,Send/Receive Pin)
-  #define SEI_BUS_COMMAND_TIMEOUT_MS 6000
-#endif
-
 #ifdef FEATURE_AUTOPARK
   unsigned long last_activity_time_autopark = 0;
 #endif  
 
-/* ------------------ let's start doing some stuff now that we got the formalities out of the way --------------------*/
-
 void setup() {
-
   delay(1000);
-
   initialize_serial();
-
   initialize_peripherals();
-
   read_settings_from_eeprom();
-
   initialize_pins();
-
   read_azimuth(0);
-
   initialize_display();
-
-  initialize_rotary_encoders();
-
   initialize_interrupts();
-
-
 } /* setup */
-
-/*-------------------------- here's where the magic happens --------------------------------*/
 
 void loop() {
 
@@ -393,25 +314,6 @@ void loop() {
 
   check_serial();
   read_headings();
-
-  #ifndef FEATURE_REMOTE_UNIT_SLAVE
-    service_request_queue();
-    service_rotation();
-    az_check_operation_timeout();
-    #ifdef FEATURE_TIMED_BUFFER
-      check_timed_interval();
-    #endif // FEATURE_TIMED_BUFFER
-    read_headings();
-    check_buttons();
-    check_overlap();
-    check_brake_release();
-    #ifdef FEATURE_ELEVATION_CONTROL
-      el_check_operation_timeout();
-    #endif
-  #endif // ndef FEATURE_REMOTE_UNIT_SLAVE
-
-  //read_headings();
-
 
   #ifdef OPTION_MORE_SERIAL_CHECKS
     check_serial();
@@ -425,23 +327,6 @@ void loop() {
     check_serial();
   #endif
 
-  #ifndef FEATURE_REMOTE_UNIT_SLAVE
-    #ifdef OPTION_AZ_MANUAL_ROTATE_LIMITS
-      check_az_manual_rotate_limit();
-    #endif
-    #if defined(OPTION_EL_MANUAL_ROTATE_LIMITS) && defined(FEATURE_ELEVATION_CONTROL)
-      check_el_manual_rotate_limit();
-    #endif
-
-    check_az_speed_pot();
-
-    #ifdef FEATURE_AZ_PRESET_ENCODER            // Rotary Encoder or Preset Selector
-      check_preset_encoders();
-    #else
-      check_az_preset_potentiometer();
-    #endif // FEATURE_AZ_PRESET_ENCODER
-  #endif // ndef FEATURE_REMOTE_UNIT_SLAVE
-
   #ifdef DEBUG_DUMP
     output_debug();
   #endif //DEBUG_DUMP
@@ -452,24 +337,12 @@ void loop() {
 
   read_headings();
 
-  #ifndef FEATURE_REMOTE_UNIT_SLAVE
-    service_rotation();
-  #endif  
-
   check_for_dirty_configuration();
 
   #ifdef DEBUG_PROFILE_LOOP_TIME
     profile_loop_time();
   #endif //DEBUG_PROFILE_LOOP_TIME
-
-  #ifdef FEATURE_REMOTE_UNIT_SLAVE
-    service_remote_unit_serial_buffer();
-  #endif // FEATURE_REMOTE_UNIT_SLAVE
-
-  #if defined(FEATURE_MASTER_WITH_SERIAL_SLAVE) || defined(FEATURE_MASTER_WITH_ETHERNET_SLAVE)
-    service_remote_communications_incoming_buffer();
-  #endif // defined(FEATURE_MASTER_WITH_SERIAL_SLAVE) || defined(FEATURE_MASTER_WITH_ETHERNET_SLAVE)
-
+  
   #ifdef FEATURE_JOYSTICK_CONTROL
     check_joystick();
   #endif // FEATURE_JOYSTICK_CONTROL
@@ -500,10 +373,6 @@ void loop() {
 
   read_headings();
 
-  #ifndef FEATURE_REMOTE_UNIT_SLAVE
-    service_rotation();
-  #endif  
-
   #ifdef FEATURE_RTC
     service_rtc();
   #endif // FEATURE_RTC
@@ -520,21 +389,11 @@ void loop() {
     service_power_switch();
   #endif //FEATURE_POWER_SWITCH
 
-  #if defined(FEATURE_CLOCK) && defined(OPTION_SYNC_MASTER_CLOCK_TO_SLAVE) && (defined(FEATURE_MASTER_WITH_SERIAL_SLAVE) || defined(FEATURE_MASTER_WITH_ETHERNET_SLAVE))
-    sync_master_clock_to_slave();
-  #endif
-
-  #if defined(OPTION_SYNC_MASTER_COORDINATES_TO_SLAVE) && (defined(FEATURE_MASTER_WITH_SERIAL_SLAVE) || defined(FEATURE_MASTER_WITH_ETHERNET_SLAVE))
-    sync_master_coordinates_to_slave();
-  #endif
-
-
   service_blink_led();
 
   #ifdef FEATURE_ANALOG_OUTPUT_PINS
     service_analog_output_pins();
   #endif //FEATURE_ANALOG_OUTPUT_PINS
-
 
   #if defined(FEATURE_SUN_PUSHBUTTON_AZ_EL_CALIBRATION) && defined(FEATURE_SUN_TRACKING)
     check_sun_pushbutton_calibration();
@@ -554,320 +413,10 @@ void loop() {
     check_serial();
   #endif
 
-
 } /* loop */
 
-/* -------------------------------------- subroutines -----------------------------------------------
- 
 
-
-                                  Where the real work happens...
- 
-
-
------------------------------------------------------------------------------------------------------ */
-
-
-// --------------------------------------------------------------
-
-#if defined(FEATURE_AZ_POSITION_A2_ABSOLUTE_ENCODER) || defined(FEATURE_EL_POSITION_A2_ABSOLUTE_ENCODER)
-  void service_a2_encoders(){
- 
-    static unsigned long last_sei_bus_command_submit_time = 0;
-    static byte submitted_sei_bus_command = 0;
-    static byte last_command_encoder_address = 0;
-    static unsigned long last_encoder_queried_resolution = 0;
-
-    float normalized_position = 0;
-
-    #ifdef FEATURE_AZ_POSITION_A2_ABSOLUTE_ENCODER
-      static byte executed_az_change_resolution = 0;
-      static byte executed_az_change_mode_power_up = 0;
-      static unsigned long last_az_position_query_time = 0;
-      static byte az_a2_position_queried = 0;
-    #endif //FEATURE_AZ_POSITION_A2_ABSOLUTE_ENCODER
-
-    #ifdef FEATURE_EL_POSITION_A2_ABSOLUTE_ENCODER
-      static byte executed_el_change_resolution = 0;
-      static byte executed_el_change_mode_power_up = 0;
-      static unsigned long last_el_position_query_time = 0;
-      static byte el_a2_position_queried = 0;      
-    #endif //FEATURE_EL_POSITION_A2_ABSOLUTE_ENCODER
-
-    #ifdef DEBUG_A2_ENCODER_LOOPBACK_TEST
-      static byte did_loopback_tests = 0;
-      if (!did_loopback_tests){
-        debug_mode = 1;
-        #ifdef FEATURE_AZ_POSITION_A2_ABSOLUTE_ENCODER
-          debug.print("service_a2_encoders: Starting az encoder loopback test...");
-          if (SEIbus1.a2_encoder_loopback_test(AZ_A2_ENCODER_ADDRESS)){
-            Serial.println("completed successfully!");
-          } else {
-            Serial.println("failed!");
-          }
-        #endif //FEATURE_AZ_POSITION_A2_ABSOLUTE_ENCODER
-        #ifdef FEATURE_EL_POSITION_A2_ABSOLUTE_ENCODER
-          debug.print("service_a2_encoders: Starting el encoder loopback test...");
-          if (SEIbus1.a2_encoder_loopback_test(EL_A2_ENCODER_ADDRESS)){
-            Serial.println("completed successfully!");
-          } else {
-            Serial.println("failed!");
-          }
-        #endif //FEATURE_EL_POSITION_A2_ABSOLUTE_ENCODER 
-        delay(1000);      
-        did_loopback_tests = 1; 
-      }
-    #endif //DEBUG_A2_ENCODER_LOOPBACK_TEST
-
-
-    // initializations
-    #ifdef FEATURE_AZ_POSITION_A2_ABSOLUTE_ENCODER
-      if ((!executed_az_change_resolution) && (SEIbus1.command_in_progress == 0) && (!submitted_sei_bus_command)) {
-        if (SEIbus1.a2_encoder_change_resolution(AZ_A2_ENCODER_ADDRESS,AZ_A2_ENCODER_RESOLUTION)){
-          submitted_sei_bus_command = 1;
-          executed_az_change_resolution = 1;
-          last_command_encoder_address = AZ_A2_ENCODER_ADDRESS;
-          #ifdef DEBUG_A2_ENCODER
-            debug.println("service_a2_encoders: a2_encoder_change_resolution submitted: az");
-          #endif           
-        } else {
-          #ifdef DEBUG_A2_ENCODER
-            debug.println("service_a2_encoders: a2_encoder_change_resolution unsuccesfully submitted: az");
-          #endif
-        }
-        last_sei_bus_command_submit_time = millis();
-      }
-    #endif //FEATURE_AZ_POSITION_A2_ABSOLUTE_ENCODER
-
-    #ifdef FEATURE_EL_POSITION_A2_ABSOLUTE_ENCODER
-      if ((!executed_el_change_resolution) && (SEIbus1.command_in_progress == 0) && (!submitted_sei_bus_command)) {
-        if (SEIbus1.a2_encoder_change_resolution(EL_A2_ENCODER_ADDRESS,EL_A2_ENCODER_RESOLUTION)){
-          submitted_sei_bus_command = 1;
-          executed_el_change_resolution = 1;
-          last_command_encoder_address = EL_A2_ENCODER_ADDRESS;
-          #ifdef DEBUG_A2_ENCODER
-            debug.println("service_a2_encoders: a2_encoder_change_resolution submitted: el");
-          #endif          
-        } else {
-          #ifdef DEBUG_A2_ENCODER
-            debug.println("service_a2_encoders: a2_encoder_change_resolution unsuccesfully submitted: el");
-          #endif
-        }
-        last_sei_bus_command_submit_time = millis();
-      }
-    #endif //FEATURE_EL_POSITION_A2_ABSOLUTE_ENCODER
-
-    #ifdef FEATURE_AZ_POSITION_A2_ABSOLUTE_ENCODER
-      if ((!executed_az_change_mode_power_up) && (SEIbus1.command_in_progress == 0) && (!submitted_sei_bus_command)) {
-        if (SEIbus1.a2_encoder_change_mode_power_up(AZ_A2_ENCODER_ADDRESS,AZ_A2_ENCODER_MODE)){
-          submitted_sei_bus_command = 1;
-          executed_az_change_mode_power_up = 1;
-          last_command_encoder_address = AZ_A2_ENCODER_ADDRESS;
-          #ifdef DEBUG_A2_ENCODER
-            debug.println("service_a2_encoders: a2_encoder_change_mode_power_up submitted: az");
-          #endif             
-        } else {
-          #ifdef DEBUG_A2_ENCODER
-            debug.println("service_a2_encoders: a2_encoder_change_mode_power_up unsuccesfully submitted: az");
-          #endif  
-        }
-        last_sei_bus_command_submit_time = millis();
-      }
-    #endif //FEATURE_AZ_POSITION_A2_ABSOLUTE_ENCODER
-
-    #ifdef FEATURE_EL_POSITION_A2_ABSOLUTE_ENCODER
-      if ((!executed_el_change_mode_power_up) && (SEIbus1.command_in_progress == 0) && (!submitted_sei_bus_command)) {
-        if (SEIbus1.a2_encoder_change_mode_power_up(EL_A2_ENCODER_ADDRESS,EL_A2_ENCODER_MODE)){
-          submitted_sei_bus_command = 1;
-          executed_el_change_mode_power_up = 1;
-          last_command_encoder_address = EL_A2_ENCODER_ADDRESS;
-          #ifdef DEBUG_A2_ENCODER
-            debug.println("service_a2_encoders: a2_encoder_change_mode_power_up submitted: el");
-          #endif           
-        } else {
-          #ifdef DEBUG_A2_ENCODER
-            debug.println("service_a2_encoders: a2_encoder_change_mode_power_up unsuccesfully submitted: el");
-          #endif  
-        }
-        last_sei_bus_command_submit_time = millis();
-      }
-    #endif //FEATURE_EL_POSITION_A2_ABSOLUTE_ENCODER
-
-
-    // periodic position query
-    #ifdef FEATURE_AZ_POSITION_A2_ABSOLUTE_ENCODER
-      if (((millis() - last_az_position_query_time) >= AZ_QUERY_FREQUENCY_MS) && (SEIbus1.command_in_progress == 0) && (!submitted_sei_bus_command)) {
-        if (SEIbus1.a2_encoder_read_position(AZ_A2_ENCODER_ADDRESS)){
-          submitted_sei_bus_command = 1;
-          last_command_encoder_address = AZ_A2_ENCODER_ADDRESS;
-          last_encoder_queried_resolution = AZ_A2_ENCODER_RESOLUTION;
-          az_a2_position_queried = 1;
-          #ifdef DEBUG_A2_ENCODER
-            debug.println("service_a2_encoders:  a2_encoder_read_position submitted: az");
-          #endif           
-        } else {
-          #ifdef DEBUG_A2_ENCODER
-            debug.println("service_a2_encoders:  a2_encoder_read_position unsuccesfully submitted: az");
-          #endif 
-        }
-        last_sei_bus_command_submit_time = millis();
-        last_az_position_query_time = millis();
-      }      
-    #endif //FEATURE_AZ_POSITION_A2_ABSOLUTE_ENCODER
-
-    #ifdef FEATURE_EL_POSITION_A2_ABSOLUTE_ENCODER
-      if (((millis() - last_el_position_query_time) >= EL_QUERY_FREQUENCY_MS) && (SEIbus1.command_in_progress == 0) && (!submitted_sei_bus_command)) {
-        if (SEIbus1.a2_encoder_read_position(EL_A2_ENCODER_ADDRESS)){
-          submitted_sei_bus_command = 1;
-          last_command_encoder_address = EL_A2_ENCODER_ADDRESS;
-          last_encoder_queried_resolution = EL_A2_ENCODER_RESOLUTION;
-          el_a2_position_queried = 1;
-          #ifdef DEBUG_A2_ENCODER
-            debug.println("service_a2_encoders:  a2_encoder_read_position submitted: el");
-          #endif           
-        } else {
-          #ifdef DEBUG_A2_ENCODER
-            debug.println("service_a2_encoders:  a2_encoder_read_position unsuccesfully submitted: el");
-          #endif 
-        }
-        last_sei_bus_command_submit_time = millis();
-        last_el_position_query_time = millis();
-      }      
-    #endif //FEATURE_EL_POSITION_A2_ABSOLUTE_ENCODER
-
-    SEIbus1.service();
-
-    // if there are command results available, process them
-    if ((SEIbus1.command_result_ready[last_command_encoder_address] == 1) && (submitted_sei_bus_command)){
-      switch(SEIbus1.last_command[last_command_encoder_address]){
-        #ifdef DEBUG_A2_ENCODER
-          case SEI_BUS_A2_ENCODER_READ_FACTORY_INFO:
-            debug.print("service_a2_encoders: Model:");
-            debug.print(SEIbus1.model_number);
-            debug.print(" Version:");
-            debug.print(SEIbus1.version_number,2);
-            debug.print(" Serial:");
-            debug.print(SEIbus1.serial_number,0);
-            debug.print(" ");
-            debug.print(SEIbus1.year);
-            debug.print("-");
-            debug.print(SEIbus1.month);
-            debug.print("-");
-            debug.print(SEIbus1.day);    
-            debug.println("");
-            break;
-          case SEI_BUS_A2_ENCODER_CMD_READ_POS_TIME_STATUS:
-            debug.print("service_a2_encoders: Time: ");
-            debug.print(SEIbus1.time,0);
-            debug.println("");
-          case SEI_BUS_A2_ENCODER_CMD_READ_POS_STATUS:
-            debug.print("service_a2_encoders: Status: ");
-            switch(SEIbus1.status & B11110000){
-              case STATUS_NO_ERROR: debug.println("OK"); break;
-              case STATUS_NOT_ENOUGH_LIGHT: debug.println("NOT_ENOUGH_LIGHT"); break;
-              case STATUS_TOO_MUCH_LIGHT: debug.println("TOO_MUCH_LIGHT"); break;
-              case STATUS_MISALIGNMENT_OR_DUST_1: debug.println("MISALIGNMENT_OR_DUST_1"); break;
-              case STATUS_MISALIGNMENT_OR_DUST_2: debug.println("MISALIGNMENT_OR_DUST_2"); break;
-              case STATUS_MISALIGNMENT_OR_DUST_3: debug.println("MISALIGNMENT_OR_DUST_3"); break;
-              case STATUS_HARDWARE_PROBLEM: debug.println("HARDWARE_PROBLEM"); break;
-              case STATUS_FAST_MODE_ERROR: debug.println("FAST_MODE_ERROR"); break;
-              case STATUS_MULTITURN_NOT_INIT: debug.println("MULTITURN_NOT_INIT"); break;
-            }
-          case SEI_BUS_A2_ENCODER_READ_RESOLUTION:
-            debug.print("service_a2_encoders: Resolution: ");
-            debug.print(SEIbus1.resolution,0);
-            debug.println("");
-            break;
-          case SEI_BUS_A2_ENCODER_CHANGE_RESOLUTION:
-            debug.println("service_a2_encoders: Resolution set.");
-            break;      
-          case SEI_BUS_A2_ENCODER_READ_SERIAL_NUMBER:
-            debug.print("service_a2_encoders: Serial number is ");
-            debug.print(SEIbus1.serial_number,0);
-            debug.println("");
-            break;      
-          case SEI_BUS_A2_ENCODER_SET_ABSOLUTE_POSITION:
-            debug.println("service_a2_encoders: Set absolute position.");
-            break;
-          case SEI_BUS_A2_ENCODER_SET_ORIGIN:
-            debug.println("service_a2_encoders: Set origin executed.");
-            break;
-          case SEI_BUS_A2_ENCODER_CHANGE_MODE_TEMPORARY:
-            debug.println("service_a2_encoders: Changed mode temporarily.");
-            break;
-          case SEI_BUS_A2_ENCODER_CHANGE_MODE_POWER_UP:
-            debug.println("service_a2_encoders: Changed power up mode.");
-            break;      
-          case SEI_BUS_A2_ENCODER_READ_MODE:
-            debug.print("service_a2_encoders: Modes set: ");
-            if (SEIbus1.mode & MODE_REVERSE){debug.print("MODE_REVERSE ");}
-            if (SEIbus1.mode & MODE_STROBE){debug.print("MODE_STROBE ");}
-            if (SEIbus1.mode & MODE_MULTITURN){debug.print("MODE_MULTITURN ");}
-            if (SEIbus1.mode & MODE_TWO_BYTE_POSITION){debug.print("MODE_TWO_BYTE_POSITION ");}
-            if (SEIbus1.mode & MODE_INCREMENTAL){debug.print("MODE_INCREMENTAL ");}
-            if (SEIbus1.mode & MODE_DIVIDE_BY_256){debug.print("MODE_DIVIDE_BY_256 ");}
-            debug.println("");
-            break;
-          case SEI_BUS_A2_ENCODER_RESET:
-            debug.println("service_a2_encoders: Completed reset.");
-            break;
-        #endif //#DEBUG_A2_ENCODER
-        
-        case SEI_BUS_A2_ENCODER_CMD_READ_POS:
-          #ifdef DEBUG_A2_ENCODER
-            debug.print("service_a2_encoders: Position Raw: ");
-            debug.print(SEIbus1.position,0);
-            debug.print("\tNormalized: ");
-            normalized_position = (SEIbus1.position/(float(last_encoder_queried_resolution)/360.0));
-            debug.print(normalized_position,4);
-            debug.print("\tRollover Compensated: ");
-            normalized_position = (SEIbus1.position_rollover_compensated/(float(last_encoder_queried_resolution)/360.0));
-            debug.print(normalized_position, 4);
-            debug.println("");
-          #endif //#DEBUG_A2_ENCODER
-
-          #ifdef FEATURE_AZ_POSITION_A2_ABSOLUTE_ENCODER
-            if (az_a2_position_queried){
-              az_a2_encoder = (SEIbus1.position/(float(last_encoder_queried_resolution)/360.0));
-              az_a2_position_queried = 0;
-            }
-          #endif //FEATURE_AZ_POSITION_A2_ABSOLUTE_ENCODER
-
-          #ifdef FEATURE_EL_POSITION_A2_ABSOLUTE_ENCODER
-            if (el_a2_position_queried){
-              el_a2_encoder = (SEIbus1.position_rollover_compensated/(float(last_encoder_queried_resolution)/360.0));
-              el_a2_position_queried = 0;
-            }
-          #endif //FEATURE_AZ_POSITION_A2_ABSOLUTE_ENCODER
-          break;
-
-        #ifdef DEBUG_A2_ENCODER
-          default:
-            debug.println("service_a2_encoders: Unknown command completed.");
-            break;
-        #endif //#DEBUG_A2_ENCODER  
-      }
-
-      submitted_sei_bus_command = 0;
-    }
-
-
-    // if a command has been in progress for awhile with no result, give up on the command
-    if (((millis() - last_sei_bus_command_submit_time) > SEI_BUS_COMMAND_TIMEOUT_MS) && (submitted_sei_bus_command)) {
-      submitted_sei_bus_command = 0;
-      #ifdef DEBUG_A2_ENCODER
-        debug.println("service_a2_encoders: command timeout");
-      #endif         
-    }
-
-  }
-#endif //#if defined(FEATURE_AZ_POSITION_A2_ABSOLUTE_ENCODER) || defined(FEATURE_EL_POSITION_A2_ABSOLUTE_ENCODER)
-
-
-// --------------------------------------------------------------
-
-void read_headings(){
-
+void read_headings() {
   #ifdef DEBUG_LOOP
     debug.print("read_headings()\n");
   #endif // DEBUG_LOOP
@@ -877,38 +426,28 @@ void read_headings(){
   #ifdef FEATURE_ELEVATION_CONTROL
     read_elevation(0);
   #endif
-
 }
 
-// --------------------------------------------------------------
-
-void service_blink_led(){
-
-
+void service_blink_led() {
   #ifdef blink_led
-  static unsigned long last_blink_led_transition = 0;
-  static byte blink_led_status = 0;
+    static unsigned long last_blink_led_transition = 0;
+    static byte blink_led_status = 0;
 
 
-  if (((millis() - last_blink_led_transition) >= 1000) && (blink_led != 0)) {
-    if (blink_led_status) {
-      digitalWriteEnhanced(blink_led, LOW);
-      blink_led_status = 0;
-    } else {
-      digitalWriteEnhanced(blink_led, HIGH);
-      blink_led_status = 1;
+    if (((millis() - last_blink_led_transition) >= 1000) && (blink_led != 0)) {
+      if (blink_led_status) {
+        digitalWriteEnhanced(blink_led, LOW);
+        blink_led_status = 0;
+      } else {
+        digitalWriteEnhanced(blink_led, HIGH);
+        blink_led_status = 1;
+      }
+      last_blink_led_transition = millis();
     }
-    last_blink_led_transition = millis();
-  }
   #endif // blink_led
-
-  
-
 
 } /* service_blink_led */
 
-
-// --------------------------------------------------------------
 void check_for_reset_flag(){
 
   static unsigned long detected_reset_flag_time = 0;
@@ -939,7 +478,6 @@ void check_for_reset_flag(){
 
 }
 
-// --------------------------------------------------------------
 #ifdef DEBUG_PROFILE_LOOP_TIME
 void profile_loop_time(){
 
@@ -963,7 +501,8 @@ void profile_loop_time(){
 } /* profile_loop_time */
 
 #endif //DEBUG_PROFILE_LOOP_TIME
-// --------------------------------------------------------------
+
+
 void check_az_speed_pot() {
 
   static unsigned long last_pot_check_time = 0;
@@ -995,7 +534,8 @@ void check_az_speed_pot() {
   }
 
 } /* check_az_speed_pot */
-// --------------------------------------------------------------
+
+
 void check_az_preset_potentiometer() {
 
 
@@ -1064,93 +604,8 @@ void check_az_preset_potentiometer() {
     }
   } // if (az_preset_pot)
 } /* check_az_preset_potentiometer */
-// --------------------------------------------------------------
-
-void initialize_rotary_encoders(){
 
 
-  #ifdef DEBUG_LOOP
-    debug.print("initialize_rotary_encoders()\n");
-    Serial.flush();
-  #endif // DEBUG_LOOP
-
-  #ifdef FEATURE_AZ_PRESET_ENCODER
-  pinModeEnhanced(az_rotary_preset_pin1, INPUT);
-  pinModeEnhanced(az_rotary_preset_pin2, INPUT);
-  az_encoder_raw_degrees = raw_azimuth;
-  #ifdef OPTION_ENCODER_ENABLE_PULLUPS
-  digitalWriteEnhanced(az_rotary_preset_pin1, HIGH);
-  digitalWriteEnhanced(az_rotary_preset_pin2, HIGH);
-  #endif // OPTION_ENCODER_ENABLE_PULLUPS
-  #endif // FEATURE_AZ_PRESET_ENCODER
-
-
-  #if defined(FEATURE_EL_PRESET_ENCODER) && defined(FEATURE_ELEVATION_CONTROL)
-  pinModeEnhanced(el_rotary_preset_pin1, INPUT);
-  pinModeEnhanced(el_rotary_preset_pin2, INPUT);
-  el_encoder_degrees = elevation;
-  #ifdef OPTION_ENCODER_ENABLE_PULLUPS
-  digitalWriteEnhanced(el_rotary_preset_pin1, HIGH);
-  digitalWriteEnhanced(el_rotary_preset_pin2, HIGH);
-  #endif // OPTION_ENCODER_ENABLE_PULLUPS
-  #endif // defined(FEATURE_EL_PRESET_ENCODER) && defined(FEATURE_ELEVATION_CONTROL)
-
-  #ifdef FEATURE_AZ_POSITION_ROTARY_ENCODER
-  pinModeEnhanced(az_rotary_position_pin1, INPUT);
-  pinModeEnhanced(az_rotary_position_pin2, INPUT);
-  #ifdef OPTION_ENCODER_ENABLE_PULLUPS
-  digitalWriteEnhanced(az_rotary_position_pin1, HIGH);
-  digitalWriteEnhanced(az_rotary_position_pin2, HIGH);
-  #endif // OPTION_ENCODER_ENABLE_PULLUPS
-  #endif // FEATURE_AZ_POSITION_ROTARY_ENCODER
-
-
-  #ifdef FEATURE_EL_POSITION_ROTARY_ENCODER
-  pinModeEnhanced(el_rotary_position_pin1, INPUT);
-  pinModeEnhanced(el_rotary_position_pin2, INPUT);
-  #ifdef OPTION_ENCODER_ENABLE_PULLUPS
-  digitalWriteEnhanced(el_rotary_position_pin1, HIGH);
-  digitalWriteEnhanced(el_rotary_position_pin2, HIGH);
-  #endif // OPTION_ENCODER_ENABLE_PULLUPS
-  #endif // FEATURE_EL_POSITION_ROTARY_ENCODER
-
-
-  #ifdef FEATURE_AZ_POSITION_INCREMENTAL_ENCODER
-    pinMode(az_incremental_encoder_pin_phase_a, INPUT);
-    pinMode(az_incremental_encoder_pin_phase_b, INPUT);
-    pinMode(az_incremental_encoder_pin_phase_z, INPUT);
-    #ifdef OPTION_INCREMENTAL_ENCODER_PULLUPS
-      digitalWrite(az_incremental_encoder_pin_phase_a, HIGH);
-      digitalWrite(az_incremental_encoder_pin_phase_b, HIGH);
-      digitalWrite(az_incremental_encoder_pin_phase_z, HIGH);
-    #endif // OPTION_INCREMENTAL_ENCODER_PULLUPS
-    attachInterrupt(AZ_POSITION_INCREMENTAL_ENCODER_A_PIN_INTERRUPT, az_position_incremental_encoder_interrupt_handler, CHANGE);
-    attachInterrupt(AZ_POSITION_INCREMENTAL_ENCODER_B_PIN_INTERRUPT, az_position_incremental_encoder_interrupt_handler, CHANGE);
-    delay(250);
-    az_3_phase_encoder_last_phase_a_state = digitalRead(az_incremental_encoder_pin_phase_a);
-    az_3_phase_encoder_last_phase_b_state = digitalRead(az_incremental_encoder_pin_phase_b);
-  #endif // FEATURE_AZ_POSITION_INCREMENTAL_ENCODER
-
-  #if defined(FEATURE_EL_POSITION_INCREMENTAL_ENCODER) && defined(FEATURE_ELEVATION_CONTROL)
-  pinMode(el_incremental_encoder_pin_phase_a, INPUT);
-  pinMode(el_incremental_encoder_pin_phase_b, INPUT);
-  pinMode(el_incremental_encoder_pin_phase_z, INPUT);
-  #ifdef OPTION_INCREMENTAL_ENCODER_PULLUPS
-  digitalWrite(el_incremental_encoder_pin_phase_a, HIGH);
-  digitalWrite(el_incremental_encoder_pin_phase_b, HIGH);
-  digitalWrite(el_incremental_encoder_pin_phase_z, HIGH);
-  #endif // OPTION_INCREMENTAL_ENCODER_PULLUPS
-  attachInterrupt(EL_POSITION_INCREMENTAL_ENCODER_A_PIN_INTERRUPT, el_position_incremental_encoder_interrupt_handler, CHANGE);
-  attachInterrupt(EL_POSITION_INCREMENTAL_ENCODER_B_PIN_INTERRUPT, el_position_incremental_encoder_interrupt_handler, CHANGE);
-  delay(250);
-  el_3_phase_encoder_last_phase_a_state = digitalRead(el_incremental_encoder_pin_phase_a);
-  el_3_phase_encoder_last_phase_b_state = digitalRead(el_incremental_encoder_pin_phase_b);
-  #endif // defined(FEATURE_EL_POSITION_INCREMENTAL_ENCODER) && defined(FEATURE_ELEVATION_CONTROL)
-
-} /* initialize_rotary_encoders */
-
-
-// --------------------------------------------------------------
 #ifdef FEATURE_AZ_PRESET_ENCODER
 void check_preset_encoders(){
 
@@ -1470,56 +925,7 @@ void check_preset_encoders(){
 
 #endif // FEATURE_AZ_PRESET_ENCODER
 
-// --------------------------------------------------------------
 
-#ifdef OPTION_AZ_MANUAL_ROTATE_LIMITS
-void check_az_manual_rotate_limit() {
-
-  if ((current_az_state() == ROTATING_CCW) && (raw_azimuth <= (AZ_MANUAL_ROTATE_CCW_LIMIT * HEADING_MULTIPLIER))) {
-    #ifdef DEBUG_AZ_MANUAL_ROTATE_LIMITS
-      debug.print("check_az_manual_rotate_limit: stopping - hit AZ_MANUAL_ROTATE_CCW_LIMIT of ");
-      debug.print(AZ_MANUAL_ROTATE_CCW_LIMIT);
-      debug.println("");
-    #endif // DEBUG_AZ_MANUAL_ROTATE_LIMITS
-    submit_request(AZ, REQUEST_KILL, 0, 49);
-  }
-  if ((current_az_state() == ROTATING_CW) && (raw_azimuth >= (AZ_MANUAL_ROTATE_CW_LIMIT * HEADING_MULTIPLIER))) {
-    #ifdef DEBUG_AZ_MANUAL_ROTATE_LIMITS
-      debug.print("check_az_manual_rotate_limit: stopping - hit AZ_MANUAL_ROTATE_CW_LIMIT of ");
-      debug.print(AZ_MANUAL_ROTATE_CW_LIMIT);
-      debug.println("");
-    #endif // DEBUG_AZ_MANUAL_ROTATE_LIMITS
-    submit_request(AZ, REQUEST_KILL, 0, 50);
-  }
-} /* check_az_manual_rotate_limit */
-#endif // #ifdef OPTION_AZ_MANUAL_ROTATE_LIMITS
-
-// --------------------------------------------------------------
-
-#if defined(OPTION_EL_MANUAL_ROTATE_LIMITS) && defined(FEATURE_ELEVATION_CONTROL)
-void check_el_manual_rotate_limit() {
-
-  if ((current_el_state() == ROTATING_DOWN) && (elevation <= (EL_MANUAL_ROTATE_DOWN_LIMIT * HEADING_MULTIPLIER))) {
-    #ifdef DEBUG_EL_MANUAL_ROTATE_LIMITS
-      debug.print("check_el_manual_rotate_limit: stopping - hit EL_MANUAL_ROTATE_DOWN_LIMIT of ");
-      debug.print(EL_MANUAL_ROTATE_DOWN_LIMIT);
-      debug.println("");
-    #endif // DEBUG_EL_MANUAL_ROTATE_LIMITS
-    submit_request(EL, REQUEST_KILL, 0, 51);
-  }
-  if ((current_el_state() == ROTATING_UP) && (elevation >= (EL_MANUAL_ROTATE_UP_LIMIT * HEADING_MULTIPLIER))) {
-    #ifdef DEBUG_EL_MANUAL_ROTATE_LIMITS
-      debug.print("check_el_manual_rotate_limit: stopping - hit EL_MANUAL_ROTATE_UP_LIMIT of ");
-      debug.print(EL_MANUAL_ROTATE_UP_LIMIT);
-      debug.println("");
-    #endif // DEBUG_EL_MANUAL_ROTATE_LIMITS
-    submit_request(EL, REQUEST_KILL, 0, 52);
-  }
-} /* check_el_manual_rotate_limit */
-#endif // #ifdef OPTION_EL_MANUAL_ROTATE_LIMITS
-
-
-// --------------------------------------------------------------
 void check_brake_release() {
 
 
@@ -1654,8 +1060,6 @@ void check_overlap(){
 
 } /* check_overlap */
 
-
-
 // --------------------------------------------------------------
 void clear_command_buffer(){
 
@@ -1665,362 +1069,8 @@ void clear_command_buffer(){
 
 }
 
-
-
-
 // --------------------------------------------------------------
-#ifdef FEATURE_REMOTE_UNIT_SLAVE
-void service_remote_unit_serial_buffer(){
-
-// Goody 2015-03-09 - this may be dead code - all done in check_serial() and proces_remote_slave_command?
-
-/*
- *
- * This implements a protocol for host unit to remote unit communications
- *
- *
- * Remote Slave Unit Protocol Reference
- *
- *  PG - ping
- *  AZ - read azimuth
- *  EL - read elevation
- *  DOxx - digital pin initialize as output;
- *  DIxx - digital pin initialize as input
- *  DPxx - digital pin initialize as input with pullup
- *  DRxx - digital pin read
- *  DLxx - digital pin write low
- *  DHxx - digital pin write high
- *  DTxxyyyy - digital pin tone output
- *  NTxx - no tone
- *  ARxx - analog pin read
- *  AWxxyyy - analog pin write
- *  SWxy - serial write byte
- *  SDx - deactivate serial read event; x = port #
- *  SSxyyyyyy... - serial write sting; x = port #, yyyy = string of characters to send
- *  SAx - activate serial read event; x = port #
- *  RB - reboot
- *
- * Responses
- *
- *  ER - report an error (remote to host only)
- *  EV - report an event (remote to host only)
- *  OK - report success (remote to host only)
- *  CS - report a cold start (remote to host only)
- *
- * Error Codes
- *
- *  ER01 - Serial port buffer timeout
- *  ER02 - Command syntax error
- *
- * Events
- *
- *  EVSxy - Serial port read event; x = serial port number, y = byte returned
- *
- *
- */
-
-
-  static String command_string; // changed to static 2013-03-27
-  byte command_good = 0;
-
-  if (control_port_buffer_carriage_return_flag) {
-
-    if (control_port_buffer_index < 3) {
-      control_port->println(F("ER02"));  // we don't have enough characters - syntax error
-    } else {
-      command_string = String(char(toupper(control_port_buffer[0]))) + String(char(toupper(control_port_buffer[1])));
-
-      #ifdef DEBUG_SERVICE_SERIAL_BUFFER
-      debug.print("serial_serial_buffer: command_string: ");
-      debug.print(command_string);
-      debug.print("$ control_port_buffer_index: ");
-      debug.print(control_port_buffer_index);
-      debug.println("");
-      #endif // DEBUG_SERVICE_SERIAL_BUFFER
-
-      if ((command_string == "SS") && (control_port_buffer[2] > 47) && (control_port_buffer[2] < 53)) { // this is a variable length command
-        command_good = 1;
-        for (byte x = 3; x < control_port_buffer_index; x++) {
-          switch (control_port_buffer[2] - 48) {
-            case 0: control_port->write(control_port_buffer[x]); break;
-            #if defined(FEATURE_MASTER_WITH_SERIAL_SLAVE)
-            case 1: remote_unit_port->write(control_port_buffer[x]); break;
-            #endif
-          }
-        }
-      }
-
-      if (control_port_buffer_index == 3) {
-
-        if (command_string == "PG") {
-          control_port->println(F("PG")); command_good = 1;
-        }                                                                        // PG - ping
-        if (command_string == "RB") {
-          wdt_enable(WDTO_30MS); while (1) {
-          }
-        }                                                                        // RB - reboot
-        if (command_string == "AZ") {
-          control_port->print(F("AZ"));
-          if (raw_azimuth < 1000) {
-            control_port->print("0");
-          }
-          if (raw_azimuth < 100) {
-            control_port->print("0");
-          }
-          if (raw_azimuth < 10) {
-            control_port->print("0");
-          }
-          control_port->println(raw_azimuth);
-          command_good = 1;
-        }
-        #ifdef FEATURE_ELEVATION_CONTROL
-        if (command_string == "EL") {
-          control_port->print(F("EL"));
-          if (elevation >= 0) {
-            control_port->print("+");
-          } else {
-            control_port->print("-");
-          }
-          if (abs(elevation) < 1000) {
-            control_port->print("0");
-          }
-          if (abs(elevation) < 100) {
-            control_port->print("0");
-          }
-          if (abs(elevation) < 10) {
-            control_port->print("0");
-          }
-          control_port->println(abs(elevation));
-          command_good = 1;
-        }
-          #endif // FEATURE_ELEVATION_CONTROL
-      } // end of three byte commands
-
-
-
-      if (control_port_buffer_index == 4) {
-        if ((command_string == "SA") & (control_port_buffer[2] > 47) && (control_port_buffer[2] < 53)) {
-          serial_read_event_flag[control_port_buffer[2] - 48] = 1;
-          command_good = 1;
-          control_port->println("OK");
-        }
-        if ((command_string == "SD") & (control_port_buffer[2] > 47) && (control_port_buffer[2] < 53)) {
-          serial_read_event_flag[control_port_buffer[2] - 48] = 0;
-          command_good = 1;
-          control_port->println("OK");
-        }
-
-      }
-
-
-      if (control_port_buffer_index == 5) {
-        if (command_string == "SW") { // Serial Write command
-          switch (control_port_buffer[2]) {
-            case '0': control_port->write(control_port_buffer[3]); command_good = 1; break;
-            #if defined(FEATURE_MASTER_WITH_SERIAL_SLAVE)
-            case '1': remote_unit_port->write(control_port_buffer[3]); command_good = 1; break;
-            #endif
-          }
-        }
-
-        if (command_string == "DO") {
-          if ((((control_port_buffer[2] > 47) && (control_port_buffer[2] < 58)) || (toupper(control_port_buffer[2]) == 'A')) && (control_port_buffer[3] > 47) && (control_port_buffer[3] < 58)) {
-            command_good = 1;
-            byte pin_value = 0;
-            if (toupper(control_port_buffer[2]) == 'A') {
-              pin_value = get_analog_pin(control_port_buffer[3] - 48);
-            } else {
-              pin_value = ((control_port_buffer[2] - 48) * 10) + (control_port_buffer[3] - 48);
-            }
-            #ifdef DEBUG_SERVICE_SERIAL_BUFFER
-              debug.print("service_serial_buffer: pin_value: ");
-              debug.print(pin_value);
-              debug.println("");
-            #endif // DEBUG_SERVICE_SERIAL_BUFFER
-            control_port->println("OK");
-            pinModeEnhanced(pin_value, OUTPUT);
-          }
-        }
-
-        if (command_string == "DH") {
-          if ((((control_port_buffer[2] > 47) && (control_port_buffer[2] < 58)) || (toupper(control_port_buffer[2]) == 'A')) && (control_port_buffer[3] > 47) && (control_port_buffer[3] < 58)) {
-            command_good = 1;
-            byte pin_value = 0;
-            if (toupper(control_port_buffer[2]) == 'A') {
-              pin_value = get_analog_pin(control_port_buffer[3] - 48);
-            } else {
-              pin_value = ((control_port_buffer[2] - 48) * 10) + (control_port_buffer[3] - 48);
-            }
-            digitalWriteEnhanced(pin_value, HIGH);
-            control_port->println("OK");
-          }
-        }
-
-        if (command_string == "DL") {
-          if ((((control_port_buffer[2] > 47) && (control_port_buffer[2] < 58)) || (toupper(control_port_buffer[2]) == 'A')) && (control_port_buffer[3] > 47) && (control_port_buffer[3] < 58)) {
-            command_good = 1;
-            byte pin_value = 0;
-            if (toupper(control_port_buffer[2]) == 'A') {
-              pin_value = get_analog_pin(control_port_buffer[3] - 48);
-            } else {
-              pin_value = ((control_port_buffer[2] - 48) * 10) + (control_port_buffer[3] - 48);
-            }
-            digitalWriteEnhanced(pin_value, LOW);
-            control_port->println("OK");
-          }
-        }
-
-        if (command_string == "DI") {
-          if ((((control_port_buffer[2] > 47) && (control_port_buffer[2] < 58)) || (toupper(control_port_buffer[2]) == 'A')) && (control_port_buffer[3] > 47) && (control_port_buffer[3] < 58)) {
-            command_good = 1;
-            byte pin_value = 0;
-            if (toupper(control_port_buffer[2]) == 'A') {
-              pin_value = get_analog_pin(control_port_buffer[3] - 48);
-            } else {
-              pin_value = ((control_port_buffer[2] - 48) * 10) + (control_port_buffer[3] - 48);
-            }
-            pinModeEnhanced(pin_value, INPUT);
-            control_port->println("OK");
-          }
-        }
-
-        if (command_string == "DP") {
-          if ((((control_port_buffer[2] > 47) && (control_port_buffer[2] < 58)) || (toupper(control_port_buffer[2]) == 'A')) && (control_port_buffer[3] > 47) && (control_port_buffer[3] < 58)) {
-            command_good = 1;
-            byte pin_value = 0;
-            if (toupper(control_port_buffer[2]) == 'A') {
-              pin_value = get_analog_pin(control_port_buffer[3] - 48);
-            } else {
-              pin_value = ((control_port_buffer[2] - 48) * 10) + (control_port_buffer[3] - 48);
-            }
-            // pinModeEnhanced(pin_value,INPUT_PULLUP);
-            pinModeEnhanced(pin_value, INPUT);
-            digitalWriteEnhanced(pin_value, HIGH);
-            control_port->println("OK");
-          }
-        }
-
-        if (command_string == "DR") {
-          if ((((control_port_buffer[2] > 47) && (control_port_buffer[2] < 58)) || (toupper(control_port_buffer[2]) == 'A')) && (control_port_buffer[3] > 47) && (control_port_buffer[3] < 58)) {
-            command_good = 1;
-            byte pin_value = 0;
-            if (toupper(control_port_buffer[2]) == 'A') {
-              pin_value = get_analog_pin(control_port_buffer[3] - 48);
-            } else {
-              pin_value = ((control_port_buffer[2] - 48) * 10) + (control_port_buffer[3] - 48);
-            }
-            byte pin_read = digitalReadEnhanced(pin_value);
-            control_port->print("DR");
-            control_port->write(control_port_buffer[2]);
-            control_port->write(control_port_buffer[3]);
-            if (pin_read) {
-              control_port->println("1");
-            } else {
-              control_port->println("0");
-            }
-          }
-        }
-        if (command_string == "AR") {
-          if ((((control_port_buffer[2] > 47) && (control_port_buffer[2] < 58)) || (toupper(control_port_buffer[2]) == 'A')) && (control_port_buffer[3] > 47) && (control_port_buffer[3] < 58)) {
-            command_good = 1;
-            byte pin_value = 0;
-            if (toupper(control_port_buffer[2]) == 'A') {
-              pin_value = get_analog_pin(control_port_buffer[3] - 48);
-            } else {
-              pin_value = ((control_port_buffer[2] - 48) * 10) + (control_port_buffer[3] - 48);
-            }
-            int pin_read = analogReadEnhanced(pin_value);
-            control_port->print("AR");
-            control_port->write(control_port_buffer[2]);
-            control_port->write(control_port_buffer[3]);
-            if (pin_read < 1000) {
-              control_port->print("0");
-            }
-            if (pin_read < 100) {
-              control_port->print("0");
-            }
-            if (pin_read < 10) {
-              control_port->print("0");
-            }
-            control_port->println(pin_read);
-          }
-        }
-
-        if (command_string == "NT") {
-          if ((((control_port_buffer[2] > 47) && (control_port_buffer[2] < 58)) || (toupper(control_port_buffer[2]) == 'A')) && (control_port_buffer[3] > 47) && (control_port_buffer[3] < 58)) {
-            command_good = 1;
-            byte pin_value = 0;
-            if (toupper(control_port_buffer[2]) == 'A') {
-              pin_value = get_analog_pin(control_port_buffer[3] - 48);
-            } else {
-              pin_value = ((control_port_buffer[2] - 48) * 10) + (control_port_buffer[3] - 48);
-            }
-            noTone(pin_value);
-            control_port->println("OK");
-          }
-        }
-
-      } // if (control_port_buffer_index == 5)
-
-      if (control_port_buffer_index == 8) {
-        if (command_string == "AW") {
-          if ((((control_port_buffer[2] > 47) && (control_port_buffer[2] < 58)) || (toupper(control_port_buffer[2]) == 'A')) && (control_port_buffer[3] > 47) && (control_port_buffer[3] < 58)) {
-            byte pin_value = 0;
-            if (toupper(control_port_buffer[2]) == 'A') {
-              pin_value = get_analog_pin(control_port_buffer[3] - 48);
-            } else {
-              pin_value = ((control_port_buffer[2] - 48) * 10) + (control_port_buffer[3] - 48);
-            }
-            int write_value = ((control_port_buffer[4] - 48) * 100) + ((control_port_buffer[5] - 48) * 10) + (control_port_buffer[6] - 48);
-            if ((write_value >= 0) && (write_value < 256)) {
-              analogWriteEnhanced(pin_value, write_value);
-              control_port->println("OK");
-              command_good = 1;
-            }
-          }
-        }
-      }
-
-      if (control_port_buffer_index == 9) {
-        if (command_string == "DT") {
-          if ((((control_port_buffer[2] > 47) && (control_port_buffer[2] < 58)) || (toupper(control_port_buffer[2]) == 'A')) && (control_port_buffer[3] > 47) && (control_port_buffer[3] < 58)) {
-            byte pin_value = 0;
-            if (toupper(control_port_buffer[2]) == 'A') {
-              pin_value = get_analog_pin(control_port_buffer[3] - 48);
-            } else {
-              pin_value = ((control_port_buffer[2] - 48) * 10) + (control_port_buffer[3] - 48);
-            }
-            int write_value = ((control_port_buffer[4] - 48) * 1000) + ((control_port_buffer[5] - 48) * 100) + ((control_port_buffer[6] - 48) * 10) + (control_port_buffer[7] - 48);
-            if ((write_value >= 0) && (write_value <= 9999)) {
-              tone(pin_value, write_value);
-              control_port->println("OK");
-              command_good = 1;
-            }
-          }
-        }
-      }
-
-
-      if (!command_good) {
-        control_port->println(F("ER02"));
-      }
-    }
-    control_port_buffer_carriage_return_flag = 0;
-    control_port_buffer_index = 0;
-  } else {
-    if (((millis() - last_serial_receive_time) > REMOTE_BUFFER_TIMEOUT_MS) && control_port_buffer_index) {
-      control_port->println(F("ER01"));
-      control_port_buffer_index = 0;
-    }
-  }
-
-
-
-} /* service_remote_unit_serial_buffer */
-
-      #endif // FEATURE_REMOTE_UNIT_SLAVE
-// --------------------------------------------------------------
-void check_serial(){
+void check_serial() {
 
   #ifdef DEBUG_LOOP
     debug.print("check_serial\n");
@@ -2037,11 +1087,6 @@ void check_serial(){
     static byte gps_missing_terminator_flag = 0;
   #endif
 
-  #if !defined(FEATURE_AZ_POSITION_ROTARY_ENCODER) && !defined(FEATURE_AZ_POSITION_PULSE_INPUT) && !defined(FEATURE_AZ_POSITION_ROTARY_ENCODER_USE_PJRC_LIBRARY)
-    long place_multiplier = 0;
-    byte decimalplace = 0;
-  #endif
-
   #ifdef FEATURE_CLOCK
     int temp_year = 0;
     byte temp_month = 0;
@@ -2054,218 +1099,6 @@ void check_serial(){
     char grid[10] = "";
     byte hit_error = 0;
   #endif // defined(FEATURE_MOON_TRACKING) || defined(FEATURE_SUN_TRACKING)
-
-  #if defined(FEATURE_AZ_POSITION_ROTARY_ENCODER) || defined(FEATURE_AZ_POSITION_PULSE_INPUT) || defined(FEATURE_AZ_POSITION_ROTARY_ENCODER_USE_PJRC_LIBRARY)
-    int new_azimuth = 9999;
-  #endif
-
-  #if defined(FEATURE_ELEVATION_CONTROL) && (defined(FEATURE_EL_POSITION_ROTARY_ENCODER) || defined(FEATURE_EL_POSITION_PULSE_INPUT) || defined(FEATURE_EL_POSITION_ROTARY_ENCODER_USE_PJRC_LIBRARY))
-    int new_elevation = 9999;
-  #endif
-
-  #if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(CONTROL_PROTOCOL_EMULATION) || defined(UNDER_DEVELOPMENT_REMOTE_UNIT_COMMANDS)
-
-  if ((serial_led) && (serial_led_time != 0) && ((millis() - serial_led_time) > SERIAL_LED_TIME_MS)) {
-    digitalWriteEnhanced(serial_led, LOW);
-    serial_led_time = 0;
-  }
-
-  if (control_port->available()) {
-    if (serial_led) {
-      digitalWriteEnhanced(serial_led, HIGH);                      // blink the LED just to say we got something
-      serial_led_time = millis();
-    }
-
-    #ifdef FEATURE_POWER_SWITCH
-      last_activity_time = millis();
-    #endif //FEATURE_POWER_SWITCH
-
-    #ifdef DEBUG_SERIAL
-      int control_port_available = control_port->available();
-    #endif // DEBUG_SERIAL
-
-    incoming_serial_byte = control_port->read();
-    last_serial_receive_time = millis();
-
-    #ifdef DEBUG_SERIAL
-      debug.print("check_serial: control_port: ");
-      debug.print(control_port_available);
-      debug.print(":");
-      debug.print(incoming_serial_byte);
-      debug.println("");
-    #endif // DEBUG_SERIAL
-
-
-    if ((incoming_serial_byte > 96) && (incoming_serial_byte < 123)) {  // uppercase it
-      incoming_serial_byte = incoming_serial_byte - 32;
-    }                                                                                                                    
-
-
-    #ifdef FEATURE_EASYCOM_EMULATION   //Easycom uses spaces, linefeeds, and carriage returns as command delimiters----------
-
-        // Easycom only
-
-        if ((control_port_buffer[0] == '\\') || (control_port_buffer[0] == '/') || ((control_port_buffer_index == 0) && ((incoming_serial_byte == '\\') || (incoming_serial_byte == '/')))) {
-          // if it's a backslash command add it to the buffer if it's not a line feed or carriage return
-          if ((incoming_serial_byte != 10) && (incoming_serial_byte != 13)) { 
-            control_port_buffer[control_port_buffer_index] = incoming_serial_byte;
-            control_port_buffer_index++;
-          }
-        } else {
-          // if it's an easycom command add it to the buffer if it's not a line feed, carriage return, or space
-          if ((incoming_serial_byte != 10) && (incoming_serial_byte != 13) && (incoming_serial_byte != 32)) { 
-            control_port_buffer[control_port_buffer_index] = incoming_serial_byte;
-            control_port_buffer_index++;
-          }
-        }
-
-        // if it is an Easycom command and we have a space, line feed, or carriage return, process it
-        if (((incoming_serial_byte == 10) || (incoming_serial_byte == 13) || (incoming_serial_byte == 32)) && (control_port_buffer[0] != '\\') && (control_port_buffer[0] != '/')){
-          #if defined(OPTION_HAMLIB_EASYCOM_AZ_EL_COMMAND_HACK) && defined(FEATURE_ELEVATION_CONTROL)
-              if ((control_port_buffer[0]=='A') && (control_port_buffer[1]=='Z') && (control_port_buffer_index == 2)){
-                unsigned long start_time_hack = millis();
-                if (!control_port->available()){
-                  while (((millis() - start_time_hack) < 200) && (!control_port->available())){}  // wait 200 mS for something else to pop up on the serial port
-                }
-                if (control_port->available()){ // is there also 'EL ' waiting for us in the buffer?
-                  start_time_hack = millis();
-                  while ( (control_port->available()) && ((millis() - start_time_hack) < 200) ) {
-                    control_port->read();
-                  }
-                  control_port_buffer[0] = 'Z';
-                  process_easycom_command(control_port_buffer,1,CONTROL_PORT0,return_string);
-                  //control_port->println(return_string); 
-                  control_port->print(return_string);
-                  #ifndef OPTION_HAMLIB_EASYCOM_NO_TERMINATOR_CHARACTER_HACK
-                    control_port->write(incoming_serial_byte);
-                  #endif //OPTION_HAMLIB_EASYCOM_NO_TERMINATOR_CHARACTER_HACK       
-                } else {  // we got just a bare AZ command
-                  process_easycom_command(control_port_buffer,control_port_buffer_index,CONTROL_PORT0,return_string);
-                  //control_port->println(return_string); 
-                  control_port->print(return_string);
-                  #ifndef OPTION_HAMLIB_EASYCOM_NO_TERMINATOR_CHARACTER_HACK
-                    control_port->write(incoming_serial_byte);
-                  #endif //OPTION_HAMLIB_EASYCOM_NO_TERMINATOR_CHARACTER_HACK 
-                }
-              } else {
-
-                if (control_port_buffer_index > 1){
-                  process_easycom_command(control_port_buffer,control_port_buffer_index,CONTROL_PORT0,return_string);
-                  //control_port->println(return_string);
-                  control_port->print(return_string);
-                  #ifndef OPTION_HAMLIB_EASYCOM_NO_TERMINATOR_CHARACTER_HACK
-                    control_port->write(incoming_serial_byte);
-                  #endif //OPTION_HAMLIB_EASYCOM_NO_TERMINATOR_CHARACTER_HACK 
-                }
-
-              }
-          #else //defined(OPTION_HAMLIB_EASYCOM_AZ_EL_COMMAND_HACK) && defined(FEATURE_ELEVATION_CONTROL)
-            if (control_port_buffer_index > 1){
-              process_easycom_command(control_port_buffer,control_port_buffer_index,CONTROL_PORT0,return_string);
-              //control_port->println(return_string); 
-              control_port->print(return_string);
-              #ifndef OPTION_HAMLIB_EASYCOM_NO_TERMINATOR_CHARACTER_HACK
-                control_port->write(incoming_serial_byte);
-              #endif //OPTION_HAMLIB_EASYCOM_NO_TERMINATOR_CHARACTER_HACK 
-            }
-          #endif //defined(OPTION_HAMLIB_EASYCOM_AZ_EL_COMMAND_HACK) && defined(FEATURE_ELEVATION_CONTROL)
-          clear_command_buffer();
-        } else {
-          // if it is a backslash command, process it if we have a carriage return
-          if ((incoming_serial_byte == 13) && ((control_port_buffer[0] == '\\') || (control_port_buffer[0] == '/'))){
-            process_backslash_command(control_port_buffer, control_port_buffer_index, CONTROL_PORT0, return_string);
-            control_port->println(return_string);
-            clear_command_buffer();
-          }
-        }
-
-
-    #endif //FEATURE_EASYCOM_EMULATION ------------------------------------------------------
-
-    #if defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_REMOTE_UNIT_SLAVE)  
-
-        if ((incoming_serial_byte != 10) && (incoming_serial_byte != 13)) { // add it to the buffer if it's not a line feed or carriage return
-          control_port_buffer[control_port_buffer_index] = incoming_serial_byte;
-          control_port_buffer_index++;
-        }
-
-        if (incoming_serial_byte == 13) {  // do we have a carriage return?
-          if ((control_port_buffer[0] == '\\') || (control_port_buffer[0] == '/')) {
-            process_backslash_command(control_port_buffer, control_port_buffer_index, CONTROL_PORT0, return_string);
-          } else {
-            #ifdef FEATURE_YAESU_EMULATION
-              process_yaesu_command(control_port_buffer,control_port_buffer_index,CONTROL_PORT0,return_string);
-            #endif //FEATURE_YAESU_EMULATION
-
-            #ifdef FEATURE_REMOTE_UNIT_SLAVE
-              process_remote_slave_command(control_port_buffer,control_port_buffer_index,CONTROL_PORT0,return_string);
-            #endif //FEATURE_REMOTE_UNIT_SLAVE
-          }  
-          control_port->println(return_string);
-          clear_command_buffer();
-        }
-
-    #endif //defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_REMOTE_UNIT_SLAVE)
-
-    #if defined(FEATURE_DCU_1_EMULATION)  
-
-        if ((incoming_serial_byte != 10) && (incoming_serial_byte != 13) && (incoming_serial_byte != ';')) { // add it to the buffer if it's not a line feed or carriage return
-          control_port_buffer[control_port_buffer_index] = incoming_serial_byte;
-          control_port_buffer_index++;
-          control_port->write(incoming_serial_byte);
-        }
-//zzzzz
-        if (incoming_serial_byte == 13) {  // do we have a command termination?
-          if ((control_port_buffer[0] == '\\') || (control_port_buffer[0] == '/')) {
-            process_backslash_command(control_port_buffer, control_port_buffer_index, CONTROL_PORT0, return_string);
-            control_port->println(return_string);
-            clear_command_buffer();
-          } else {
-            clear_command_buffer();
-          }
-        }
-        if (incoming_serial_byte == ';'){   
-          control_port->write(incoming_serial_byte);
-          control_port->println();
-          process_dcu_1_command(control_port_buffer,control_port_buffer_index,CONTROL_PORT0,return_string);
-          control_port->println(return_string);
-          clear_command_buffer();          
-        }  
-    #endif //defined(FEATURE_DCU_1_EMULATION) 
-
-  } // if (control_port->available())
-  #endif // defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_EASYCOM_EMULATION)
-
-
-  // remote unit port servicing
-  #if defined(FEATURE_MASTER_WITH_SERIAL_SLAVE)
-      if (remote_unit_port->available()) {
-        incoming_serial_byte = remote_unit_port->read();
-
-        #if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_EASYCOM_EMULATION)
-            // if (serial_read_event_flag[1]) {
-            //   control_port->print("EVS1");
-            //   control_port->write(incoming_serial_byte);
-            //   control_port->println();
-            // }
-            if (remote_port_rx_sniff) {
-              control_port->write(incoming_serial_byte);
-            }
-        #endif //defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_EASYCOM_EMULATION)
-
-        if ((incoming_serial_byte != 10) && (remote_unit_port_buffer_index < COMMAND_BUFFER_SIZE)) {
-          // incoming_serial_byte = toupper(incoming_serial_byte);
-          remote_unit_port_buffer[remote_unit_port_buffer_index] = incoming_serial_byte;
-          remote_unit_port_buffer_index++;
-          if ((incoming_serial_byte == 13) || (remote_unit_port_buffer_index == COMMAND_BUFFER_SIZE)) {
-            remote_unit_port_buffer_carriage_return_flag = 1;
-          }
-        }
-        serial1_last_receive_time = millis();
-
-      }
-  #endif // defined(FEATURE_MASTER_WITH_SERIAL_SLAVE)
-
 
   #ifdef FEATURE_GPS
 
@@ -2435,92 +1268,9 @@ void check_serial(){
     }
   #endif //defined(GPS_MIRROR_PORT) && defined(FEATURE_GPS)
 
-
 } /* check_serial */
 
-
-// --------------------------------------------------------------
-void check_buttons(){
-
-  #ifdef FEATURE_ADAFRUIT_BUTTONS
-    int buttons = 0;
-    // buttons = lcd.readButtons();
-    buttons = k3ngdisplay.readButtons();
-
-    if (buttons & BUTTON_RIGHT) {
-  #else
-    if (button_cw && (digitalReadEnhanced(button_cw) == BUTTON_ACTIVE_STATE)) {
-  #endif // FEATURE_ADAFRUIT_BUTTONS
-
-    if (azimuth_button_was_pushed == 0) {
-    #ifdef DEBUG_BUTTONS
-      debug.println("check_buttons: button_cw pushed");
-    #endif // DEBUG_BUTTONS
-    #ifdef OPTION_AZ_MANUAL_ROTATE_LIMITS
-    if (raw_azimuth < (AZ_MANUAL_ROTATE_CW_LIMIT * HEADING_MULTIPLIER)) {
-      #endif
-      submit_request(AZ, REQUEST_CW, 0, 61);
-      azimuth_button_was_pushed = 1;
-      #ifdef OPTION_AZ_MANUAL_ROTATE_LIMITS
-    } else {
-      #ifdef DEBUG_BUTTONS
-      debug.println("check_buttons: exceeded AZ_MANUAL_ROTATE_CW_LIMIT");
-      #endif // DEBUG_BUTTONS
-    }
-      #endif
-    }
-
-  } else {
-    #ifdef FEATURE_ADAFRUIT_BUTTONS
-    if (buttons & BUTTON_LEFT) {
-    #else
-    if (button_ccw && (digitalReadEnhanced(button_ccw) == BUTTON_ACTIVE_STATE)) {
-    #endif // FEATURE_ADAFRUIT_BUTTONS
-    if (azimuth_button_was_pushed == 0) {
-    #ifdef DEBUG_BUTTONS
-    debug.println("check_buttons: button_ccw pushed");
-    #endif // DEBUG_BUTTONS  
-    #ifdef OPTION_AZ_MANUAL_ROTATE_LIMITS
-        if (raw_azimuth > (AZ_MANUAL_ROTATE_CCW_LIMIT * HEADING_MULTIPLIER)) {
-      #endif
-        submit_request(AZ, REQUEST_CCW, 0, 62);
-        azimuth_button_was_pushed = 1;
-      #ifdef OPTION_AZ_MANUAL_ROTATE_LIMITS
-      } else {
-        #ifdef DEBUG_BUTTONS
-        debug.println("check_buttons: exceeded AZ_MANUAL_ROTATE_CCW_LIMIT");
-        #endif // DEBUG_BUTTONS
-      }
-      #endif // OPTION_AZ_MANUAL_ROTATE_LIMITS
-      }
-    }
-  }
-
-#ifdef FEATURE_ADAFRUIT_BUTTONS
-  if ((azimuth_button_was_pushed) && (!(buttons & 0x12))) {
-    #ifdef DEBUG_BUTTONS
-      debug.println("check_buttons: no button depressed");
-    #endif // DEBUG_BUTTONS
-    submit_request(AZ, REQUEST_STOP, 0, 63);
-    azimuth_button_was_pushed = 0;
-  }
-
-#else
-  if ((azimuth_button_was_pushed) && (digitalReadEnhanced(button_ccw) == BUTTON_INACTIVE_STATE) && (digitalReadEnhanced(button_cw) == BUTTON_INACTIVE_STATE)) {
-    delay(200);
-    if ((digitalReadEnhanced(button_ccw) == BUTTON_INACTIVE_STATE) && (digitalReadEnhanced(button_cw) == BUTTON_INACTIVE_STATE)) {
-    #ifdef DEBUG_BUTTONS
-      debug.println("check_buttons: no AZ button depressed");
-    #endif // DEBUG_BUTTONS
-    #ifndef OPTION_BUTTON_RELEASE_NO_SLOWDOWN
-    submit_request(AZ, REQUEST_STOP, 0, 64);
-    #else
-    submit_request(AZ, REQUEST_KILL, 0, 65);
-    #endif // OPTION_BUTTON_RELEASE_NO_SLOWDOWN
-    azimuth_button_was_pushed = 0;
-    }
-  }
-#endif // FEATURE_ADAFRUIT_BUTTONS
+void check_buttons() {
 
 #ifdef FEATURE_ELEVATION_CONTROL
   #ifdef FEATURE_ADAFRUIT_BUTTONS
@@ -3691,7 +2441,7 @@ void read_settings_from_eeprom(){
     initialize_eeprom_with_defaults();
   }
 } /* read_settings_from_eeprom */
-// --------------------------------------------------------------
+
 void initialize_eeprom_with_defaults(){
 
   #ifdef DEBUG_LOOP
@@ -3737,8 +2487,6 @@ void initialize_eeprom_with_defaults(){
 
 } /* initialize_eeprom_with_defaults */
 
-
-// --------------------------------------------------------------
 void write_settings_to_eeprom(){
 
   #ifdef DEBUG_EEPROM
@@ -3756,9 +2504,7 @@ void write_settings_to_eeprom(){
 
   configuration_dirty = 0;
 
-}
-
-// --------------------------------------------------------------
+} /* write_settings_to_eeprom */
 
 void az_check_operation_timeout(){
 
@@ -3770,9 +2516,7 @@ void az_check_operation_timeout(){
       debug.println("az_check_operation_timeout: timeout reached, aborting rotation");
     #endif // DEBUG_AZ_CHECK_OPERATION_TIMEOUT
   }
-}
-
-// --------------------------------------------------------------
+} /* az_check_operation_timeout */
 
 #ifdef FEATURE_TIMED_BUFFER
 void clear_timed_buffer(){
@@ -3781,8 +2525,6 @@ void clear_timed_buffer(){
   timed_buffer_entry_pointer = 0;
 }
 #endif // FEATURE_TIMED_BUFFER
-
-// --------------------------------------------------------------
 
 #ifdef FEATURE_TIMED_BUFFER
 void initiate_timed_buffer(byte source_port){
@@ -3813,7 +2555,7 @@ void initiate_timed_buffer(byte source_port){
 
 } /* initiate_timed_buffer */
 #endif // FEATURE_TIMED_BUFFER
-// --------------------------------------------------------------
+
 #ifdef FEATURE_TIMED_BUFFER
 void print_timed_buffer_empty_message(){
 
@@ -3824,7 +2566,7 @@ void print_timed_buffer_empty_message(){
 }
 
 #endif // FEATURE_TIMED_BUFFER
-// --------------------------------------------------------------
+
 #ifdef FEATURE_TIMED_BUFFER
 void check_timed_interval(){
 
@@ -3859,16 +2601,11 @@ void check_timed_interval(){
 } /* check_timed_interval */
 #endif // FEATURE_TIMED_BUFFER
 
-
-// --------------------------------------------------------------
-
-void read_azimuth(byte force_read){
-
+void read_azimuth(byte force_read) {
 
   #ifdef FEATURE_AZ_POSITION_INCREMENTAL_ENCODER
     read_azimuth_lock = 1;
   #endif
-
 
   unsigned int previous_raw_azimuth = raw_azimuth;
   static unsigned long last_measurement_time = 0;
@@ -4466,8 +3203,6 @@ void read_azimuth(byte force_read){
     read_azimuth_lock = 0;
   #endif
 
-
-
 } /* read_azimuth */
 
 // --------------------------------------------------------------
@@ -4475,9 +3210,7 @@ void read_azimuth(byte force_read){
 void output_debug(){
 
   #ifdef DEBUG_DUMP
-
     char tempstring[32] = "";
-
     #if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(CONTROL_PROTOCOL_EMULATION) || defined(UNDER_DEVELOPMENT_REMOTE_UNIT_COMMANDS)
 
       if (((millis() - last_debug_output_time) >= 3000) && (debug_mode)) {
@@ -4945,8 +3678,6 @@ void output_debug(){
 
 } /* output_debug */
 
-
-// --------------------------------------------------------------
 void print_to_port(char * print_this,byte port){
 
   #if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_EASYCOM_EMULATION)
@@ -5018,9 +3749,6 @@ void el_check_operation_timeout(){
   }
 }
 #endif
-
-
-// --------------------------------------------------------------
 
 #ifdef FEATURE_ELEVATION_CONTROL
 void read_elevation(byte force_read){
@@ -6073,7 +4801,6 @@ void rotator(byte rotation_action, byte rotation_type) {
       break;
           #endif // FEATURE_ELEVATION_CONTROL
   } /* switch */
-
   #ifdef DEBUG_ROTATOR
   if (debug_mode) {
     debug.print(F("rotator: exiting\n"));
@@ -6110,8 +4837,6 @@ void initialize_interrupts(){
 
 
 }
-
-// --------------------------------------------------------------
 
 void initialize_pins(){
 
@@ -6430,8 +5155,6 @@ void initialize_pins(){
 
 } /* initialize_pins */
 
-// --------------------------------------------------------------
-
 void initialize_serial(){
 
   #if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_EASYCOM_EMULATION) || defined(FEATURE_CLOCK) || defined(UNDER_DEVELOPMENT_REMOTE_UNIT_COMMANDS)
@@ -6462,10 +5185,6 @@ void initialize_serial(){
   #endif //FEATURE_GPS
 
 } /* initialize_serial */
-
-
-// --------------------------------------------------------------
-
 
 void initialize_display(){
 
@@ -6502,9 +5221,6 @@ void initialize_display(){
 
 
 }
-
-
-// --------------------------------------------------------------
 
 void initialize_peripherals(){
 
@@ -6669,8 +5385,6 @@ void initialize_peripherals(){
 
 } /* initialize_peripherals */
 
-
-// --------------------------------------------------------------
 void submit_request(byte axis, byte request, int parm, byte called_by){
 
   #ifdef DEBUG_SUBMIT_REQUEST
@@ -6717,7 +5431,7 @@ void submit_request(byte axis, byte request, int parm, byte called_by){
   #endif // DEBUG_SUBMIT_REQUEST  
 
 } /* submit_request */
-// --------------------------------------------------------------
+
 void service_rotation(){
 
 
@@ -7233,7 +5947,7 @@ void service_rotation(){
   #endif
 
 } /* service_rotation */
-// --------------------------------------------------------------
+
 void stop_all_tracking(){
 
 
@@ -7246,7 +5960,6 @@ void stop_all_tracking(){
 
 }
 
-// --------------------------------------------------------------
 void service_request_queue(){
 
 // xxxx
@@ -7824,7 +6537,6 @@ void service_request_queue(){
 
 } /* service_request_queue */
 
-// --------------------------------------------------------------
 void check_for_dirty_configuration(){
 
   static unsigned long last_config_write_time = 0;
@@ -7836,7 +6548,6 @@ void check_for_dirty_configuration(){
 
 }
 
-// --------------------------------------------------------------
 byte current_az_state(){
 
   if ((az_state == SLOW_START_CW) || (az_state == NORMAL_CW) || (az_state == SLOW_DOWN_CW) || (az_state == TIMED_SLOW_DOWN_CW)) {
@@ -7848,7 +6559,7 @@ byte current_az_state(){
   return NOT_DOING_ANYTHING;
 
 }
-// --------------------------------------------------------------
+
 #ifdef FEATURE_ELEVATION_CONTROL
 byte current_el_state(){
 
@@ -7862,58 +6573,7 @@ byte current_el_state(){
 
 }
 #endif // FEATURE_ELEVATION_CONTROL
-// --------------------------------------------------------------
-#ifdef FEATURE_AZ_POSITION_PULSE_INPUT
-void az_position_pulse_interrupt_handler(){
 
-
- #ifdef DEBUG_POSITION_PULSE_INPUT
-  // az_position_pule_interrupt_handler_flag++;
-  az_pulse_counter++;
-  #endif // DEBUG_POSITION_PULSE_INPUT
-
-  if (current_az_state() == ROTATING_CW) {
-    az_position_pulse_input_azimuth += AZ_POSITION_PULSE_DEG_PER_PULSE;
-    last_known_az_state = ROTATING_CW;
-  } else {
-    if (current_az_state() == ROTATING_CCW) {
-      az_position_pulse_input_azimuth -= AZ_POSITION_PULSE_DEG_PER_PULSE;
-      last_known_az_state = ROTATING_CCW;
-    } else {
-          #ifndef OPTION_PULSE_IGNORE_AMBIGUOUS_PULSES
-      if (last_known_az_state == ROTATING_CW) {
-        az_position_pulse_input_azimuth += AZ_POSITION_PULSE_DEG_PER_PULSE;
-      } else {
-        if (last_known_az_state == ROTATING_CCW) {
-          az_position_pulse_input_azimuth -= AZ_POSITION_PULSE_DEG_PER_PULSE;
-        }
-      }
-            #endif // OPTION_PULSE_IGNORE_AMBIGUOUS_PULSES
-            #ifdef DEBUG_POSITION_PULSE_INPUT
-      az_pulse_counter_ambiguous++;
-            #endif // DEBUG_POSITION_PULSE_INPUT
-    }
-  }
-
-  #ifdef OPTION_AZ_POSITION_PULSE_HARD_LIMIT
-  if (az_position_pulse_input_azimuth < azimuth_starting_point) {
-    az_position_pulse_input_azimuth = azimuth_starting_point;
-  }
-  if (az_position_pulse_input_azimuth > (azimuth_starting_point + azimuth_rotation_capability)) {
-    az_position_pulse_input_azimuth = (azimuth_starting_point + azimuth_rotation_capability);
-  }
-  #else
-  if (az_position_pulse_input_azimuth < 0) {
-    az_position_pulse_input_azimuth += 360;
-  }
-  if (az_position_pulse_input_azimuth >= 360) {
-    az_position_pulse_input_azimuth -= 360;
-  }
-  #endif // OPTION_AZ_POSITION_PULSE_HARD_LIMIT
-
-} /* az_position_pulse_interrupt_handler */
-#endif // FEATURE_AZ_POSITION_PULSE_INPUT
-// --------------------------------------------------------------
 #ifdef FEATURE_ELEVATION_CONTROL
 #ifdef FEATURE_EL_POSITION_PULSE_INPUT
 void el_position_pulse_interrupt_handler(){
@@ -7993,480 +6653,7 @@ void el_position_pulse_interrupt_handler(){
 } /* el_position_pulse_interrupt_handler */
 #endif // FEATURE_EL_POSITION_PULSE_INPUT
 #endif // FEATURE_ELEVATION_CONTROL
-// --------------------------------------------------------------------------
-#if defined(FEATURE_MASTER_WITH_SERIAL_SLAVE) || defined(FEATURE_MASTER_WITH_ETHERNET_SLAVE)
-byte submit_remote_command(byte remote_command_to_send, byte parm1, int parm2){
 
-  #ifdef FEATURE_MASTER_WITH_ETHERNET_SLAVE
-  char ethernet_send_string[32];
-  char temp_string[32];
-  #endif //FEATURE_MASTER_WITH_ETHERNET_SLAVE
-
-  #ifdef FEATURE_MASTER_WITH_ETHERNET_SLAVE
-  if (ethernetslavelinkclient0_state != ETHERNET_SLAVE_CONNECTED){return 0;}
-  #endif //FEATURE_MASTER_WITH_ETHERNET_SLAVE
-
-  if ((remote_unit_command_submitted && ((remote_command_to_send == REMOTE_UNIT_AZ_COMMAND) || (remote_command_to_send == REMOTE_UNIT_EL_COMMAND) || (remote_command_to_send == REMOTE_UNIT_CL_COMMAND))) || suspend_remote_commands) {
-    return 0;
-  } else {
-    switch (remote_command_to_send) {
-      case REMOTE_UNIT_CL_COMMAND:
-        #ifdef FEATURE_MASTER_WITH_SERIAL_SLAVE
-          remote_unit_port->println("CL");
-        #endif //FEATURE_MASTER_WITH_SERIAL_SLAVE
-        #ifdef FEATURE_MASTER_WITH_ETHERNET_SLAVE
-          ethernet_slave_link_send("CL");
-        #endif //FEATURE_MASTER_WITH_ETHERNET_SLAVE
-        #if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_EASYCOM_EMULATION)
-          if (remote_port_tx_sniff) {control_port->println("CL");}
-        #endif
-        remote_unit_command_submitted = REMOTE_UNIT_CL_COMMAND;
-        break;
-
-
-      case REMOTE_UNIT_AZ_COMMAND:
-        #ifdef FEATURE_MASTER_WITH_SERIAL_SLAVE
-          remote_unit_port->println("AZ");
-        #endif //FEATURE_MASTER_WITH_SERIAL_SLAVE
-        #ifdef FEATURE_MASTER_WITH_ETHERNET_SLAVE
-          ethernet_slave_link_send("AZ");
-        #endif //FEATURE_MASTER_WITH_ETHERNET_SLAVE
-        #if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_EASYCOM_EMULATION)
-          if (remote_port_tx_sniff) {control_port->println("AZ");}
-        #endif
-        remote_unit_command_submitted = REMOTE_UNIT_AZ_COMMAND;
-        break;
-
-      case REMOTE_UNIT_EL_COMMAND:
-        #ifdef FEATURE_MASTER_WITH_SERIAL_SLAVE
-          remote_unit_port->println("EL");
-        #endif //FEATURE_MASTER_WITH_SERIAL_SLAVE
-        #ifdef FEATURE_MASTER_WITH_ETHERNET_SLAVE
-          ethernet_slave_link_send("EL");
-        #endif //FEATURE_MASTER_WITH_ETHERNET_SLAVE        
-        #if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_EASYCOM_EMULATION)
-          if (remote_port_tx_sniff) {control_port->println("EL");}
-        #endif
-        remote_unit_command_submitted = REMOTE_UNIT_EL_COMMAND;
-        break;
-
-
-      case REMOTE_UNIT_AW_COMMAND:
-        #ifdef FEATURE_MASTER_WITH_SERIAL_SLAVE
-          take_care_of_pending_remote_command();
-          remote_unit_port->print("AW");
-          #if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_EASYCOM_EMULATION)
-            if (remote_port_tx_sniff) {control_port->print("AW");}
-          #endif          
-          parm1 = parm1 - 100;   // pin number
-          if (parm1 < 10) {
-            remote_unit_port->print("0");
-            #if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_EASYCOM_EMULATION)
-              if (remote_port_tx_sniff) {control_port->print("0");}
-            #endif
-          }
-          remote_unit_port->print(parm1);
-          #if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_EASYCOM_EMULATION)
-            if (remote_port_tx_sniff) {control_port->print(parm1);}
-          #endif          
-          if (parm2 < 10) {
-            remote_unit_port->print("0");
-            #if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_EASYCOM_EMULATION)
-              if (remote_port_tx_sniff) {control_port->print("0");}
-            #endif            
-          }
-          if (parm2 < 100) {
-            remote_unit_port->print("0");
-            #if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_EASYCOM_EMULATION)
-              if (remote_port_tx_sniff) {control_port->print("0");}
-            #endif            
-          }
-          remote_unit_port->println(parm2);
-          #if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_EASYCOM_EMULATION)
-            if (remote_port_tx_sniff) {control_port->println(parm2);}
-          #endif                
-        #endif //FEATURE_MASTER_WITH_SERIAL_SLAVE
-
-        #ifdef FEATURE_MASTER_WITH_ETHERNET_SLAVE
-          take_care_of_pending_remote_command();
-          strcpy(ethernet_send_string,"AW");
-          parm1 = parm1 - 100;   // pin number
-          if (parm1 < 10) {strcat(ethernet_send_string,"0");}
-          dtostrf(parm1,0,0,temp_string);
-          if (parm2 < 10) {strcat(ethernet_send_string,"0");}
-          if (parm2 < 100) {strcat(ethernet_send_string,"0");}
-          dtostrf(parm2,0,0,temp_string);
-          strcat(ethernet_send_string,temp_string);
-          ethernet_slave_link_send(ethernet_send_string);
-        #endif //FEATURE_MASTER_WITH_ETHERNET_SLAVE
-
-        remote_unit_command_submitted = REMOTE_UNIT_OTHER_COMMAND;
-        break;
-
-      case REMOTE_UNIT_DHL_COMMAND:
-        #ifdef FEATURE_MASTER_WITH_SERIAL_SLAVE
-          take_care_of_pending_remote_command();
-          remote_unit_port->print("D");
-          #if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_EASYCOM_EMULATION)
-            if (remote_port_tx_sniff) {control_port->print("D");}
-          #endif              
-          if (parm2 == HIGH) {
-            remote_unit_port->print("H");
-            #if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_EASYCOM_EMULATION)
-              if (remote_port_tx_sniff) {control_port->print("H");}
-            #endif                
-          } else {
-            remote_unit_port->print("L");
-            #if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_EASYCOM_EMULATION)
-              if (remote_port_tx_sniff) {control_port->print("L");}
-            #endif                
-          }
-          parm1 = parm1 - 100;
-          if (parm1 < 10) {
-            remote_unit_port->print("0");
-            #if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_EASYCOM_EMULATION)
-              if (remote_port_tx_sniff) {control_port->print("0");}
-            #endif                
-          }
-          remote_unit_port->println(parm1);
-          #if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_EASYCOM_EMULATION)
-            if (remote_port_tx_sniff) {control_port->println(parm1);}
-          #endif              
-        #endif //FEATURE_MASTER_WITH_SERIAL_SLAVE
-
-
-        #ifdef FEATURE_MASTER_WITH_ETHERNET_SLAVE
-          take_care_of_pending_remote_command();
-          strcpy(ethernet_send_string,"D");
-          if (parm2 == HIGH) {strcat(ethernet_send_string,"H");} else {strcat(ethernet_send_string,"L");}
-          parm1 = parm1 - 100;
-          if (parm1 < 10) {strcat(ethernet_send_string,"0");}
-          dtostrf(parm1,0,0,temp_string);
-          strcat(ethernet_send_string,temp_string);
-          ethernet_slave_link_send(ethernet_send_string);
-        #endif //FEATURE_MASTER_WITH_ETHERNET_SLAVE
-
-        remote_unit_command_submitted = REMOTE_UNIT_OTHER_COMMAND;
-
-        break;
-
-      case REMOTE_UNIT_DOI_COMMAND:
-        #ifdef FEATURE_MASTER_WITH_SERIAL_SLAVE
-          take_care_of_pending_remote_command();
-          remote_unit_port->print("D");
-          #if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_EASYCOM_EMULATION)
-            if (remote_port_tx_sniff) {control_port->print("D");}
-          #endif                
-          if (parm2 == OUTPUT) {
-            remote_unit_port->print("O");
-            #if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_EASYCOM_EMULATION)
-              if (remote_port_tx_sniff) {control_port->print("O");}
-            #endif                  
-          } else {
-            remote_unit_port->print("I");}
-            #if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_EASYCOM_EMULATION)
-              if (remote_port_tx_sniff) {control_port->print("I");}
-            #endif                  
-          parm1 = parm1 - 100;
-          if (parm1 < 10) {
-            remote_unit_port->print("0");
-            #if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_EASYCOM_EMULATION)
-              if (remote_port_tx_sniff) {control_port->print("0");}
-            #endif                  
-          }
-          remote_unit_port->println(parm1);
-            #if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_EASYCOM_EMULATION)
-              if (remote_port_tx_sniff) {control_port->println(parm1);}
-            #endif                
-          remote_unit_command_submitted = REMOTE_UNIT_OTHER_COMMAND;
-          // get_remote_port_ok_response();
-        #endif //FEATURE_MASTER_WITH_SERIAL_SLAVE
-
-        #ifdef FEATURE_MASTER_WITH_ETHERNET_SLAVE
-          take_care_of_pending_remote_command();
-          strcpy(ethernet_send_string,"D");
-          if (parm2 == OUTPUT) {strcat(ethernet_send_string,"O");} else {strcat(ethernet_send_string,"I");}
-          parm1 = parm1 - 100;
-          if (parm1 < 10) {strcat(ethernet_send_string,"0");}
-          dtostrf(parm1,0,0,temp_string);
-          strcat(ethernet_send_string,temp_string);
-          ethernet_slave_link_send(ethernet_send_string);
-          remote_unit_command_submitted = REMOTE_UNIT_OTHER_COMMAND;
-        #endif //FEATURE_MASTER_WITH_ETHERNET_SLAVE
-
-        break;
-
-      case REMOTE_UNIT_GS_COMMAND:
-        #ifdef FEATURE_MASTER_WITH_SERIAL_SLAVE
-          remote_unit_port->println("GS");
-        #endif //FEATURE_MASTER_WITH_SERIAL_SLAVE
-        #ifdef FEATURE_MASTER_WITH_ETHERNET_SLAVE
-          ethernet_slave_link_send("GS");
-        #endif //FEATURE_MASTER_WITH_ETHERNET_SLAVE
-        #if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_EASYCOM_EMULATION)
-          if (remote_port_tx_sniff) {control_port->println("GS");}
-        #endif
-        remote_unit_command_submitted = REMOTE_UNIT_GS_COMMAND;
-        break;
-
-      case REMOTE_UNIT_RC_COMMAND:    
-        #ifdef FEATURE_MASTER_WITH_SERIAL_SLAVE
-          remote_unit_port->println("RC");
-        #endif //FEATURE_MASTER_WITH_SERIAL_SLAVE
-        #ifdef FEATURE_MASTER_WITH_ETHERNET_SLAVE
-          ethernet_slave_link_send("RC");
-        #endif //FEATURE_MASTER_WITH_ETHERNET_SLAVE
-        #if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_EASYCOM_EMULATION)
-          if (remote_port_tx_sniff) {control_port->println("RC");}
-        #endif
-        remote_unit_command_submitted = REMOTE_UNIT_RC_COMMAND;
-        break;
-
-    } /* switch */
-    last_remote_unit_command_time = millis();
-    remote_unit_command_results_available = 0;
-    return 1;
-  }
-
-
-
-} /* submit_remote_command */
-#endif // defined(FEATURE_MASTER_WITH_SERIAL_SLAVE) || defined(FEATURE_MASTER_WITH_ETHERNET_SLAVE)
-
-// --------------------------------------------------------------------------
-
-#if defined(FEATURE_MASTER_WITH_SERIAL_SLAVE) || defined(FEATURE_MASTER_WITH_ETHERNET_SLAVE)
-byte is_ascii_number(byte char_in){
-
-  if ((char_in > 47) && (char_in < 58)) {
-    return 1;
-  } else {
-    return 0;
-  }
-
-}
-#endif // defined(FEATURE_MASTER_WITH_SERIAL_SLAVE) || defined(FEATURE_MASTER_WITH_ETHERNET_SLAVE)
-// --------------------------------------------------------------------------
-#if defined(FEATURE_MASTER_WITH_SERIAL_SLAVE) || defined(FEATURE_MASTER_WITH_ETHERNET_SLAVE)
-void service_remote_communications_incoming_buffer(){
-
-
-  #if defined(FEATURE_CLOCK) && defined(OPTION_SYNC_MASTER_CLOCK_TO_SLAVE)
-    int temp_year = 0;
-    byte temp_month = 0;
-    byte temp_day = 0;
-    byte temp_minute = 0;
-    byte temp_hour = 0;
-    byte temp_sec = 0;
-  #endif // defined(FEATURE_CLOCK) && defined(OPTION_SYNC_MASTER_CLOCK_TO_SLAVE)
-
-  float temp_float_latitude = 0;
-  float temp_float_longitude = 0;
-
-
-
-  byte good_data = 0;
-
-  if (remote_unit_port_buffer_carriage_return_flag) {
-
-    #ifdef DEBUG_SVC_REMOTE_COMM_INCOMING_BUFFER
-      debug.print("service_remote_communications_incoming_buffer: remote_unit_port_buffer_index: ");
-      debug.print(remote_unit_port_buffer_index);
-      debug.print(" buffer: ");
-      for (int x = 0; x < remote_unit_port_buffer_index; x++) {
-        debug_write((char*)remote_unit_port_buffer[x]);
-        debug.println("$");
-      }
-    #endif // DEBUG_SVC_REMOTE_COMM_INCOMING_BUFFER
-
-    if (remote_unit_command_submitted) {   // this was a solicited response
-      switch (remote_unit_command_submitted) {
-        #ifdef OPTION_SYNC_MASTER_COORDINATES_TO_SLAVE
-        case REMOTE_UNIT_RC_COMMAND:  //RC+40.9946 -075.6596
-          if ((remote_unit_port_buffer[0] == 'R') && (remote_unit_port_buffer[1] == 'C') && (remote_unit_port_buffer[5] == '.') && (remote_unit_port_buffer[10] == ' ') && (remote_unit_port_buffer[15] == '.')){
-            temp_float_latitude = ((remote_unit_port_buffer[3]-48)*10) + (remote_unit_port_buffer[4]-48) + ((remote_unit_port_buffer[6]-48)/10.0) + ((remote_unit_port_buffer[7]-48)/100.0) + ((remote_unit_port_buffer[8]-48)/1000.0) + ((remote_unit_port_buffer[9]-48)/10000.0);
-            if (remote_unit_port_buffer[2] == '-') {
-              temp_float_latitude = temp_float_latitude * -1;
-            }
-            temp_float_longitude = ((remote_unit_port_buffer[12]-48)*100) + ((remote_unit_port_buffer[13]-48)*10) + (remote_unit_port_buffer[14]-48) + ((remote_unit_port_buffer[16]-48)/10.0)+ ((remote_unit_port_buffer[17]-48)/100.0) + ((remote_unit_port_buffer[18]-48)/1000.0) + ((remote_unit_port_buffer[19]-48)/10000.0);
-            if (remote_unit_port_buffer[11] == '-') {
-              temp_float_longitude = temp_float_longitude * -1;
-            }
-            if ((temp_float_latitude <= 90) && (temp_float_latitude >= -90) && (temp_float_longitude <= 180) && (temp_float_longitude >= -180)){
-              latitude = temp_float_latitude;
-              longitude = temp_float_longitude;
-              #ifdef DEBUG_SYNC_MASTER_COORDINATES_TO_SLAVE
-              debug.println("service_remote_communications_incoming_buffer: coordinates synced to slave");
-              #endif //DEBUG_SYNC_MASTER_COORDINATES_TO_SLAVE              
-            }         
-            good_data = 1;
-          }
-          break;
-        #endif //OPTION_SYNC_MASTER_COORDINATES_TO_SLAVE
-        #ifdef OPTION_SYNC_MASTER_CLOCK_TO_SLAVE
-        case REMOTE_UNIT_GS_COMMAND:
-          if ((remote_unit_port_buffer[0] == 'G') && (remote_unit_port_buffer[1] == 'S')){
-            if (remote_unit_port_buffer[2] == '1'){
-              if (clock_status == SLAVE_SYNC) {clock_status = SLAVE_SYNC_GPS;}
-              good_data = 1;
-            } else {
-              if (remote_unit_port_buffer[2] == '0') {good_data = 1;}
-            }
-          }
-          break;
-        #endif //OPTION_SYNC_MASTER_CLOCK_TO_SLAVE
-
-        case REMOTE_UNIT_CL_COMMAND:
-          if ((remote_unit_port_buffer[0] == 'C') && (remote_unit_port_buffer[1] == 'L') &&
-            (remote_unit_port_buffer[12] == ' ') && (remote_unit_port_buffer[21] == 'Z'))
-          {
-            #if defined(FEATURE_CLOCK) && defined(OPTION_SYNC_MASTER_CLOCK_TO_SLAVE)
-            temp_year = ((remote_unit_port_buffer[2] - 48) * 1000) + ((remote_unit_port_buffer[3] - 48) * 100) + ((remote_unit_port_buffer[4] - 48) * 10) + (remote_unit_port_buffer[5] - 48);
-            temp_month = ((remote_unit_port_buffer[7] - 48) * 10) + (remote_unit_port_buffer[8] - 48);
-            temp_day = ((remote_unit_port_buffer[10] - 48) * 10) + (remote_unit_port_buffer[11] - 48);
-            temp_hour = ((remote_unit_port_buffer[13] - 48) * 10) + (remote_unit_port_buffer[14] - 48);
-            temp_minute = ((remote_unit_port_buffer[16] - 48) * 10) + (remote_unit_port_buffer[17] - 48);
-            temp_sec = ((remote_unit_port_buffer[19] - 48) * 10) + (remote_unit_port_buffer[20] - 48);
-            if ((temp_year > 2013) && (temp_year < 2070) &&
-                (temp_month > 0) && (temp_month < 13) &&
-                (temp_day > 0) && (temp_day < 32) &&
-                (temp_hour >= 0) && (temp_hour < 24) &&
-                (temp_minute >= 0) && (temp_minute < 60) &&
-                (temp_sec >= 0) && (temp_sec < 60) ) {
-
-              clock_year_set = temp_year;
-              clock_month_set = temp_month;
-              clock_day_set = temp_day;
-              clock_hour_set = temp_hour;
-              clock_min_set = temp_minute;
-              clock_sec_set = temp_sec;
-              millis_at_last_calibration = millis();
-              #ifdef DEBUG_SYNC_MASTER_CLOCK_TO_SLAVE
-              debug.println("service_remote_communications_incoming_buffer: clock synced to slave clock");
-              #endif //DEBUG_SYNC_MASTER_CLOCK_TO_SLAVE
-              good_data = 1;
-              clock_synced_to_remote = 1;
-              if (clock_status == FREE_RUNNING) {clock_status = SLAVE_SYNC;}
-            } else {
-
-              #ifdef DEBUG_SYNC_MASTER_CLOCK_TO_SLAVE
-              debug.println("service_remote_communications_incoming_buffer: slave clock sync error");
-              #endif //DEBUG_SYNC_MASTER_CLOCK_TO_SLAVE  
-              if ((clock_status == SLAVE_SYNC) || (clock_status == SLAVE_SYNC_GPS)) {clock_status = FREE_RUNNING;}   
-            }
-            #endif // defined(FEATURE_CLOCK) && defined(OPTION_SYNC_MASTER_CLOCK_TO_SLAVE)
-
-            #if !defined(FEATURE_CLOCK) || !defined(OPTION_SYNC_MASTER_CLOCK_TO_SLAVE)
-            good_data = 1;
-            #endif //!defined(FEATURE_CLOCK) || !defined(OPTION_SYNC_MASTER_CLOCK_TO_SLAVE)
-          } else {
-            #if defined(FEATURE_CLOCK) && defined(OPTION_SYNC_MASTER_CLOCK_TO_SLAVE)
-            #ifdef DEBUG_SYNC_MASTER_CLOCK_TO_SLAVE
-            debug.print("service_remote_communications_incoming_buffer: REMOTE_UNIT_CL_COMMAND format error.  remote_unit_port_buffer_index: ");
-            debug.print(remote_unit_port_buffer_index);
-            debug.println("");
-            #endif //DEBUG_SYNC_MASTER_CLOCK_TO_SLAVE 
-            if ((clock_status == SLAVE_SYNC) || (clock_status == SLAVE_SYNC_GPS)) {clock_status = FREE_RUNNING;} 
-            #endif // defined(FEATURE_CLOCK) && defined(OPTION_SYNC_MASTER_CLOCK_TO_SLAVE)          
-          }
-          break;
-        case REMOTE_UNIT_AZ_COMMAND:
-          if ((remote_unit_port_buffer_index == 13) && (remote_unit_port_buffer[0] == 'A') && (remote_unit_port_buffer[1] == 'Z') &&
-              (is_ascii_number(remote_unit_port_buffer[2])) && (is_ascii_number(remote_unit_port_buffer[3])) && (is_ascii_number(remote_unit_port_buffer[4])) && (is_ascii_number(remote_unit_port_buffer[6]))  && (is_ascii_number(remote_unit_port_buffer[7])) && (is_ascii_number(remote_unit_port_buffer[8])) && (is_ascii_number(remote_unit_port_buffer[9])) && (is_ascii_number(remote_unit_port_buffer[10])) && (is_ascii_number(remote_unit_port_buffer[11]))) {
-            remote_unit_command_result_float = ((remote_unit_port_buffer[2] - 48) * 100) + ((remote_unit_port_buffer[3] - 48) * 10) + (remote_unit_port_buffer[4] - 48) + ((remote_unit_port_buffer[6] - 48) / 10.0) + ((remote_unit_port_buffer[7] - 48) / 100.0) + ((remote_unit_port_buffer[8] - 48) / 1000.0) + ((remote_unit_port_buffer[9] - 48) / 10000.0) + ((remote_unit_port_buffer[10] - 48) / 100000.0) + ((remote_unit_port_buffer[11] - 48) / 1000000.0);
-            good_data = 1;
-          }
-          break;
-        case REMOTE_UNIT_EL_COMMAND:
-          if ((remote_unit_port_buffer_index == 14) && (remote_unit_port_buffer[0] == 'E') && (remote_unit_port_buffer[1] == 'L') &&
-              (is_ascii_number(remote_unit_port_buffer[3])) && (is_ascii_number(remote_unit_port_buffer[4])) && (is_ascii_number(remote_unit_port_buffer[5])) && (is_ascii_number(remote_unit_port_buffer[7])) && (is_ascii_number(remote_unit_port_buffer[8])) && (is_ascii_number(remote_unit_port_buffer[9])) && (is_ascii_number(remote_unit_port_buffer[10])) && (is_ascii_number(remote_unit_port_buffer[11])) && (is_ascii_number(remote_unit_port_buffer[12]))) {
-            remote_unit_command_result_float = ((remote_unit_port_buffer[3] - 48) * 100) + ((remote_unit_port_buffer[4] - 48) * 10) + (remote_unit_port_buffer[5] - 48) + ((remote_unit_port_buffer[7] - 48) / 10.0)  + ((remote_unit_port_buffer[8] - 48) / 100.0)  + ((remote_unit_port_buffer[9] - 48) / 1000.0)  + ((remote_unit_port_buffer[10] - 48) / 10000.0)  + ((remote_unit_port_buffer[11] - 48) / 100000.0)  + ((remote_unit_port_buffer[12] - 48) / 1000000.0);
-            if (remote_unit_port_buffer[2] == '+') {
-              good_data = 1;
-            }
-            if (remote_unit_port_buffer[2] == '-') {
-              remote_unit_command_result_float = remote_unit_command_result_float * -1.0;
-              good_data = 1;
-            }
-          }
-          break;
-        case REMOTE_UNIT_OTHER_COMMAND:
-          if ((remote_unit_port_buffer[0] == 'O') && (remote_unit_port_buffer[1] == 'K')) {
-            good_data = 1;
-          }
-          break;
-      } /* switch */
-      if (good_data) {
-        if (remote_unit_command_submitted != REMOTE_UNIT_OTHER_COMMAND) {
-          remote_unit_command_results_available = remote_unit_command_submitted;
-        }
-        remote_unit_good_results++;
-
-        #ifdef DEBUG_SVC_REMOTE_COMM_INCOMING_BUFFER
-        debug.print("service_remote_communications_incoming_buffer: remote_unit_command_results_available: ");
-        debug.print(remote_unit_command_results_available);
-        debug.print(" remote_unit_command_result_float: ");
-        debug.print(remote_unit_command_result_float,2);
-        debug.println("");
-        #endif // DEBUG_SVC_REMOTE_COMM_INCOMING_BUFFER
-
-
-      } else {
-
-        #ifdef DEBUG_SVC_REMOTE_COMM_INCOMING_BUFFER_BAD_DATA
-        debug.print("service_remote_communications_incoming_buffer: bad data: remote_unit_command_submitted: ");
-        switch (remote_unit_command_submitted) {
-          case REMOTE_UNIT_AZ_COMMAND: debug.print("REMOTE_UNIT_AZ_COMMAND"); break;
-          case REMOTE_UNIT_EL_COMMAND: debug.print("REMOTE_UNIT_EL_COMMAND"); break;
-          case REMOTE_UNIT_OTHER_COMMAND: debug.print("REMOTE_UNIT_OTHER_COMMAND"); break;
-          default: debug.print("UNDEFINED"); break;
-        }
-        debug.print(" buffer_index:");
-        debug.print(remote_unit_port_buffer_index);
-        debug.print(" buffer: ");
-        for (int x = 0; x < remote_unit_port_buffer_index; x++) {
-          debug_write((char*)remote_unit_port_buffer[x]);
-        }
-        debug.println("$");
-        #endif // DEBUG_SVC_REMOTE_COMM_INCOMING_BUFFER_BAD_DATA
-
-
-        remote_unit_command_results_available = 0;
-        remote_unit_bad_results++;
-      }
-      remote_unit_command_submitted = 0;
-    } else {  // this was an unsolicited message
-
-    }
-    remote_unit_port_buffer_carriage_return_flag = 0;
-    remote_unit_port_buffer_index = 0;
-  }
-
-  // has a command timed out?
-  if ((remote_unit_command_submitted) && ((millis() - last_remote_unit_command_time) > REMOTE_UNIT_COMMAND_TIMEOUT_MS)) {
-
-    #if defined(FEATURE_CLOCK) && defined(OPTION_SYNC_MASTER_CLOCK_TO_SLAVE)
-    if ((remote_unit_command_submitted == REMOTE_UNIT_CL_COMMAND) && ((clock_status == SLAVE_SYNC) || (clock_status == SLAVE_SYNC_GPS))){
-      clock_status = FREE_RUNNING;
-    }
-    #endif //defined(FEATURE_CLOCK) && defined(OPTION_SYNC_MASTER_CLOCK_TO_SLAVE)
-
-    remote_unit_command_timeouts++;
-    remote_unit_command_submitted = 0;
-    remote_unit_port_buffer_index = 0;
-    
-  }
-
-  // have characters been in the buffer for some time but no carriage return?
-  if ((remote_unit_port_buffer_index) && (!remote_unit_command_submitted) && ((millis() - serial1_last_receive_time) > REMOTE_UNIT_COMMAND_TIMEOUT_MS)) {
-    remote_unit_port_buffer_index = 0;
-    remote_unit_incoming_buffer_timeouts++;
-  }
-
-} /* service_remote_communications_incoming_buffer */
-
-#endif // defined(FEATURE_MASTER_WITH_SERIAL_SLAVE) || defined(FEATURE_MASTER_WITH_ETHERNET_SLAVE)
-// --------------------------------------------------------------------------
 #ifdef FEATURE_AZIMUTH_CORRECTION
 float correct_azimuth(float azimuth_in){
 
@@ -8483,7 +6670,7 @@ float correct_azimuth(float azimuth_in){
 
 }
 #endif // FEATURE_AZIMUTH_CORRECTION
-// --------------------------------------------------------------------------
+
 #ifdef FEATURE_ELEVATION_CORRECTION
 float correct_elevation(float elevation_in){
 
@@ -8503,7 +6690,7 @@ float correct_elevation(float elevation_in){
 
 }
 #endif // FEATURE_ELEVATION_CORRECTION
-// --------------------------------------------------------------------------
+
 #ifdef FEATURE_JOYSTICK_CONTROL
 void check_joystick(){
 
@@ -8945,7 +7132,7 @@ void digitalWriteEnhanced(uint8_t pin, uint8_t writevalue){
 
 // --------------------------------------------------------------
 
-int digitalReadEnhanced(uint8_t pin){
+int digitalReadEnhanced(uint8_t pin) {
 
   return digitalRead(pin);
 
@@ -8953,7 +7140,7 @@ int digitalReadEnhanced(uint8_t pin){
 
 // --------------------------------------------------------------
 
-int analogReadEnhanced(uint8_t pin){
+int analogReadEnhanced(uint8_t pin) {
 
   #ifdef OPTION_EXTERNAL_ANALOG_REFERENCE
     analogReference(EXTERNAL);
@@ -9920,11 +8107,7 @@ void service_rtc(){
 } /* service_rtc */
 #endif // FEATURE_RTC
 
-// --------------------------------------------------------------
-
-
-
-byte process_backslash_command(byte input_buffer[], int input_buffer_index, byte source_port, char * return_string){
+byte process_backslash_command(byte input_buffer[], int input_buffer_index, byte source_port, char * return_string) {
 
   strcpy(return_string,"");
   static unsigned long serial_led_time = 0;
@@ -11029,615 +9212,6 @@ Not implemented yet:
   return(0);
 } // process_backslash_command
 
-//-----------------------------------------------------------------------
-
-#ifdef FEATURE_EASYCOM_EMULATION
-void process_easycom_command(byte * easycom_command_buffer, int easycom_command_buffer_index, byte source_port, char * return_string){
-
-
-  /* Easycom protocol implementation
-   *
-   * Implemented commands:
-   *
-   * Command      Meaning     Parameters
-   * -------      -------     ----------
-   *
-   * ML           Move Left
-   * MR           Move Right
-   * MU           Move Up
-   * MD           Move Down
-   * SA           Stop azimuth moving
-   * SE           Stop elevation moving
-   *
-   * VE           Request Version
-   * AZ           Azimuth     number - 1 decimal place (activated with OPTION_EASYCOM_AZ_QUERY_COMMAND)
-   * EL           Elevation   number - 1 decimal place (activated with OPTION_EASYCOM_EL_QUERY_COMMAND)
-   *
-   *
-   */
-
-
-
-  char tempstring[11] = "";
-  float heading = -1;
-  strcpy(return_string,"");
-
-  switch (easycom_command_buffer[0]) { // look at the first character of the command
-    #if defined(OPTION_HAMLIB_EASYCOM_AZ_EL_COMMAND_HACK) && defined(FEATURE_ELEVATION_CONTROL)  
-    case 'Z':
-      //strcpy(return_string,"+");
-      strcpy(return_string,"AZ");
-      dtostrf((float)azimuth/(float)HEADING_MULTIPLIER,0,1,tempstring);
-      strcat(return_string,tempstring);
-      //if (elevation >= 0){
-        //strcat(return_string,"+");
-        strcat(return_string," EL");
-      //}
-      dtostrf((float)elevation/(float)HEADING_MULTIPLIER,0,1,tempstring);      
-      strcat(return_string,tempstring);
-      break;
-    #endif //OPTION_HAMLIB_EASYCOM_AZ_EL_COMMAND_HACK
-    case 'A':  // AZ
-      if (easycom_command_buffer[1] == 'Z') {  // format is AZx.x or AZxx.x or AZxxx.x (why didn't they make it fixed length?)
-        switch (easycom_command_buffer_index) {
-          #ifdef OPTION_EASYCOM_AZ_QUERY_COMMAND
-          case 2:
-            //strcpy(return_string,"AZ");
-            strcpy(return_string,"+");
-            dtostrf((float)azimuth/(float)HEADING_MULTIPLIER,0,1,tempstring);
-            strcat(return_string,tempstring);
-            return;
-            break;
-          #endif // OPTION_EASYCOM_AZ_QUERY_COMMAND
-          case 5: // format AZx.x
-            heading = (easycom_command_buffer[2] - 48) + ((easycom_command_buffer[4] - 48) / 10.);
-            break;
-          case 6: // format AZxx.x
-            heading = ((easycom_command_buffer[2] - 48) * 10.) + (easycom_command_buffer[3] - 48) + ((easycom_command_buffer[5] - 48) / 10.);
-            break;
-          case 7: // format AZxxx.x
-            heading = ((easycom_command_buffer[2] - 48) * 100.) + ((easycom_command_buffer[3] - 48) * 10.) + (easycom_command_buffer[4] - 48.) + ((easycom_command_buffer[6] - 48) / 10.);
-            break;
-            // default: control_port->println("?"); break;
-        }
-        if (((heading >= 0) && (heading < 451))  && (easycom_command_buffer[easycom_command_buffer_index - 2] == '.')) {
-          submit_request(AZ, REQUEST_AZIMUTH, (heading * HEADING_MULTIPLIER), 36);
-        } else {
-          strcpy(return_string,"?");
-        }
-      } else {
-        strcpy(return_string,"?");
-      }
-      break;
-      #ifdef FEATURE_ELEVATION_CONTROL
-    case 'E':  // EL
-      if (easycom_command_buffer[1] == 'L') {
-        switch (easycom_command_buffer_index) {
-          #ifdef OPTION_EASYCOM_EL_QUERY_COMMAND
-          case 2:
-            //strcpy(return_string,"EL");
-            if (elevation >= 0){
-              strcpy(return_string,"+");
-            }
-            dtostrf((float)elevation/(float)HEADING_MULTIPLIER,0,1,tempstring);
-            strcat(return_string,tempstring);            
-            return;
-            break;
-          #endif // OPTION_EASYCOM_EL_QUERY_COMMAND
-          case 5: // format ELx.x
-            heading = (easycom_command_buffer[2] - 48) + ((easycom_command_buffer[4] - 48) / 10.);
-            break;
-          case 6: // format ELxx.x
-            heading = ((easycom_command_buffer[2] - 48) * 10.) + (easycom_command_buffer[3] - 48) + ((easycom_command_buffer[5] - 48) / 10.);
-            break;
-          case 7: // format ELxxx.x
-            heading = ((easycom_command_buffer[2] - 48) * 100.) + ((easycom_command_buffer[3] - 48) * 10.) + (easycom_command_buffer[4] - 48) + ((easycom_command_buffer[6] - 48) / 10.);
-            break;
-            // default: control_port->println("?"); break;
-        }
-        if (((heading >= 0) && (heading < 181)) && (easycom_command_buffer[easycom_command_buffer_index - 2] == '.')) {
-          submit_request(EL, REQUEST_ELEVATION, (heading * HEADING_MULTIPLIER), 37);
-        } else {
-          strcpy(return_string,"?");
-        }
-      } else {
-        strcpy(return_string,"?");
-      }
-      break;
-      #endif // #FEATURE_ELEVATION_CONTROL
-    case 'S':  // SA or SE - stop azimuth, stop elevation
-      switch (easycom_command_buffer[1]) {
-        case 'A':
-          submit_request(AZ, REQUEST_STOP, 0, 38);
-          break;
-        #ifdef FEATURE_ELEVATION_CONTROL
-        case 'E':
-          submit_request(EL, REQUEST_STOP, 0, 39);
-          break;
-        #endif // FEATURE_ELEVATION_CONTROL
-        default: strcpy(return_string,"?"); break;
-      }
-      break;
-    case 'M':  // ML, MR, MU, MD - move left, right, up, down
-      switch (easycom_command_buffer[1]) {
-        case 'L': // ML - move left
-          submit_request(AZ, REQUEST_CCW, 0, 40);
-          break;
-        case 'R': // MR - move right
-          submit_request(AZ, REQUEST_CW, 0, 41);
-          break;
-        #ifdef FEATURE_ELEVATION_CONTROL
-        case 'U': // MU - move up
-          submit_request(EL, REQUEST_UP, 0, 42);
-          break;
-        case 'D': // MD - move down
-          submit_request(EL, REQUEST_DOWN, 0, 43);
-          break;
-        #endif // FEATURE_ELEVATION_CONTROL
-        default: strcpy(return_string,"?"); break;
-      }
-      break;
-    case 'V': // VE - version query
-      if (easycom_command_buffer[1] == 'E') {
-        strcpy(return_string,"VE002");
-      }                                                                       // not sure what to send back, sending 002 because this is easycom version 2?
-      break;
-    default: strcpy(return_string,"?"); break;
-  } /* switch */
-
-
-
-} /* easycom_serial_commmand */
-#endif // FEATURE_EASYCOM_EMULATION
-
-
-
-
-//-----------------------------------------------------------------------
-
-#ifdef FEATURE_DCU_1_EMULATION
-void process_dcu_1_command(byte * dcu_1_command_buffer, int dcu_1_command_buffer_index, byte source_port, char * return_string){
-
-
-//zzzzzzz
-
-  /* DCU-1 protocol implementation
-
-
-    AP1### = set azimuth target,  ### = 0 to 359
-
-    AM1 = execute rotation
-
-   */
-
-
-  strcpy(return_string,"?");
-  static int dcu_1_azimuth_target_set = 0;
-  int temp_heading = 0;
-
-  
-
-  if (dcu_1_command_buffer[0] == 'A'){
-    if ((dcu_1_command_buffer[1] == 'P') && (dcu_1_command_buffer[2] == '1') && (dcu_1_command_buffer_index == 6)){
-      temp_heading = ((dcu_1_command_buffer[3] - 48) * 100) + ((dcu_1_command_buffer[4] - 48) * 10) + (dcu_1_command_buffer[5] - 48);
-      if ((temp_heading > -1) && (temp_heading < 360)){
-        dcu_1_azimuth_target_set = temp_heading;
-        strcpy(return_string,"OK");
-        return;
-      }
-    }
-    if ((dcu_1_command_buffer[1] == 'M') && (dcu_1_command_buffer[2] == '1')  && (dcu_1_command_buffer_index == 3)){
-      submit_request(AZ, REQUEST_AZIMUTH, (dcu_1_azimuth_target_set * HEADING_MULTIPLIER), 233);
-      strcpy(return_string,"OK");
-      return;
-    }    
-  }
-
-
-} 
-#endif // FEATURE_DCU_1_EMULATION
-
-
-
-// --------------------------------------------------------------
-
-    
-
-
-
-
-#ifdef FEATURE_REMOTE_UNIT_SLAVE
-void process_remote_slave_command(byte * slave_command_buffer, int slave_command_buffer_index, byte source_port, char * return_string){
-
-
-/*
- *
- * This implements a protocol for host unit to remote unit communications
- *
- *
- * Remote Slave Unit Protocol Reference
- *
- *  PG - ping
- *  AZ - read azimuth  (returns AZxxx.xxxxxx)
- *  EL - read elevation (returns ELxxx.xxxxxx)
- *  RC - read coordinates (returns RC+xx.xxxx -xxx.xxxx)
- *  GS - query GPS status (returns GS0 (no sync) or GS1 (sync))
- *  DOxx - digital pin initialize as output;
- *  DIxx - digital pin initialize as input
- *  DPxx - digital pin initialize as input with pullup
- *  DRxx - digital pin read
- *  DLxx - digital pin write low
- *  DHxx - digital pin write high
- *  DTxxyyyy - digital pin tone output
- *  NTxx - no tone
- *  ARxx - analog pin read
- *  AWxxyyy - analog pin write
- *  SWxy - serial write byte
- *  SDx - deactivate serial read event; x = port #
- *  SSxyyyyyy... - serial write string; x = port #, yyyy = string of characters to send
- *  SAx - activate serial read event; x = port #
- *  RB - reboot
- *  CL - return clock date and time
- *
- * Responses
- *
- *  ER - report an error (remote to host only)
- *  EV - report an event (remote to host only)
- *  OK - report success (remote to host only)
- *  CS - report a cold start (remote to host only)
- *
- * Error Codes
- *
- *  ER01 - Serial port buffer timeout
- *  ER02 - Command syntax error
- *
- * Events
- *
- *  EVSxy - Serial port read event; x = serial port number, y = byte returned
- *
- *
- */
-
-
-
-  byte command_good = 0;
-  strcpy(return_string,"");
-  char tempstring[25] = "";
-
-  if (slave_command_buffer_index < 2) {
-    strcpy(return_string,"ER02");  // we don't have enough characters - syntax error
-  } else {
-
-    #ifdef DEBUG_PROCESS_SLAVE
-    debug.print("serial_serial_buffer: command_string: ");
-    debug.print((char*)slave_command_buffer);
-    debug.print("$ slave_command_buffer_index: ");
-    debug.print(slave_command_buffer_index);
-    debug.print("\n");
-    #endif // DEBUG_PROCESS_SLAVE
-
-    if (((slave_command_buffer[0] == 'S') && (slave_command_buffer[1] == 'S')) && (slave_command_buffer[2] > 47) && (slave_command_buffer[2] < 53)) { // this is a variable length command
-      command_good = 1;
-      for (byte x = 3; x < slave_command_buffer_index; x++) {
-        switch (slave_command_buffer[2] - 48) {
-          case 0: control_port->write(slave_command_buffer[x]); break;
-          #if defined(FEATURE_MASTER_WITH_SERIAL_SLAVE)
-          case 1: remote_unit_port->write(slave_command_buffer[x]); break;
-          #endif
-        }
-      }
-    }
-
-    if (slave_command_buffer_index == 2) {
-
-      #ifdef FEATURE_CLOCK
-      if ((slave_command_buffer[0] == 'C') && (slave_command_buffer[1] == 'L')) {
-        strcpy(return_string,"CL");
-        update_time();
-        strcat(return_string,timezone_modified_clock_string());
-        command_good = 1;
-      }
-      #endif //FEATURE_CLOCK
-
-
-      #ifdef FEATURE_GPS
-      if ((slave_command_buffer[0] == 'R') && (slave_command_buffer[1] == 'C')) {                    // RC - read coordinates
-        strcpy(return_string,"RC");
-        if (latitude < 0){strcat(return_string,"-");} else {strcat(return_string,"+");}
-        dtostrf(abs(latitude),0,4,tempstring);
-        strcat(return_string,tempstring);         
-        strcat(return_string," ");
-        if (longitude < 0){strcat(return_string,"-");} else {strcat(return_string,"+");}
-        if (longitude < 100){strcat(return_string,"0");}
-        dtostrf(abs(longitude),0,4,tempstring);
-        strcat(return_string,tempstring);        
-        command_good = 1;
-      }   
-      #ifdef FEATURE_CLOCK
-      if ((slave_command_buffer[0] == 'G') && (slave_command_buffer[1] == 'S')) {                    // GS - query GPS sync
-        strcpy(return_string,"GS");
-        if (clock_status == GPS_SYNC){                
-          strcat(return_string,"1");
-        } else {
-          strcat(return_string,"0");
-        }        
-        command_good = 1;
-      }
-      #endif //FEATURE_CLOCK                 
-      #endif //FEATURE_GPS      
-
-      if ((slave_command_buffer[0] == 'P') && (slave_command_buffer[1] == 'G')) {
-        strcpy(return_string,"PG"); command_good = 1;
-      }                                                                        // PG - ping
-      if ((slave_command_buffer[0] == 'R') && (slave_command_buffer[1] == 'B')) {
-        wdt_enable(WDTO_30MS); while (1) {
-        }
-      }                                                                        // RB - reboot
-      if ((slave_command_buffer[0] == 'A') && (slave_command_buffer[1] == 'Z')) {
-        strcpy(return_string,"AZ");
-        //if ((raw_azimuth/HEADING_MULTIPLIER) < 1000) {
-        //  strcat(return_string,"0");
-        //}
-        if ((raw_azimuth/HEADING_MULTIPLIER) < 100) {
-          strcat(return_string,"0");
-        }
-        if ((raw_azimuth/HEADING_MULTIPLIER) < 10) {
-          strcat(return_string,"0");
-        }
-        dtostrf(float(raw_azimuth/(float)HEADING_MULTIPLIER),0,6,tempstring);
-        strcat(return_string,tempstring);          
-        command_good = 1;
-      }
-      #ifdef FEATURE_ELEVATION_CONTROL
-      if ((slave_command_buffer[0] == 'E') && (slave_command_buffer[1] == 'L')) {
-        strcpy(return_string,"EL");
-        if ((elevation/HEADING_MULTIPLIER) >= 0) {
-          strcat(return_string,"+");
-        } else {
-          strcat(return_string,"-");
-        }
-        //if (abs(elevation/HEADING_MULTIPLIER) < 1000) {
-        //  strcat(return_string,"0");
-        //}
-        if (abs(elevation/HEADING_MULTIPLIER) < 100) {
-          strcat(return_string,"0");
-        }
-        if (abs(elevation/HEADING_MULTIPLIER) < 10) {
-          strcat(return_string,"0");
-        }
-        dtostrf(float(abs(elevation/(float)HEADING_MULTIPLIER)),0,6,tempstring);
-        strcat(return_string,tempstring);            
-        command_good = 1;
-      }
-        #endif // FEATURE_ELEVATION_CONTROL
-    } // end of two byte commands
-
-
-
-    if (slave_command_buffer_index == 3) {
-      if (((slave_command_buffer[0] == 'S') && (slave_command_buffer[1] == 'A')) & (slave_command_buffer[2] > 47) && (slave_command_buffer[2] < 53)) {
-        serial_read_event_flag[slave_command_buffer[2] - 48] = 1;
-        command_good = 1;
-        strcpy(return_string,"OK");
-      }
-      if (((slave_command_buffer[0] == 'S') && (slave_command_buffer[1] == 'D')) & (slave_command_buffer[2] > 47) && (slave_command_buffer[2] < 53)) {
-        serial_read_event_flag[slave_command_buffer[2] - 48] = 0;
-        command_good = 1;
-        strcpy(return_string,"OK");
-      }
-
-    }
-
-
-    if (slave_command_buffer_index == 4) {
-      if ((slave_command_buffer[0] == 'S') && (slave_command_buffer[1] == 'W')) { // Serial Write command
-        switch (slave_command_buffer[2]) {
-          case '0': control_port->write(slave_command_buffer[3]); command_good = 1; break;
-          #if defined(FEATURE_MASTER_WITH_SERIAL_SLAVE)
-          case '1': remote_unit_port->write(slave_command_buffer[3]); command_good = 1; break;
-          #endif
-        }
-      }
-
-      if ((slave_command_buffer[0] == 'D') && (slave_command_buffer[1] == 'O')) {
-        if ((((slave_command_buffer[2] > 47) && (slave_command_buffer[2] < 58)) || (toupper(slave_command_buffer[2]) == 'A')) && (slave_command_buffer[3] > 47) && (slave_command_buffer[3] < 58)) {
-          command_good = 1;
-          byte pin_value = 0;
-          if (toupper(slave_command_buffer[2]) == 'A') {
-            pin_value = get_analog_pin(slave_command_buffer[3] - 48);
-          } else {
-            pin_value = ((slave_command_buffer[2] - 48) * 10) + (slave_command_buffer[3] - 48);
-          }
-          #ifdef DEBUG_PROCESS_SLAVE
-          debug.print("service_serial_buffer: pin_value: ");
-          debug.print(pin_value);
-          #endif // DEBUG_PROCESS_SLAVE
-          strcpy(return_string,"OK");
-          pinModeEnhanced(pin_value, OUTPUT);
-        }
-      }
-
-      if ((slave_command_buffer[0] == 'D') && (slave_command_buffer[1] == 'H')) {
-        if ((((slave_command_buffer[2] > 47) && (slave_command_buffer[2] < 58)) || (toupper(slave_command_buffer[2]) == 'A')) && (slave_command_buffer[3] > 47) && (slave_command_buffer[3] < 58)) {
-          command_good = 1;
-          byte pin_value = 0;
-          if (toupper(slave_command_buffer[2]) == 'A') {
-            pin_value = get_analog_pin(slave_command_buffer[3] - 48);
-          } else {
-            pin_value = ((slave_command_buffer[2] - 48) * 10) + (slave_command_buffer[3] - 48);
-          }
-          digitalWriteEnhanced(pin_value, HIGH);
-          strcpy(return_string,"OK");
-        }
-      }
-
-      if ((slave_command_buffer[0] == 'D') && (slave_command_buffer[1] == 'L')) {
-        if ((((slave_command_buffer[2] > 47) && (slave_command_buffer[2] < 58)) || (toupper(slave_command_buffer[2]) == 'A')) && (slave_command_buffer[3] > 47) && (slave_command_buffer[3] < 58)) {
-          command_good = 1;
-          byte pin_value = 0;
-          if (toupper(slave_command_buffer[2]) == 'A') {
-            pin_value = get_analog_pin(slave_command_buffer[3] - 48);
-          } else {
-            pin_value = ((slave_command_buffer[2] - 48) * 10) + (slave_command_buffer[3] - 48);
-          }
-          digitalWriteEnhanced(pin_value, LOW);
-          strcpy(return_string,"OK");
-        }
-      }
-
-      if ((slave_command_buffer[0] == 'D') && (slave_command_buffer[1] == 'I')) {
-        if ((((slave_command_buffer[2] > 47) && (slave_command_buffer[2] < 58)) || (toupper(slave_command_buffer[2]) == 'A')) && (slave_command_buffer[3] > 47) && (slave_command_buffer[3] < 58)) {
-          command_good = 1;
-          byte pin_value = 0;
-          if (toupper(slave_command_buffer[2]) == 'A') {
-            pin_value = get_analog_pin(slave_command_buffer[3] - 48);
-          } else {
-            pin_value = ((slave_command_buffer[2] - 48) * 10) + (slave_command_buffer[3] - 48);
-          }
-          pinModeEnhanced(pin_value, INPUT);
-          strcpy(return_string,"OK");
-        }
-      }
-
-      if ((slave_command_buffer[0] == 'D') && (slave_command_buffer[1] == 'P')) {
-        if ((((slave_command_buffer[2] > 47) && (slave_command_buffer[2] < 58)) || (toupper(slave_command_buffer[2]) == 'A')) && (slave_command_buffer[3] > 47) && (slave_command_buffer[3] < 58)) {
-          command_good = 1;
-          byte pin_value = 0;
-          if (toupper(slave_command_buffer[2]) == 'A') {
-            pin_value = get_analog_pin(slave_command_buffer[3] - 48);
-          } else {
-            pin_value = ((slave_command_buffer[2] - 48) * 10) + (slave_command_buffer[3] - 48);
-          }
-          pinModeEnhanced(pin_value, INPUT);
-          digitalWriteEnhanced(pin_value, HIGH);
-          strcpy(return_string,"OK");
-        }
-      }
-
-      if ((slave_command_buffer[0] == 'D') && (slave_command_buffer[1] == 'R')) {
-        if ((((slave_command_buffer[2] > 47) && (slave_command_buffer[2] < 58)) || (toupper(slave_command_buffer[2]) == 'A')) && (slave_command_buffer[3] > 47) && (slave_command_buffer[3] < 58)) {
-          command_good = 1;
-          byte pin_value = 0;
-          if (toupper(slave_command_buffer[2]) == 'A') {
-            pin_value = get_analog_pin(slave_command_buffer[3] - 48);
-          } else {
-            pin_value = ((slave_command_buffer[2] - 48) * 10) + (slave_command_buffer[3] - 48);
-          }
-          byte pin_read = digitalReadEnhanced(pin_value);
-          strcpy(return_string,"DR");
-          dtostrf((slave_command_buffer[2]-48),0,0,tempstring);
-          strcat(return_string,tempstring);              
-          dtostrf((slave_command_buffer[3]-48),0,0,tempstring);
-          strcat(return_string,tempstring);  
-          if (pin_read) {
-            strcat(return_string,"1");
-          } else {
-            strcat(return_string,"0");
-          }
-        }
-      }
-      if ((slave_command_buffer[0] == 'A') && (slave_command_buffer[1] == 'R')) {
-        if ((((slave_command_buffer[2] > 47) && (slave_command_buffer[2] < 58)) || (toupper(slave_command_buffer[2]) == 'A')) && (slave_command_buffer[3] > 47) && (slave_command_buffer[3] < 58)) {
-          command_good = 1;
-          byte pin_value = 0;
-          if (toupper(slave_command_buffer[2]) == 'A') {
-            pin_value = get_analog_pin(slave_command_buffer[3] - 48);
-          } else {
-            pin_value = ((slave_command_buffer[2] - 48) * 10) + (slave_command_buffer[3] - 48);
-          }
-          int pin_read = analogReadEnhanced(pin_value);
-          strcpy(return_string,"AR");
-          if (toupper(slave_command_buffer[2]) == 'A') {
-            strcat(return_string,"A");
-          } else {
-            dtostrf((slave_command_buffer[2]-48),0,0,tempstring);
-            strcat(return_string,tempstring);
-          }
-                        
-          dtostrf((slave_command_buffer[3]-48),0,0,tempstring);
-          strcat(return_string,tempstring);  
-          if (pin_read < 1000) {
-            strcat(return_string,"0");
-          }
-          if (pin_read < 100) {
-            strcat(return_string,"0");
-          }
-          if (pin_read < 10) {
-            strcat(return_string,"0");
-          }
-          dtostrf(pin_read,0,0,tempstring);
-          strcat(return_string,tempstring);             
-        }
-      }
-
-      if ((slave_command_buffer[0] == 'N') && (slave_command_buffer[1] == 'T')) {
-        if ((((slave_command_buffer[2] > 47) && (slave_command_buffer[2] < 58)) || (toupper(slave_command_buffer[2]) == 'A')) && (slave_command_buffer[3] > 47) && (slave_command_buffer[3] < 58)) {
-          command_good = 1;
-          byte pin_value = 0;
-          if (toupper(slave_command_buffer[2]) == 'A') {
-            pin_value = get_analog_pin(slave_command_buffer[3] - 48);
-          } else {
-            pin_value = ((slave_command_buffer[2] - 48) * 10) + (slave_command_buffer[3] - 48);
-          }
-          noTone(pin_value);
-          strcpy(return_string,"OK");
-        }
-      }
-
-    } // if (slave_command_buffer_index == 4)
-
-    if (slave_command_buffer_index == 7) {
-      if ((slave_command_buffer[0] == 'A') && (slave_command_buffer[1] == 'W')) {
-        if ((((slave_command_buffer[2] > 47) && (slave_command_buffer[2] < 58)) || (toupper(slave_command_buffer[2]) == 'A')) && (slave_command_buffer[3] > 47) && (slave_command_buffer[3] < 58)) {
-          byte pin_value = 0;
-          if (toupper(slave_command_buffer[2]) == 'A') {
-            pin_value = get_analog_pin(slave_command_buffer[3] - 48);
-          } else {
-            pin_value = ((slave_command_buffer[2] - 48) * 10) + (slave_command_buffer[3] - 48);
-          }
-          int write_value = ((slave_command_buffer[4] - 48) * 100) + ((slave_command_buffer[5] - 48) * 10) + (slave_command_buffer[6] - 48);
-          if ((write_value >= 0) && (write_value < 256)) {
-            analogWriteEnhanced(pin_value, write_value);
-            strcpy(return_string,"OK");
-            command_good = 1;
-          }
-        }
-      }
-    }
-
-    if (slave_command_buffer_index == 8) {
-      if ((slave_command_buffer[0] == 'D') && (slave_command_buffer[1] == 'T')) {
-        if ((((slave_command_buffer[2] > 47) && (slave_command_buffer[2] < 58)) || (toupper(slave_command_buffer[2]) == 'A')) && (slave_command_buffer[3] > 47) && (slave_command_buffer[3] < 58)) {
-          byte pin_value = 0;
-          if (toupper(slave_command_buffer[2]) == 'A') {
-            pin_value = get_analog_pin(slave_command_buffer[3] - 48);
-          } else {
-            pin_value = ((slave_command_buffer[2] - 48) * 10) + (slave_command_buffer[3] - 48);
-          }
-          int write_value = ((slave_command_buffer[4] - 48) * 1000) + ((slave_command_buffer[5] - 48) * 100) + ((slave_command_buffer[6] - 48) * 10) + (slave_command_buffer[7] - 48);
-          if ((write_value >= 0) && (write_value <= 9999)) {
-            tone(pin_value, write_value);
-            strcpy(return_string,"OK");
-            command_good = 1;
-          }
-        }
-      }
-    }
-
-
-    if (!command_good) {
-      strcpy(return_string,"ER0289");
-    }
-  }
-
-  slave_command_buffer_index = 0;
-
-}
-#endif //FEATURE_REMOTE_UNIT_SLAVE
-
-// --------------------------------------------------------------
-
-
 #ifdef FEATURE_YAESU_EMULATION
 void process_yaesu_command(byte * yaesu_command_buffer, int yaesu_command_buffer_index, byte source_port, char * return_string){
 
@@ -12163,276 +9737,7 @@ void process_yaesu_command(byte * yaesu_command_buffer, int yaesu_command_buffer
     } /* switch */
 
 } /* yaesu_serial_command */
-  #endif // FEATURE_YAESU_EMULATION
-// --------------------------------------------------------------
-
-        
-#ifdef FEATURE_ETHERNET
-void service_ethernet(){
-
-
-  byte incoming_byte = 0;
-  static unsigned long last_incoming_byte_receive_time = 0;
-  char return_string[100] = ""; 
-  static byte ethernet_port_buffer0[COMMAND_BUFFER_SIZE];
-  static int ethernet_port_buffer_index0 = 0;
-  static byte first_connect_occurred = 0;
-  static long last_received_byte0 = 0;
-
-  #ifdef FEATURE_REMOTE_UNIT_SLAVE
-    static byte preamble_received = 0;
-  #endif //FEATURE_REMOTE_UNIT_SLAVE
-
-  /*  this is the server side (receiving bytes from a client such as a master unit receiving commands from a computer
-      or a slave receiving commands from a master unit
-
-  */
-
- 
-  // clear things out if we received a partial message and it's been awhile
-  if ((ethernet_port_buffer_index0) && ((millis()-last_received_byte0) > ETHERNET_MESSAGE_TIMEOUT_MS)){
-    ethernet_port_buffer_index0 = 0;
-    #ifdef FEATURE_REMOTE_UNIT_SLAVE
-      preamble_received = 0;
-    #endif //FEATURE_REMOTE_UNIT_SLAVE
-  }
-
-
-  if (ethernetserver0.available()){
-    ethernetclient0 = ethernetserver0.available();
-
-    last_received_byte0 = millis();
-
-    if (!first_connect_occurred){  // clean out the cruft that's alway spit out on first connect
-      while(ethernetclient0.available()){ethernetclient0.read();}
-      first_connect_occurred = 1;
-      return;
-    }    
-
-    if (ethernetclient0.available() > 0){        // the client has sent something
-      incoming_byte = ethernetclient0.read();
-      last_incoming_byte_receive_time = millis();
-
-      #ifdef DEBUG_ETHERNET
-      debug.print("service_ethernet: client:") ;
-      debug.print(" char:");
-      debug.print((char) incoming_byte);
-      debug.print("\n");
-      #endif //DEBUG_ETHERNET  
-
-      if ((incoming_byte > 96) && (incoming_byte < 123)) {  // uppercase it
-        incoming_byte = incoming_byte - 32;
-      }          
-
-      char ethernet_preamble[] = ETHERNET_PREAMBLE;
-
-      #ifdef FEATURE_REMOTE_UNIT_SLAVE
-        if (preamble_received < 254){         // the master/slave ethernet link has each message prefixed with a preamble
-          if (ethernet_preamble[preamble_received] == 0){
-            preamble_received = 254;
-          } else {
-            if (incoming_byte == ethernet_preamble[preamble_received]){
-              preamble_received++;
-            } else {
-              preamble_received = 0;
-            }
-          }
-        }
-        // add it to the buffer if it's not a line feed or carriage return and we've received the preamble
-        if ((incoming_byte != 10) && (incoming_byte != 13) && (preamble_received == 254)) { 
-          ethernet_port_buffer0[ethernet_port_buffer_index0] = incoming_byte;
-          ethernet_port_buffer_index0++;
-      }
-      #else 
-        if ((incoming_byte != 10) && (incoming_byte != 13)) { // add it to the buffer if it's not a line feed or carriage return
-          ethernet_port_buffer0[ethernet_port_buffer_index0] = incoming_byte;
-          ethernet_port_buffer_index0++;
-        }
-      #endif //FEATURE_REMOTE_UNIT_SLAVE
-
-
-      if (((incoming_byte == 13) || (ethernet_port_buffer_index0 >= COMMAND_BUFFER_SIZE)) && (ethernet_port_buffer_index0 > 0)){  // do we have a carriage return?
-        if ((ethernet_port_buffer0[0] == '\\') || (ethernet_port_buffer0[0] == '/')) {
-          process_backslash_command(ethernet_port_buffer0, ethernet_port_buffer_index0, ETHERNET_PORT0, return_string);
-        } else {
-          #ifdef FEATURE_YAESU_EMULATION
-          process_yaesu_command(ethernet_port_buffer0,ethernet_port_buffer_index0,ETHERNET_PORT0,return_string);
-          #endif //FEATURE_YAESU_EMULATION
-          #ifdef FEATURE_EASYCOM_EMULATION
-          process_easycom_command(ethernet_port_buffer0,ethernet_port_buffer_index0,ETHERNET_PORT0,return_string);
-          #endif //FEATURE_EASYCOM_EMULATION
-          #ifdef FEATURE_REMOTE_UNIT_SLAVE
-          process_remote_slave_command(ethernet_port_buffer0,ethernet_port_buffer_index0,ETHERNET_PORT0,return_string);
-          #endif //FEATURE_REMOTE_UNIT_SLAVE          
-        }  
-        ethernetclient0.println(return_string);
-        ethernet_port_buffer_index0 = 0;
-        #ifdef FEATURE_REMOTE_UNIT_SLAVE
-        preamble_received = 0;
-        #endif //FEATURE_REMOTE_UNIT_SLAVE
-      }
-
-    }
-  }
-
-
-  #ifdef ETHERNET_TCP_PORT_1
-  static byte ethernet_port_buffer1[COMMAND_BUFFER_SIZE];
-  static int ethernet_port_buffer_index1 = 0;
-
-  if (ethernetserver1.available()){
-
-    ethernetclient1 = ethernetserver1.available();
-
-    if (ethernetclient1.available() > 0){        // the client has sent something
-      incoming_byte = ethernetclient1.read();
-      last_incoming_byte_receive_time = millis();
-
-      #ifdef DEBUG_ETHERNET
-      debug.print("service_ethernet: client:") ;
-      debug.print(" char:");
-      debug.print((char) incoming_byte);
-      debug.print("\n");
-      #endif //DEBUG_ETHERNET  
-
-      if ((incoming_byte > 96) && (incoming_byte < 123)) {  // uppercase it
-        incoming_byte = incoming_byte - 32;
-      }                                                                                                                    
-      if ((incoming_byte != 10) && (incoming_byte != 13)) { // add it to the buffer if it's not a line feed or carriage return
-        ethernet_port_buffer1[ethernet_port_buffer_index1] = incoming_byte;
-        ethernet_port_buffer_index1++;
-      }
-      if (incoming_byte == 13) {  // do we have a carriage return?
-        if ((ethernet_port_buffer1[0] == '\\') || (ethernet_port_buffer1[0] == '/')) {
-          process_backslash_command(ethernet_port_buffer1, ethernet_port_buffer_index1, ETHERNET_PORT1, return_string);
-        } else {
-          #ifdef FEATURE_YAESU_EMULATION
-          process_yaesu_command(ethernet_port_buffer1,ethernet_port_buffer_index1,ETHERNET_PORT1,return_string);
-          #endif //FEATURE_YAESU_EMULATION
-          #ifdef FEATURE_EASYCOM_EMULATION
-          process_easycom_command(ethernet_port_buffer1,ethernet_port_buffer_index1,ETHERNET_PORT1,return_string);
-          #endif //FEATURE_EASYCOM_EMULATION
-          #ifdef FEATURE_REMOTE_UNIT_SLAVE
-          process_remote_slave_command(ethernet_port_buffer1,ethernet_port_buffer_index1,ETHERNET_PORT1,return_string);
-          #endif //FEATURE_REMOTE_UNIT_SLAVE
-        }  
-        ethernetclient1.println(return_string);
-        ethernet_port_buffer_index1 = 0;
-      }
-
-    }
-  }
-  #endif //ETHERNET_TCP_PORT_1
-
-  #ifdef FEATURE_MASTER_WITH_ETHERNET_SLAVE
-  static long last_connect_try = 0;
-  static long last_received_byte_time = 0;
-  byte incoming_ethernet_byte = 0;
-  static byte first_ethernet_slave_connect_occurred = 0;
-
-  // are we disconnected and is it time to reconnect?
-  if ((ethernetslavelinkclient0_state == ETHERNET_SLAVE_DISCONNECTED)  && (((millis()-last_connect_try) >= ETHERNET_SLAVE_RECONNECT_TIME_MS) || (last_connect_try == 0))){
-
-    #ifdef DEBUG_ETHERNET
-    debug.println("service_ethernet: master_slave_ethernet: connecting");
-    #endif //DEBUG_ETHERNET
-
-    if (ethernetslavelinkclient0.connect(slave_unit_ip, ETHERNET_SLAVE_TCP_PORT)){
-      ethernetslavelinkclient0_state = ETHERNET_SLAVE_CONNECTED;
-      if (!first_ethernet_slave_connect_occurred){
-        first_ethernet_slave_connect_occurred = 1;
-        ethernet_slave_reconnects = 65535;
-      }
-    } else {
-      ethernetslavelinkclient0.stop();
-      #ifdef DEBUG_ETHERNET
-      debug.println("service_ethernet: master_slave_ethernet: connect failed");
-      #endif //DEBUG_ETHERNET
-    }
-
-    ethernet_slave_reconnects++;
-    last_connect_try = millis();
-  }
-
-
-  if (ethernetslavelinkclient0.available()) {
-    incoming_ethernet_byte = ethernetslavelinkclient0.read();
-
-    #ifdef DEBUG_ETHERNET
-    debug.print("service_ethernet: slave rx: ");
-    debug.print(incoming_ethernet_byte);
-    debug.print(" : ");
-    debug.print(incoming_ethernet_byte);
-    debug.println("");
-    #endif //DEBUG_ETHERNET      
-
-    if (remote_port_rx_sniff) {
-      control_port->write(incoming_ethernet_byte);
-    }
-
-    if ((incoming_ethernet_byte != 10) && (remote_unit_port_buffer_index < COMMAND_BUFFER_SIZE)) {
-      remote_unit_port_buffer[remote_unit_port_buffer_index] = incoming_ethernet_byte;
-      remote_unit_port_buffer_index++;
-      if ((incoming_ethernet_byte == 13) || (remote_unit_port_buffer_index >= COMMAND_BUFFER_SIZE)) {
-        remote_unit_port_buffer_carriage_return_flag = 1;
-        #ifdef DEBUG_ETHERNET
-        debug.println("service_ethernet: remote_unit_port_buffer_carriage_return_flag");
-        #endif //DEBUG_ETHERNET          
-      }
-    }
-    last_received_byte_time = millis();
-
-  }
-
-  if (((millis() - last_received_byte_time) >= ETHERNET_MESSAGE_TIMEOUT_MS) && (remote_unit_port_buffer_index > 1) && (!remote_unit_port_buffer_carriage_return_flag)){
-    remote_unit_port_buffer_index = 0;
-    #ifdef DEBUG_ETHERNET
-    debug.println("service_ethernet: master_slave_ethernet: remote_unit_incoming_buffer_timeout");
-    #endif //DEBUG_ETHERNET    
-    remote_unit_incoming_buffer_timeouts++;
-  }
-
-  if ((ethernetslavelinkclient0_state == ETHERNET_SLAVE_CONNECTED) && (!ethernetslavelinkclient0.connected())){
-    ethernetslavelinkclient0.stop();
-    ethernetslavelinkclient0_state = ETHERNET_SLAVE_DISCONNECTED;
-    remote_unit_port_buffer_index = 0;
-    #ifdef DEBUG_ETHERNET
-    debug.println("service_ethernet: master_slave_ethernet: lost connection");
-    #endif //DEBUG_ETHERNET    
-  }
-
-
-  #endif //FEATURE_MASTER_WITH_ETHERNET_SLAVE
-
-}
-#endif //FEATURE_ETHERNET
-// --------------------------------------------------------------
-
-#ifdef FEATURE_MASTER_WITH_ETHERNET_SLAVE
-byte ethernet_slave_link_send(char * string_to_send){
-
-  if (ethernetslavelinkclient0_state == ETHERNET_SLAVE_CONNECTED){
-    ethernetslavelinkclient0.print(ETHERNET_PREAMBLE);
-    ethernetslavelinkclient0.println(string_to_send);
-    #ifdef DEBUG_ETHERNET
-    debug.print("ethernet_slave_link_send: ");
-    debug.println(string_to_send);
-    #endif //DEBUG_ETHERNET
-    return 1;
-  } else {
-    #ifdef DEBUG_ETHERNET
-    debug.print("ethernet_slave_link_send: link down not sending:");
-    debug.println(string_to_send);
-    #endif //DEBUG_ETHERNET    
-    return 0;
-  }
-
-}
-#endif //FEATURE_MASTER_WITH_ETHERNET_SLAVE
-
-
-//-------------------------------------------------------
-
+#endif // FEATURE_YAESU_EMULATION
 
 #ifdef FEATURE_MOON_TRACKING
 void service_moon_tracking(){
@@ -12508,9 +9813,7 @@ void service_moon_tracking(){
 
 
 } /* service_moon_tracking */
-    #endif // FEATURE_MOON_TRACKING
-
-// --------------------------------------------------------------
+#endif // FEATURE_MOON_TRACKING
 
 #ifdef FEATURE_SUN_TRACKING
 void service_sun_tracking(){
@@ -12589,8 +9892,6 @@ void service_sun_tracking(){
 } /* service_sun_tracking */
 #endif // FEATURE_SUN_TRACKING
 
-// --------------------------------------------------------------
-
 #if defined(FEATURE_MOON_PUSHBUTTON_AZ_EL_CALIBRATION) && defined(FEATURE_MOON_TRACKING)
 void check_moon_pushbutton_calibration(){
 
@@ -12606,8 +9907,6 @@ void check_moon_pushbutton_calibration(){
 
 }
 #endif //defined(FEATURE_MOON_PUSHBUTTON_AZ_EL_CALIBRATION) && defined(FEATURE_MOON_TRACKING)       
-
-//-------------------------------------------------------
 
 #if defined(FEATURE_SUN_PUSHBUTTON_AZ_EL_CALIBRATION) && defined(FEATURE_SUN_TRACKING)
 void check_sun_pushbutton_calibration(){
@@ -12625,8 +9924,6 @@ void check_sun_pushbutton_calibration(){
 }
 #endif //defined(FEATURE_SUN_PUSHBUTTON_AZ_EL_CALIBRATION) && defined(FEATURE_SUN_TRACKING)       
 
-//-------------------------------------------------------
-
 #if defined(FEATURE_SUN_TRACKING) || defined(FEATURE_MOON_TRACKING)
 char * coordinate_string(){
 
@@ -12641,8 +9938,6 @@ char * coordinate_string(){
 
 }
 #endif //defined(FEATURE_SUN_TRACKING) || defined(FEATURE_MOON_TRACKING)
-
-// --------------------------------------------------------------
 
 #ifdef FEATURE_MOON_TRACKING
 char * moon_status_string(){
@@ -12670,7 +9965,7 @@ char * moon_status_string(){
     return returnstring;
 }
 #endif // FEATURE_MOON_TRACKING
-// --------------------------------------------------------------
+
 #ifdef FEATURE_SUN_TRACKING
 char * sun_status_string(){
 
@@ -12697,202 +9992,4 @@ char * sun_status_string(){
     return returnstring;
 }
 #endif // FEATURE_SUN_TRACKING
-// --------------------------------------------------------------
 
-
-
-
-
-
-//------------------------------------------------------
-
-#if defined(FEATURE_STEPPER_MOTOR)
-void service_stepper_motor_pulse_pins(){
-
-  service_stepper_motor_pulse_pins_count++;
-
-  static unsigned int az_stepper_pin_transition_counter = 0;
-  static byte az_stepper_pin_last_state = LOW;
-
-  if (az_stepper_freq_count > 0){
-    az_stepper_pin_transition_counter++;
-    if (az_stepper_pin_transition_counter >= az_stepper_freq_count){
-      if (az_stepper_pin_last_state == LOW){
-        digitalWrite(az_stepper_motor_pulse,HIGH);
-        az_stepper_pin_last_state = HIGH;
-      } else {
-        digitalWrite(az_stepper_motor_pulse,LOW);
-        az_stepper_pin_last_state = LOW;
-      }
-      az_stepper_pin_transition_counter = 0;
-    }
-  } else {
-    az_stepper_pin_transition_counter = 0;
-  }
-
-  #ifdef FEATURE_ELEVATION_CONTROL
-  static unsigned int el_stepper_pin_transition_counter = 0;
-  static byte el_stepper_pin_last_state = LOW;
-
-  if (el_stepper_freq_count > 0){
-    el_stepper_pin_transition_counter++;
-    if (el_stepper_pin_transition_counter >= el_stepper_freq_count){
-      if (el_stepper_pin_last_state == LOW){
-        digitalWrite(el_stepper_motor_pulse,HIGH);
-        el_stepper_pin_last_state = HIGH;
-      } else {
-        digitalWrite(el_stepper_motor_pulse,LOW);
-        el_stepper_pin_last_state = LOW;
-      }
-      el_stepper_pin_transition_counter = 0;
-    }
-  } else {
-    el_stepper_pin_transition_counter = 0;
-  }
-
-  #endif //FEATURE_ELEVATION_CONTROL
-
-}
-#endif //defined(FEATURE_STEPPER_MOTOR)
-
-//------------------------------------------------------
-#ifdef FEATURE_STEPPER_MOTOR
-void set_az_stepper_freq(unsigned int frequency){
-
-  if (frequency > 0) {
-    az_stepper_freq_count = 2000 / frequency;
-  } else {
-    az_stepper_freq_count = 0;
-  }
-
-  #ifdef DEBUG_STEPPER
-  debug.print("set_az_stepper_freq: ");
-  debug.print(frequency);
-  debug.print(" az_stepper_freq_count:");
-  debug.print(az_stepper_freq_count);
-  debug.println("");
-  #endif //DEBUG_STEPPER
-
-}
-
-#endif //FEATURE_STEPPER_MOTOR
-//------------------------------------------------------
-#if defined(FEATURE_ELEVATION_CONTROL) && defined(FEATURE_STEPPER_MOTOR)
-void set_el_stepper_freq(unsigned int frequency){
-
-
-  if (frequency > 0) {
-    el_stepper_freq_count = 2000 / frequency;
-  } else {
-    el_stepper_freq_count = 0;
-  }
-
-  #ifdef DEBUG_STEPPER
-  debug.print("set_el_stepper_freq: ");
-  debug.print(frequency);
-  debug.print(" el_stepper_freq_count:");
-  debug.print(el_stepper_freq_count);
-  debug.println("");
-  #endif //DEBUG_STEPPER
-
-}
-
-#endif //defined(FEATURE_ELEVATION_CONTROL) && defined(FEATURE_STEPPER_MOTOR)
-//------------------------------------------------------
-
-#if defined(FEATURE_TEST_DISPLAY_AT_STARTUP)
-
-void test_display(){
-  
-  char tempchar[12] = "";
-  int display_number = 1;
-
-
-  k3ngdisplay.print_top_left("1");
-  k3ngdisplay.service(1);
-  delay(150);  
-  k3ngdisplay.print_top_right("2");
-  k3ngdisplay.service(1);
-  delay(150);   
-  k3ngdisplay.print_bottom_left("3");
-  k3ngdisplay.service(1);
-  delay(150);   
-  k3ngdisplay.print_bottom_right("4"); 
-  k3ngdisplay.service(1);
-  delay(2000);
-  k3ngdisplay.clear();
-
-  for (int y = 0; y < LCD_ROWS;y++){
-    for (int x = 0; x < LCD_COLUMNS;x++){
-      dtostrf(display_number,0,0,tempchar);
-      k3ngdisplay.print(tempchar,x,y);
-      k3ngdisplay.service(1);
-      delay(100);
-      display_number++;
-      if (display_number > 9){display_number = 0;}
-    }
-  }
-  
-  delay(2000);
-}
-
-
-#endif //FEATURE_TEST_DISPLAY_AT_STARTUP
-
-
-
-//------------------------------------------------------
-#if defined(FEATURE_AUTOPARK)
-void service_autopark(){
-
-
-  byte autopark_inhibited = 0;
-
-  #if defined(FEATURE_ELEVATION_CONTROL)
-    if ((az_state != IDLE) || (el_state != IDLE) || (park_status == PARKED)){
-      last_activity_time_autopark = millis();
-    }
-  #else
-    if ((az_state != IDLE) || (park_status == PARKED)){
-      last_activity_time_autopark = millis();
-    }
-  #endif
-
-  if (pin_autopark_timer_reset){
-    if (digitalReadEnhanced(pin_autopark_timer_reset) == LOW){
-      last_activity_time_autopark = millis();
-      if (park_status == PARK_INITIATED){
-        deactivate_park();
-        submit_request(AZ, REQUEST_STOP, 0, 85);
-        #ifdef FEATURE_ELEVATION_CONTROL
-          submit_request(EL, REQUEST_STOP, 0, 85);
-        #endif
-      }      
-    }
-  }
-
-  if (pin_autopark_disable){
-    if (digitalReadEnhanced(pin_autopark_disable) == LOW){
-      autopark_inhibited = 1;
-      last_activity_time_autopark = millis();
-      if (park_status == PARK_INITIATED){
-        deactivate_park();
-        submit_request(AZ, REQUEST_STOP, 0, 86);
-        #ifdef FEATURE_ELEVATION_CONTROL
-          submit_request(EL, REQUEST_STOP, 0, 86);
-        #endif        
-      }
-    }
-  }
-
-  if ((configuration.autopark_active) && (!autopark_inhibited) && ((millis() - last_activity_time_autopark) > (long(configuration.autopark_time_minutes) * 60000L)) 
-    && ((park_status != PARK_INITIATED) || (park_status != PARKED))) {
-    #if defined(DEBUG_PARK)
-      debug.print(F("service_autopark: initiating park\n"));
-    #endif
-    initiate_park();
-  }
-
-
-}
-#endif //FEATURE_AUTOPARK
