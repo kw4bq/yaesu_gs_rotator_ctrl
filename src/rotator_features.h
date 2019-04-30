@@ -3,23 +3,20 @@
 #define FEATURE_ELEVATION_CONTROL      // uncomment this for AZ/EL rotators
 #define FEATURE_YAESU_EMULATION
 
+#if defined(FEATURE_YAESU_EMULATION) 
+  #define CONTROL_PROTOCOL_EMULATION
+#endif
+
 // #define FEATURE_MOON_TRACKING
 // #define FEATURE_SUN_TRACKING
 // #define FEATURE_CLOCK
 // #define FEATURE_GPS
 // #define FEATURE_RTC_DS1307
 // #define FEATURE_RTC_PCF8583
-// #define FEATURE_ETHERNET
 // #define FEATURE_AUTOCORRECT
 
-#define LANGUAGE_ENGLISH         // all languages customized in rotator_language.h
-// #define LANGUAGE_SPANISH
-// #define LANGUAGE_CZECH
-// #define LANGUAGE_ITALIAN
-// #define LANGUAGE_PORTUGUESE_BRASIL
-// #define LANGUAGE_GERMAN  
-// #define LANGUAGE_FRENCH
-// #define LANGUAGE_DUTCH
+#define LANGUAGE_ENGLISH
+
 
 #define FEATURE_AZ_POSITION_POTENTIOMETER
 #define FEATURE_EL_POSITION_POTENTIOMETER
@@ -32,15 +29,11 @@
 // #define FEATURE_SUN_PUSHBUTTON_AZ_EL_CALIBRATION
 // #define FEATURE_MOON_PUSHBUTTON_AZ_EL_CALIBRATION
 
-
-
-#define OPTION_GS_232B_EMULATION          // comment this out to default to Yaesu GS-232A emulation when using FEATURE_YAESU_EMULATION above
+#define OPTION_GS_232B_EMULATION
 // #define FEATURE_ROTATION_INDICATOR_PIN     // activate rotation_indication_pin to indicate rotation
 // #define FEATURE_LIMIT_SENSE
 #define FEATURE_TIMED_BUFFER           // Support for Yaesu timed buffer commands
 #define OPTION_SERIAL_HELP_TEXT        // Yaesu help command prints help
-// #define FEATURE_PARK
-// #define FEATURE_AUTOPARK               // Requires FEATURE_PARK
 // #define OPTION_AZ_MANUAL_ROTATE_LIMITS    // this option will automatically stop the L and R commands when hitting a CCW or CW limit (settings are AZ_MANUAL_ROTATE_CCW_LIMIT, AZ_MANUAL_ROTATE_CW_LIMIT) 
 // #define OPTION_EL_MANUAL_ROTATE_LIMITS    // (settings are EL_MANUAL_ROTATE_DOWN_LIMIT, EL_MANUAL_ROTATE_UP_LIMIT)
 

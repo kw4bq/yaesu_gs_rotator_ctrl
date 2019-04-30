@@ -8,12 +8,16 @@
 
 #define SERIAL_PORT_CLASS HardwareSerial
 
+#define FEATURE_I2C_LCD
+#define FEATURE_LCD_DISPLAY
+#define FEATURE_WIRE_SUPPORT
+
 #include "rotator_features.h" 
 #include "rotator_dependencies.h"
 
 #include <LiquidCrystal_I2C.h>
 #include "rotator_k3ngdisplay.h"
-#include <Wire.h>  
+#include <Wire.h>
 
 #if defined(FEATURE_MOON_TRACKING) || defined(FEATURE_SUN_TRACKING)
   #include <moon2.h>
@@ -34,11 +38,6 @@
 #ifdef FEATURE_RTC_PCF8583
   #include <PCF8583.h>
 #endif //FEATURE_RTC_PCF8583
-
-#ifdef FEATURE_ETHERNET
-  #include <SPI.h>
-  #include <Ethernet.h>
-#endif
 
 #include "rotator.h"
 #include "rotator_pins.h"
@@ -219,25 +218,6 @@ byte current_az_speed_voltage = 0;
   byte gps_data_available = 0;
 #endif // FEATURE_GPS
 
-#ifdef FEATURE_ETHERNET
-  byte mac[] = {ETHERNET_MAC_ADDRESS};
-  IPAddress ip(ETHERNET_IP_ADDRESS);
-  IPAddress gateway(ETHERNET_IP_GATEWAY);
-  IPAddress subnet(ETHERNET_IP_SUBNET_MASK);
-  EthernetClient ethernetclient0;
-  EthernetServer ethernetserver0(ETHERNET_TCP_PORT_0);
-  #ifdef ETHERNET_TCP_PORT_1
-    EthernetClient ethernetclient1;
-    EthernetServer ethernetserver1(ETHERNET_TCP_PORT_1);
-  #endif //ETHERNET_TCP_PORT_1
-  #ifdef FEATURE_MASTER_WITH_ETHERNET_SLAVE
-    EthernetClient ethernetslavelinkclient0;
-    IPAddress slave_unit_ip(ETHERNET_SLAVE_IP_ADDRESS);
-    byte ethernetslavelinkclient0_state = ETHERNET_SLAVE_DISCONNECTED;
-    unsigned int ethernet_slave_reconnects = 0;
-  #endif //FEATURE_MASTER_WITH_ETHERNET_SLAVE
-#endif //FEATURE_ETHERNET
-
 #ifdef FEATURE_POWER_SWITCH
   unsigned long last_activity_time = 0;
 #endif //FEATURE_POWER_SWITCH
@@ -381,10 +361,6 @@ void loop() {
   #ifdef OPTION_MORE_SERIAL_CHECKS
     check_serial();
   #endif
-
-  #ifdef FEATURE_ETHERNET
-    service_ethernet();
-  #endif // FEATURE_ETHERNET
 
   #ifdef FEATURE_POWER_SWITCH
     service_power_switch();
@@ -2604,16 +2580,8 @@ void check_timed_interval(){
 
 void read_azimuth(byte force_read) {
 
-  #ifdef FEATURE_AZ_POSITION_INCREMENTAL_ENCODER
-    read_azimuth_lock = 1;
-  #endif
-
   unsigned int previous_raw_azimuth = raw_azimuth;
   static unsigned long last_measurement_time = 0;
-
-  #ifdef FEATURE_AZ_POSITION_INCREMENTAL_ENCODER
-    static unsigned int incremental_encoder_previous_raw_azimuth = raw_azimuth;
-  #endif // FEATURE_AZ_POSITION_INCREMENTAL_ENCODER
 
   if (heading_reading_inhibit_pin) {
     if (digitalReadEnhanced(heading_reading_inhibit_pin)) {
@@ -2627,592 +2595,49 @@ void read_azimuth(byte force_read) {
     static float average_read_time = 0;
   #endif // DEBUG_HEADING_READING_TIME
 
-  #ifdef DEBUG_HH12
-    static unsigned long last_hh12_debug = 0;
-  #endif
-
-  #ifndef FEATURE_AZ_POSITION_GET_FROM_REMOTE_UNIT
-    if (((millis() - last_measurement_time) > AZIMUTH_MEASUREMENT_FREQUENCY_MS) || (force_read)) {
-  #else
-    if (1) {
-  #endif
+  if (((millis() - last_measurement_time) > AZIMUTH_MEASUREMENT_FREQUENCY_MS) || (force_read)) {
 
     #ifdef FEATURE_AZ_POSITION_POTENTIOMETER
       analog_az = analogReadEnhanced(rotator_analog_az);
       raw_azimuth = map(analog_az, configuration.analog_az_full_ccw, configuration.analog_az_full_cw, (azimuth_starting_point * HEADING_MULTIPLIER), ((azimuth_starting_point + azimuth_rotation_capability) * HEADING_MULTIPLIER));
-      //raw_azimuth = map(analog_az* HEADING_MULTIPLIER, configuration.analog_az_full_ccw* HEADING_MULTIPLIER, configuration.analog_az_full_cw* HEADING_MULTIPLIER, (azimuth_starting_point * HEADING_MULTIPLIER), ((azimuth_starting_point + azimuth_rotation_capability) * HEADING_MULTIPLIER));
 
       #ifdef FEATURE_AZIMUTH_CORRECTION
         raw_azimuth = (correct_azimuth(raw_azimuth / (float) HEADING_MULTIPLIER) * HEADING_MULTIPLIER);
       #endif // FEATURE_AZIMUTH_CORRECTION
+      
       raw_azimuth = raw_azimuth + (configuration.azimuth_offset * HEADING_MULTIPLIER);
+      
       if (AZIMUTH_SMOOTHING_FACTOR > 0) {
         raw_azimuth = (raw_azimuth * (1 - (AZIMUTH_SMOOTHING_FACTOR / 100.))) + (previous_raw_azimuth * (AZIMUTH_SMOOTHING_FACTOR / 100.));
       }
+      
       if (raw_azimuth >= (360 * HEADING_MULTIPLIER)) {
+        
         azimuth = raw_azimuth - (360 * HEADING_MULTIPLIER);
         if (azimuth >= (360 * HEADING_MULTIPLIER)) {
           azimuth = azimuth - (360 * HEADING_MULTIPLIER);
         }
+        
       } else {
+        
         if (raw_azimuth < 0) {
           azimuth = raw_azimuth + (360 * HEADING_MULTIPLIER);
         } else {
           azimuth = raw_azimuth;
         }
+        
       }
     #endif // FEATURE_AZ_POSITION_POTENTIOMETER
 
-    #ifdef FEATURE_AZ_POSITION_GET_FROM_REMOTE_UNIT
-      #if defined(FEATURE_MASTER_WITH_SERIAL_SLAVE) || defined(FEATURE_MASTER_WITH_ETHERNET_SLAVE)
-        static unsigned long last_remote_unit_az_query_time = 0;
-        // do we have a command result waiting for us?
-        if (remote_unit_command_results_available == REMOTE_UNIT_AZ_COMMAND) {
-
-          #ifdef DEBUG_HEADING_READING_TIME
-            average_read_time = (average_read_time + (millis() - last_time)) / 2.0;
-            last_time = millis();
-
-            if (debug_mode) {
-              if ((millis() - last_print_time) > 1000) {
-                debug.println("read_azimuth: avg read frequency: ");
-                debug.print(average_read_time, 2);
-                debug.println("");
-                last_print_time = millis();
-              }
-            }
-          #endif // DEBUG_HEADING_READING_TIME
-          raw_azimuth = remote_unit_command_result_float * HEADING_MULTIPLIER;
-
-
-          #ifdef FEATURE_AZIMUTH_CORRECTION
-            raw_azimuth = (correct_azimuth(raw_azimuth / (float) HEADING_MULTIPLIER) * HEADING_MULTIPLIER);
-          #endif // FEATURE_AZIMUTH_CORRECTION
-
-          raw_azimuth = raw_azimuth + (configuration.azimuth_offset * HEADING_MULTIPLIER);
-
-          if (AZIMUTH_SMOOTHING_FACTOR > 0) {
-            raw_azimuth = (raw_azimuth * (1 - (AZIMUTH_SMOOTHING_FACTOR / 100))) + (previous_raw_azimuth * (AZIMUTH_SMOOTHING_FACTOR / 100));
-          }
-          if (raw_azimuth >= (360 * HEADING_MULTIPLIER)) {
-            azimuth = raw_azimuth - (360 * HEADING_MULTIPLIER);
-            if (azimuth >= (360 * HEADING_MULTIPLIER)) {
-              azimuth = azimuth - (360 * HEADING_MULTIPLIER);
-            }
-          } else {
-            if (raw_azimuth < 0) {
-              azimuth = raw_azimuth + (360 * HEADING_MULTIPLIER);
-            } else {
-              azimuth = raw_azimuth;
-            }
-          }
-          remote_unit_command_results_available = 0;
-        } else {
-          // is it time to request the azimuth?
-          if ((millis() - last_remote_unit_az_query_time) > AZ_REMOTE_UNIT_QUERY_TIME_MS) {
-            if (submit_remote_command(REMOTE_UNIT_AZ_COMMAND, 0, 0)) {
-              last_remote_unit_az_query_time = millis();
-            }
-          }
-        }
-      #endif // defined(FEATURE_MASTER_WITH_SERIAL_SLAVE) || defined(FEATURE_MASTER_WITH_ETHERNET_SLAVE)
-    #endif // FEATURE_AZ_POSITION_GET_FROM_REMOTE_UNIT
-
-
-
-    #ifdef FEATURE_AZ_POSITION_ROTARY_ENCODER
-      static byte az_position_encoder_state = 0;
-      az_position_encoder_state = ttable[az_position_encoder_state & 0xf][((digitalReadEnhanced(az_rotary_position_pin2) << 1) | digitalReadEnhanced(az_rotary_position_pin1))];
-      byte az_position_encoder_result = az_position_encoder_state & 0x30;
-      if (az_position_encoder_result) {
-        if (az_position_encoder_result == DIR_CW) {
-          configuration.last_azimuth = configuration.last_azimuth + AZ_POSITION_ROTARY_ENCODER_DEG_PER_PULSE;
-          #ifdef DEBUG_POSITION_ROTARY_ENCODER
-            debug.println("read_azimuth: AZ_POSITION_ROTARY_ENCODER: CW");
-          #endif // DEBUG_POSITION_ROTARY_ENCODER
-        }
-        if (az_position_encoder_result == DIR_CCW) {
-          configuration.last_azimuth = configuration.last_azimuth - AZ_POSITION_ROTARY_ENCODER_DEG_PER_PULSE;
-          #ifdef DEBUG_POSITION_ROTARY_ENCODER
-            debug.println("read_azimuth: AZ_POSITION_ROTARY_ENCODER: CCW");
-          #endif // DEBUG_POSITION_ROTARY_ENCODER
-        }
-
-        #ifdef OPTION_AZ_POSITION_ROTARY_ENCODER_HARD_LIMIT
-          if (configuration.last_azimuth < azimuth_starting_point) {
-            configuration.last_azimuth = azimuth_starting_point;
-          }
-          if (configuration.last_azimuth > (azimuth_starting_point + azimuth_rotation_capability)) {
-            configuration.last_azimuth = (azimuth_starting_point + azimuth_rotation_capability);
-          }
-        #else
-          if (configuration.last_azimuth < 0) {
-            configuration.last_azimuth += 360;
-          }
-          if (configuration.last_azimuth >= 360) {
-            configuration.last_azimuth -= 360;
-          }
-        #endif // OPTION_AZ_POSITION_ROTARY_ENCODER_HARD_LIMIT
-
-
-        raw_azimuth = int(configuration.last_azimuth * HEADING_MULTIPLIER);
-
-
-        #ifdef FEATURE_AZIMUTH_CORRECTION
-          raw_azimuth = (correct_azimuth(raw_azimuth / (float) HEADING_MULTIPLIER) * HEADING_MULTIPLIER);
-        #endif // FEATURE_AZIMUTH_CORRECTION
-
-        if (raw_azimuth >= (360 * HEADING_MULTIPLIER)) {
-          azimuth = raw_azimuth - (360 * HEADING_MULTIPLIER);
-        } else {
-          azimuth = raw_azimuth;
-        }
-        configuration_dirty = 1;
-      }
-    #endif // FEATURE_AZ_POSITION_ROTARY_ENCODER
-
-
-    #if defined(FEATURE_AZ_POSITION_ROTARY_ENCODER_USE_PJRC_LIBRARY)
-       encoder_pjrc_current_az_position = encoder_pjrc_az.read();
-        if ( (encoder_pjrc_current_az_position != encoder_pjrc_previous_az_position) ) 
-        {
-          configuration.last_azimuth = configuration.last_azimuth + ((encoder_pjrc_current_az_position - encoder_pjrc_previous_az_position) * AZ_POSITION_ROTARY_ENCODER_DEG_PER_PULSE); 
-            
-          #ifdef DEBUG_POSITION_ROTARY_ENCODER_USE_PJRC_LIBRARY 
-           if ((encoder_pjrc_current_az_position - encoder_pjrc_previous_az_position ) < 0) 
-            {
-             debug.print("read_azimuth: AZ_POSITION_ROTARY_PJRC_ENCODER: CCW - ");
-            }
-             else
-            {
-             debug.print("read_azimuth: AZ_POSITION_ROTARY_PJRC_ENCODER: CW - ");
-            } 
-             debug.print("Encoder Count: ");
-             debug.print(encoder_pjrc_current_az_position);
-             debug.print(" - configuration.last_azimuth : ");
-             debug.print(configuration.last_azimuth );
-             debug.print(" - raw_azimuth : ");
-             debug.println(raw_azimuth);
-          #endif // DEBUG_AZ_POSITION_ROTARY_ENCODER_USE_PJRC_LIBRARY 
-
-          encoder_pjrc_previous_az_position = encoder_pjrc_current_az_position;
-             
-          #ifdef OPTION_AZ_POSITION_ROTARY_ENCODER_HARD_LIMIT
-           if (configuration.last_azimuth < azimuth_starting_point) {
-             configuration.last_azimuth = azimuth_starting_point;
-           }
-          if (configuration.last_azimuth > (azimuth_starting_point + azimuth_rotation_capability)) {
-             configuration.last_azimuth = (azimuth_starting_point + azimuth_rotation_capability);
-           }
-         #else
-           if (configuration.last_azimuth < 0) {
-             configuration.last_azimuth += 360;
-           }
-           if (configuration.last_azimuth >= 360) {
-             configuration.last_azimuth -= 360;
-           }
-         #endif // OPTION_AZ_POSITION_ROTARY_ENCODER_HARD_LIMIT
-
-         //debug.print(" Calculating raw_azimuth : ");
-         raw_azimuth = int(configuration.last_azimuth * HEADING_MULTIPLIER);
-
-
-         #ifdef FEATURE_AZIMUTH_CORRECTION
-           raw_azimuth = (correct_azimuth(raw_azimuth / (float) HEADING_MULTIPLIER) * HEADING_MULTIPLIER);
-         #endif // FEATURE_AZIMUTH_CORRECTION
-
-         if (raw_azimuth >= (360 * HEADING_MULTIPLIER)) {
-           azimuth = raw_azimuth - (360 * HEADING_MULTIPLIER);
-         } else {
-           azimuth = raw_azimuth;
-         }
-         configuration_dirty = 1;
-                  
-        }     
-    #endif  //FEATURE_AZ_POSITION_ROTARY_ENCODER_USE_PJRC_LIBRARY
-
-
-    #ifdef FEATURE_AZ_POSITION_HMC5883L
-      MagnetometerScaled scaled = compass.ReadScaledAxis(); // scaled values from compass.
-
-      #ifdef DEBUG_HMC5883L
-        debug.print("read_azimuth: HMC5883L x:");
-        debug.print(scaled.XAxis,4);
-        debug.print(" y:");
-        debug.print(scaled.YAxis,4);
-        debug.println("");
-      #endif //DEBUG_HMC5883L
-
-
-      float heading = atan2(scaled.YAxis, scaled.XAxis);
-      //  heading += declinationAngle;
-      // Correct for when signs are reversed.
-      if (heading < 0) heading += 2 * PI;
-      if (heading > 2 * PI) heading -= 2 * PI;
-      raw_azimuth = (heading * RAD_TO_DEG) * HEADING_MULTIPLIER; // radians to degree
-      if (AZIMUTH_SMOOTHING_FACTOR > 0) {
-        raw_azimuth = (raw_azimuth * (1 - (AZIMUTH_SMOOTHING_FACTOR / 100))) + (previous_raw_azimuth * (AZIMUTH_SMOOTHING_FACTOR / 100));
-      }
-      #ifdef FEATURE_AZIMUTH_CORRECTION
-        raw_azimuth = (correct_azimuth(raw_azimuth / (float) HEADING_MULTIPLIER) * HEADING_MULTIPLIER);
-      #endif // FEATURE_AZIMUTH_CORRECTION
-      raw_azimuth = raw_azimuth + (configuration.azimuth_offset * HEADING_MULTIPLIER);
-      azimuth = raw_azimuth;
-    #endif // FEATURE_AZ_POSITION_HMC5883L
-
-    #ifdef FEATURE_AZ_POSITION_HMC5883L_USING_JARZEBSKI_LIBRARY
-      Vector norm = compass.readNormalize();
-
-      // Calculate heading
-      float heading = atan2(norm.YAxis, norm.XAxis);
-
-      #ifdef DEBUG_HMC5883L
-        debug.print("read_azimuth: HMC5883L x:");
-        debug.print(norm.XAxis,4);
-        debug.print(" y:");
-        debug.print(norm.YAxis,4);
-        debug.println("");
-      #endif //DEBUG_HMC5883L
-
-      // Set declination angle on your location and fix heading
-      // You can find your declination on: http://magnetic-declination.com/
-      // (+) Positive or (-) for negative
-      // For Bytom / Poland declination angle is 4'26E (positive)
-      // Formula: (deg + (min / 60.0)) / (180 / M_PI);
-      //float declinationAngle = (4.0 + (26.0 / 60.0)) / (180 / M_PI);
-      //heading += declinationAngle;
-
-      // Correct for heading < 0deg and heading > 360deg
-      if (heading < 0){
-        heading += 2 * PI;
-      }
-
-      if (heading > 2 * PI){
-        heading -= 2 * PI;
-      }
-
-      // Convert to degrees
-      raw_azimuth = heading * 180 / M_PI; 
-
-      if (AZIMUTH_SMOOTHING_FACTOR > 0) {
-        raw_azimuth = (raw_azimuth * (1 - (AZIMUTH_SMOOTHING_FACTOR / 100))) + (previous_raw_azimuth * (AZIMUTH_SMOOTHING_FACTOR / 100));
-      }
-      #ifdef FEATURE_AZIMUTH_CORRECTION
-        raw_azimuth = (correct_azimuth(raw_azimuth / (float) HEADING_MULTIPLIER) * HEADING_MULTIPLIER);
-      #endif // FEATURE_AZIMUTH_CORRECTION
-      raw_azimuth = raw_azimuth + (configuration.azimuth_offset * HEADING_MULTIPLIER);
-      azimuth = raw_azimuth;
-    #endif // FEATURE_AZ_POSITION_HMC5883L_USING_JARZEBSKI_LIBRARY
-
-    #if defined(FEATURE_AZ_POSITION_DFROBOT_QMC5883)
-
-      Vector norm = compass.readNormalize();
-
-      // Calculate heading
-      float heading = atan2(norm.YAxis, norm.XAxis);
-
-      #ifdef DEBUG_QMC5883
-        debug.print("read_azimuth: QMC5883 x:");
-        debug.print(norm.XAxis,4);
-        debug.print(" y:");
-        debug.print(norm.YAxis,4);
-        debug.println("");
-      #endif //DEBUG_QMC5883
-
-      // Set declination angle on your location and fix heading
-      // You can find your declination on: http://magnetic-declination.com/
-      // (+) Positive or (-) for negative
-      // For Bytom / Poland declination angle is 4'26E (positive)
-      // Formula: (deg + (min / 60.0)) / (180 / PI);
-      // float declinationAngle = (4.0 + (26.0 / 60.0)) / (180 / PI);
-      // heading += declinationAngle;
-
-      // Correct for heading < 0deg and heading > 360deg
-      if (heading < 0){
-        heading += 2 * PI;
-      }
-
-      if (heading > 2 * PI){
-        heading -= 2 * PI;
-      }
-
-      // Convert to degrees
-      raw_azimuth = heading * 180 / M_PI; 
-
-      if (AZIMUTH_SMOOTHING_FACTOR > 0) {
-        raw_azimuth = (raw_azimuth * (1 - (AZIMUTH_SMOOTHING_FACTOR / 100))) + (previous_raw_azimuth * (AZIMUTH_SMOOTHING_FACTOR / 100));
-      }
-      #ifdef FEATURE_AZIMUTH_CORRECTION
-        raw_azimuth = (correct_azimuth(raw_azimuth / (float) HEADING_MULTIPLIER) * HEADING_MULTIPLIER);
-      #endif // FEATURE_AZIMUTH_CORRECTION
-      raw_azimuth = raw_azimuth + (configuration.azimuth_offset * HEADING_MULTIPLIER);
-      azimuth = raw_azimuth;
-    #endif //FEATURE_AZ_POSITION_DFROBOT_QMC5883
-
-
-
-
-
-    #if defined(FEATURE_AZ_POSITION_MECHASOLUTION_QMC5883)
-
-      int mecha_x, mecha_y, mecha_z, mecha_azimuth;
-      compass.read(&mecha_x, &mecha_y, &mecha_z, &mecha_azimuth);
-
-
-      #ifdef DEBUG_QMC5883
-        debug.print("read_azimuth: QMC5883 x:");
-        debug.print(mecha_x);
-        debug.print(" y:");
-        debug.print(mecha_y);
-        debug.print(" z:");
-        debug.print(mecha_z);
-        debug.print(" mecha_azimuth:");
-        debug.print(mecha_azimuth);                
-        debug.println("");
-      #endif //DEBUG_QMC5883
-
-
-
-      // Correct for heading < 0deg and heading > 360deg
-      if (mecha_azimuth < 0){
-        mecha_azimuth += 360;
-      }
-
-      if (mecha_azimuth > 359){
-        mecha_azimuth -= 360;
-      }
-
-      raw_azimuth = mecha_azimuth;
-
-      if (AZIMUTH_SMOOTHING_FACTOR > 0) {
-        raw_azimuth = (raw_azimuth * (1 - (AZIMUTH_SMOOTHING_FACTOR / 100))) + (previous_raw_azimuth * (AZIMUTH_SMOOTHING_FACTOR / 100));
-      }
-      #ifdef FEATURE_AZIMUTH_CORRECTION
-        raw_azimuth = (correct_azimuth(raw_azimuth / (float) HEADING_MULTIPLIER) * HEADING_MULTIPLIER);
-      #endif // FEATURE_AZIMUTH_CORRECTION
-      raw_azimuth = raw_azimuth + (configuration.azimuth_offset * HEADING_MULTIPLIER);
-      azimuth = raw_azimuth;
-    #endif //FEATURE_AZ_POSITION_MECHASOLUTION_QMC5883
-
-
-
-    #ifdef FEATURE_AZ_POSITION_ADAFRUIT_LSM303
-      lsm.read();
-      float heading = atan2(lsm.magData.y, lsm.magData.x);
-      //  heading += declinationAngle;
-      // Correct for when signs are reversed.
-      if (heading < 0) heading += 2 * PI;
-      if (heading > 2 * PI) heading -= 2 * PI;
-      raw_azimuth = (heading * RAD_TO_DEG) * HEADING_MULTIPLIER; // radians to degree
-      #ifdef FEATURE_AZIMUTH_CORRECTION
-        raw_azimuth = (correct_azimuth(raw_azimuth / (float) HEADING_MULTIPLIER) * HEADING_MULTIPLIER);
-      #endif // FEATURE_AZIMUTH_CORRECTION
-      raw_azimuth = raw_azimuth + (configuration.azimuth_offset * HEADING_MULTIPLIER);
-      if (AZIMUTH_SMOOTHING_FACTOR > 0) {
-        raw_azimuth = (raw_azimuth * (1 - (AZIMUTH_SMOOTHING_FACTOR / 100))) + (previous_raw_azimuth * (AZIMUTH_SMOOTHING_FACTOR / 100));
-      }
-      azimuth = raw_azimuth;
-    #endif // FEATURE_AZ_POSITION_ADAFRUIT_LSM303
-
-
-    #ifdef FEATURE_AZ_POSITION_POLOLU_LSM303
-      compass.read();   
-      #ifdef DEBUG_POLOLU_LSM303_CALIBRATION
-        running_min.x = min(running_min.x, compass.m.x);
-        running_min.y = min(running_min.y, compass.m.y);
-        running_min.z = min(running_min.z, compass.m.z);
-        running_max.x = max(running_max.x, compass.m.x);
-        running_max.y = max(running_max.y, compass.m.y);
-        running_max.z = max(running_max.z, compass.m.z);
-        snprintf(report, sizeof(report), "min: {%+6d, %+6d, %+6d}    max: {%+6d, %+6d, %+6d}",
-        running_min.x, running_min.y, running_min.z,
-        running_max.x, running_max.y, running_max.z);
-        Serial.println(report);
-      #endif // DEBUG_POLOLU_LSM303_CALIBRATION
-      //lsm.read();
-          
-      /*
-      When given no arguments, the heading() function returns the angular
-      difference in the horizontal plane between a default vector and
-      north, in degrees.
-    
-      The default vector is chosen by the library to point along the
-      surface of the PCB, in the direction of the top of the text on the
-      silkscreen. This is the +X axis on the Pololu LSM303D carrier and
-      the -Y axis on the Pololu LSM303DLHC, LSM303DLM, and LSM303DLH
-      carriers.
-      
-      To use a different vector as a reference, use the version of heading()
-      that takes a vector argument; for example, use
-    
-      compass.heading((LSM303::vector<int>){0, 0, 1});
-    
-      to use the +Z axis as a reference.
-      */
-      float heading = compass.heading();
-      
-      //float heading = atan2(lsm.magData.y, lsm.magData.x);
-      //  heading += declinationAngle; 
-      // Correct for when signs are reversed.
-      /*
-      if (heading < 0) heading += 2 * PI;
-      if (heading > 2 * PI) heading -= 2 * PI;
-      raw_azimuth = (heading * RAD_TO_DEG) * HEADING_MULTIPLIER; // radians to degree
-      */
-      raw_azimuth = heading * HEADING_MULTIPLIER ;  // pololu library returns float value of actual heading.
-      #ifdef FEATURE_AZIMUTH_CORRECTION
-        raw_azimuth = (correct_azimuth(raw_azimuth / (float) HEADING_MULTIPLIER) * HEADING_MULTIPLIER);
-      #endif // FEATURE_AZIMUTH_CORRECTION
-      raw_azimuth = raw_azimuth + (configuration.azimuth_offset * HEADING_MULTIPLIER);
-      if (AZIMUTH_SMOOTHING_FACTOR > 0) {
-        raw_azimuth = (raw_azimuth * (1 - (AZIMUTH_SMOOTHING_FACTOR / 100))) + (previous_raw_azimuth * (AZIMUTH_SMOOTHING_FACTOR / 100));
-      }
-      azimuth = raw_azimuth;
-    #endif // FEATURE_AZ_POSITION_POLOLU_LSM303
-
-
-
-    #ifdef FEATURE_AZ_POSITION_PULSE_INPUT
-      #ifdef DEBUG_POSITION_PULSE_INPUT
-  //    if (az_position_pule_interrupt_handler_flag) {
-  //      control_port->print(F("read_azimuth: az_position_pusle_interrupt_handler_flag: "));
-  //      control_port->println(az_position_pule_interrupt_handler_flag);
-  //      az_position_pule_interrupt_handler_flag = 0;
-  //    }
-      #endif // DEBUG_POSITION_PULSE_INPUT
-      static float last_az_position_pulse_input_azimuth = az_position_pulse_input_azimuth;
-      if (az_position_pulse_input_azimuth != last_az_position_pulse_input_azimuth) {
-        #ifdef DEBUG_POSITION_PULSE_INPUT
-  //        if (debug_mode){
-  //          control_port->print(F("read_azimuth: last_az_position_pulse_input_azimuth:"));
-  //          control_port->print(last_az_position_pulse_input_azimuth);
-  //          control_port->print(F(" az_position_pulse_input_azimuth:"));
-  //          control_port->print(az_position_pulse_input_azimuth);
-  //          control_port->print(F(" az_pulse_counter:"));
-  //          control_port->println(az_pulse_counter);
-  //        }
-        #endif // DEBUG_POSITION_PULSE_INPUT
-        configuration.last_azimuth = az_position_pulse_input_azimuth;
-        configuration_dirty = 1;
-        last_az_position_pulse_input_azimuth = az_position_pulse_input_azimuth;
-        raw_azimuth = int(configuration.last_azimuth * HEADING_MULTIPLIER);
-        #ifdef FEATURE_AZIMUTH_CORRECTION
-          raw_azimuth = (correct_azimuth(raw_azimuth / (float) HEADING_MULTIPLIER) * HEADING_MULTIPLIER);
-        #endif // FEATURE_AZIMUTH_CORRECTION
-        raw_azimuth = raw_azimuth + (configuration.azimuth_offset * HEADING_MULTIPLIER);
-        if (raw_azimuth >= (360 * HEADING_MULTIPLIER)) {
-          azimuth = raw_azimuth - (360 * HEADING_MULTIPLIER);
-        } else {
-          azimuth = raw_azimuth;
-        }
-      }
-    #endif // FEATURE_AZ_POSITION_PULSE_INPUT
-
-    #ifdef FEATURE_AZ_POSITION_HH12_AS5045_SSI
-      #if defined(OPTION_REVERSE_AZ_HH12_AS5045)
-        raw_azimuth = int((360.0-azimuth_hh12.heading()+azimuth_starting_point /*AZIMUTH_STARTING_POINT_DEFAULT*/) * HEADING_MULTIPLIER);
-      #else
-        raw_azimuth = int((azimuth_hh12.heading()+azimuth_starting_point /*AZIMUTH_STARTING_POINT_DEFAULT*/) * HEADING_MULTIPLIER);
-      #endif
-      #ifdef DEBUG_HH12
-        if ((millis() - last_hh12_debug) > 5000) {
-          debug.print(F("read_azimuth: HH-12 raw: "));
-          control_port->println(raw_azimuth);
-          last_hh12_debug = millis();
-        }
-      #endif // DEBUG_HH12
-      #ifdef FEATURE_AZIMUTH_CORRECTION
-        raw_azimuth = (correct_azimuth(raw_azimuth / (float) HEADING_MULTIPLIER) * HEADING_MULTIPLIER);
-      #endif // FEATURE_AZIMUTH_CORRECTION
-      raw_azimuth = raw_azimuth + (configuration.azimuth_offset * HEADING_MULTIPLIER);
-      if (raw_azimuth < 0){raw_azimuth = raw_azimuth + (360 * HEADING_MULTIPLIER);}
-      if (raw_azimuth >= (360 * HEADING_MULTIPLIER)) {
-        azimuth = raw_azimuth - (360 * HEADING_MULTIPLIER);
-      } else {
-        azimuth = raw_azimuth;
-      }
-    #endif // FEATURE_AZ_POSITION_HH12_AS5045_SSI
-/*
-    #ifdef FEATURE_AZ_POSITION_INCREMENTAL_ENCODER
-      if (AZIMUTH_STARTING_POINT_DEFAULT == 0) {
-        raw_azimuth = (((((az_incremental_encoder_position) / ((long)AZ_POSITION_INCREMENTAL_ENCODER_PULSES_PER_REV*4L)) * 360L)) * (long)HEADING_MULTIPLIER);
-      } else {
-        if (az_incremental_encoder_position > ((long)AZ_POSITION_INCREMENTAL_ENCODER_PULSES_PER_REV*4L)) {
-          raw_azimuth = (((((az_incremental_encoder_position - ((long)AZ_POSITION_INCREMENTAL_ENCODER_PULSES_PER_REV*4L)) / ((long)AZ_POSITION_INCREMENTAL_ENCODER_PULSES_PER_REV*4L)) * 360L)) * (long)HEADING_MULTIPLIER);
-        } else {
-          raw_azimuth = (((((az_incremental_encoder_position + ((long)AZ_POSITION_INCREMENTAL_ENCODER_PULSES_PER_REV*4L)) / ((long)AZ_POSITION_INCREMENTAL_ENCODER_PULSES_PER_REV*4L)) * 360L)) * (long)HEADING_MULTIPLIER);
-        }
-      }
-
-      #ifdef FEATURE_AZIMUTH_CORRECTION
-        raw_azimuth = (correct_azimuth(raw_azimuth / (float) HEADING_MULTIPLIER) * HEADING_MULTIPLIER);
-      #endif // FEATURE_AZIMUTH_CORRECTION
-      raw_azimuth = raw_azimuth + (configuration.azimuth_offset * HEADING_MULTIPLIER);
-      if (raw_azimuth >= (360 * HEADING_MULTIPLIER)) {
-        azimuth = raw_azimuth - (360 * HEADING_MULTIPLIER);
-      } else {
-        azimuth = raw_azimuth;
-      }
-      if (raw_azimuth != incremental_encoder_previous_raw_azimuth) {
-        configuration.last_az_incremental_encoder_position = az_incremental_encoder_position;
-        configuration_dirty = 1;
-        incremental_encoder_previous_raw_azimuth = raw_azimuth;
-      }
-    #endif // FEATURE_AZ_POSITION_INCREMENTAL_ENCODER
-*/
-
-    #ifdef FEATURE_AZ_POSITION_INCREMENTAL_ENCODER
-      if (azimuth_starting_point /*AZIMUTH_STARTING_POINT_DEFAULT*/ == 0) {
-        raw_azimuth = (((((az_incremental_encoder_position) / (AZ_POSITION_INCREMENTAL_ENCODER_PULSES_PER_REV*4.)) * 360.0)) * HEADING_MULTIPLIER);
-      } else {
-        if (az_incremental_encoder_position > (AZ_POSITION_INCREMENTAL_ENCODER_PULSES_PER_REV*4.)) {
-          raw_azimuth = (((((az_incremental_encoder_position - (AZ_POSITION_INCREMENTAL_ENCODER_PULSES_PER_REV*4.)) / (AZ_POSITION_INCREMENTAL_ENCODER_PULSES_PER_REV*4.)) * 360.0)) * HEADING_MULTIPLIER);
-        } else {
-          raw_azimuth = (((((az_incremental_encoder_position + (AZ_POSITION_INCREMENTAL_ENCODER_PULSES_PER_REV*4.)) / (AZ_POSITION_INCREMENTAL_ENCODER_PULSES_PER_REV*4.)) * 360.0)) * HEADING_MULTIPLIER);
-        }
-      }
-      #ifdef FEATURE_AZIMUTH_CORRECTION
-        raw_azimuth = (correct_azimuth(raw_azimuth / (float) HEADING_MULTIPLIER) * HEADING_MULTIPLIER);
-      #endif // FEATURE_AZIMUTH_CORRECTION
-      raw_azimuth = raw_azimuth + (configuration.azimuth_offset * HEADING_MULTIPLIER);
-      if (raw_azimuth >= (360 * HEADING_MULTIPLIER)) {
-        azimuth = raw_azimuth - (360 * HEADING_MULTIPLIER);
-      } else {
-        azimuth = raw_azimuth;
-      }
-      if (raw_azimuth != incremental_encoder_previous_raw_azimuth) {
-        configuration.last_az_incremental_encoder_position = az_incremental_encoder_position;
-        configuration_dirty = 1;
-        incremental_encoder_previous_raw_azimuth = raw_azimuth;
-      }
-    #endif // FEATURE_AZ_POSITION_INCREMENTAL_ENCODER      
-
     last_measurement_time = millis();
   }
-
-
-  #ifdef FEATURE_AZ_POSITION_A2_ABSOLUTE_ENCODER
-    raw_azimuth = az_a2_encoder * HEADING_MULTIPLIER;
-    #ifdef FEATURE_AZIMUTH_CORRECTION
-      raw_azimuth = (correct_azimuth(raw_azimuth / (float) HEADING_MULTIPLIER) * HEADING_MULTIPLIER);
-    #endif // FEATURE_AZIMUTH_CORRECTION
-    raw_azimuth = raw_azimuth + (configuration.azimuth_offset * HEADING_MULTIPLIER);
-    azimuth = raw_azimuth;
-  #endif //FEATURE_AZ_POSITION_A2_ABSOLUTE_ENCODER  
-
-  #ifdef FEATURE_AZ_POSITION_INCREMENTAL_ENCODER
-    read_azimuth_lock = 0;
-  #endif
-
 } /* read_azimuth */
 
-// --------------------------------------------------------------
-
-void output_debug(){
+void output_debug() {
 
   #ifdef DEBUG_DUMP
     char tempstring[32] = "";
-    #if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(CONTROL_PROTOCOL_EMULATION) || defined(UNDER_DEVELOPMENT_REMOTE_UNIT_COMMANDS)
+    #if defined(CONTROL_PROTOCOL_EMULATION)
 
       if (((millis() - last_debug_output_time) >= 3000) && (debug_mode)) {
 
@@ -3224,15 +2649,6 @@ void output_debug(){
 
         debug.print("debug: \t");
         debug.print(CODE_VERSION);
-        #ifdef HARDWARE_WB6KCN
-          debug.print(" HARDWARE_WB6KCN");
-        #endif
-        #ifdef HARDWARE_M0UPU
-          debug.print(" HARDWARE_M0UPU");
-        #endif    
-        #ifdef HARDWARE_EA4TX_ARS_USB
-          debug.print(" HARDWARE_EA4TX_ARS_USB");
-        #endif      
         debug.print("\t\t");
 
         #ifdef FEATURE_CLOCK
@@ -3274,10 +2690,9 @@ void output_debug(){
           debug.print(" ");
           debug.print(coordinates_to_maidenhead(latitude,longitude));
         #endif
-
+        
         debug.print("\t\t");
-
-
+        
         #ifdef FEATURE_YAESU_EMULATION
           debug.print("GS-232");
           #ifdef OPTION_GS_232B_EMULATION
@@ -3287,39 +2702,27 @@ void output_debug(){
           #endif
         #endif // FEATURE_YAESU_EMULATION
 
-        #ifdef FEATURE_EASYCOM_EMULATION
-          debug.print("EASYCOM");
-        #endif // FEATURE_EASYCOM_EMULATION            
-
-        #ifdef FEATURE_DCU_1_EMULATION
-          debug.print("DCU-1");
-        #endif // FEATURE_DCU_1_EMULATION  
-
         debug.println("");
 
         debug.print("\tAZ:");
         switch (az_state) {
           case IDLE: debug.print("IDLE"); break;
-          #ifndef HARDWARE_EA4TX_ARS_USB
-            case SLOW_START_CW: debug.print("SLOW_START_CW"); break;
-            case SLOW_START_CCW: debug.print("SLOW_START_CCW"); break;
-          #endif //ifndef HARDWARE_EA4TX_ARS_USB
+          case SLOW_START_CW: debug.print("SLOW_START_CW"); break;
+          case SLOW_START_CCW: debug.print("SLOW_START_CCW"); break;
           case NORMAL_CW: debug.print("NORMAL_CW"); break;
           case NORMAL_CCW: debug.print("NORMAL_CCW"); break;
-          #ifndef HARDWARE_EA4TX_ARS_USB
-            case SLOW_DOWN_CW: debug.print("SLOW_DOWN_CW"); break;
-            case SLOW_DOWN_CCW: debug.print("SLOW_DOWN_CCW"); break;
-            case INITIALIZE_SLOW_START_CW: debug.print("INITIALIZE_SLOW_START_CW"); break;
-            case INITIALIZE_SLOW_START_CCW: debug.print("INITIALIZE_SLOW_START_CCW"); break;
-            case INITIALIZE_TIMED_SLOW_DOWN_CW: debug.print("INITIALIZE_TIMED_SLOW_DOWN_CW"); break;
-            case INITIALIZE_TIMED_SLOW_DOWN_CCW: debug.print("INITIALIZE_TIMED_SLOW_DOWN_CCW"); break;
-            case TIMED_SLOW_DOWN_CW: debug.print("TIMED_SLOW_DOWN_CW"); break;
-            case TIMED_SLOW_DOWN_CCW: debug.print("TIMED_SLOW_DOWN_CCW"); break;
-            case INITIALIZE_DIR_CHANGE_TO_CW: debug.print("INITIALIZE_DIR_CHANGE_TO_CW"); break;
-            case INITIALIZE_DIR_CHANGE_TO_CCW: debug.print("INITIALIZE_DIR_CHANGE_TO_CCW"); break;
-            case INITIALIZE_NORMAL_CW: debug.print("INITIALIZE_NORMAL_CW"); break;
-            case INITIALIZE_NORMAL_CCW: debug.print("INITIALIZE_NORMAL_CCW"); break; 
-          #endif //ifndef HARDWARE_EA4TX_ARS_USB     
+          case SLOW_DOWN_CW: debug.print("SLOW_DOWN_CW"); break;
+          case SLOW_DOWN_CCW: debug.print("SLOW_DOWN_CCW"); break;
+          case INITIALIZE_SLOW_START_CW: debug.print("INITIALIZE_SLOW_START_CW"); break;
+          case INITIALIZE_SLOW_START_CCW: debug.print("INITIALIZE_SLOW_START_CCW"); break;
+          case INITIALIZE_TIMED_SLOW_DOWN_CW: debug.print("INITIALIZE_TIMED_SLOW_DOWN_CW"); break;
+          case INITIALIZE_TIMED_SLOW_DOWN_CCW: debug.print("INITIALIZE_TIMED_SLOW_DOWN_CCW"); break;
+          case TIMED_SLOW_DOWN_CW: debug.print("TIMED_SLOW_DOWN_CW"); break;
+          case TIMED_SLOW_DOWN_CCW: debug.print("TIMED_SLOW_DOWN_CCW"); break;
+          case INITIALIZE_DIR_CHANGE_TO_CW: debug.print("INITIALIZE_DIR_CHANGE_TO_CW"); break;
+          case INITIALIZE_DIR_CHANGE_TO_CCW: debug.print("INITIALIZE_DIR_CHANGE_TO_CCW"); break;
+          case INITIALIZE_NORMAL_CW: debug.print("INITIALIZE_NORMAL_CW"); break;
+          case INITIALIZE_NORMAL_CCW: debug.print("INITIALIZE_NORMAL_CCW"); break; 
         }
 
         debug.print("  Q:");
@@ -3334,19 +2737,12 @@ void output_debug(){
         debug.print((azimuth / LCD_HEADING_MULTIPLIER), LCD_DECIMAL_PLACES);
         debug.print("  AZ_raw:");
         debug.print((raw_azimuth / LCD_HEADING_MULTIPLIER), LCD_DECIMAL_PLACES);
-        //debug.print(")");
-
 
         if (az_state != IDLE) {
           debug.print("  Target:");
           debug.print((target_azimuth / LCD_HEADING_MULTIPLIER), LCD_DECIMAL_PLACES);
-       
-
           debug.print("  Target_raw: ");
-
           debug.print((target_raw_azimuth / LCD_HEADING_MULTIPLIER), LCD_DECIMAL_PLACES);
-          //debug.print(")");
-
           debug.print("  Secs_left:");
           debug.print((OPERATION_TIMEOUT - (millis() - az_last_rotate_initiation)) / 1000);
         }
@@ -3361,7 +2757,6 @@ void output_debug(){
           debug.print("-");
           dtostrf(configuration.analog_az_full_cw,0,0,tempstring);
           debug.print(tempstring);
-          //debug.print(") ");
         #endif // FEATURE_AZ_POSITION_POTENTIOMETER
 
         debug.print(F("  Start:"));
@@ -3372,49 +2767,38 @@ void output_debug(){
         debug.print(azimuth_starting_point);
         debug.print("-");
         debug.print((azimuth_starting_point+azimuth_rotation_capability),0);
-        //debug.println("");
-        //debug.print("\t");
-
-        #ifndef HARDWARE_EA4TX_ARS_USB
-          debug.print("  AZ_Speed_Norm:");
-          debug.print(normal_az_speed_voltage);
-          debug.print("  Current:");
-          debug.print(current_az_speed_voltage);
-          if (az_speed_pot) {
-            debug.print("  AZ_Speed_Pot:");
-            debug.print(analogReadEnhanced(az_speed_pot));
-          }
-          if (az_preset_pot) {
-            debug.print(F("  AZ_Preset_Pot_Analog:"));
-            debug.print(analogReadEnhanced(az_preset_pot));
-            debug.print(F("  AZ_Preset_Pot_Setting: "));
-            dtostrf((map(analogReadEnhanced(az_preset_pot), AZ_PRESET_POT_FULL_CW, AZ_PRESET_POT_FULL_CCW, AZ_PRESET_POT_FULL_CW_MAP, AZ_PRESET_POT_FULL_CCW_MAP)),0,0,tempstring);
-            debug.print(tempstring);
-          }
-          debug.print("  Offset:");
-          dtostrf(configuration.azimuth_offset,0,2,tempstring);
+        debug.print("  AZ_Speed_Norm:");
+        debug.print(normal_az_speed_voltage);
+        debug.print("  Current:");
+        debug.print(current_az_speed_voltage);
+        if (az_speed_pot) {
+          debug.print("  AZ_Speed_Pot:");
+          debug.print(analogReadEnhanced(az_speed_pot));
+        }
+        if (az_preset_pot) {
+          debug.print(F("  AZ_Preset_Pot_Analog:"));
+          debug.print(analogReadEnhanced(az_preset_pot));
+          debug.print(F("  AZ_Preset_Pot_Setting: "));
+          dtostrf((map(analogReadEnhanced(az_preset_pot), AZ_PRESET_POT_FULL_CW, AZ_PRESET_POT_FULL_CCW, AZ_PRESET_POT_FULL_CW_MAP, AZ_PRESET_POT_FULL_CCW_MAP)),0,0,tempstring);
           debug.print(tempstring);
-        #endif // ndef HARDWARE_EA4TX_ARS_USB
+        }
+        debug.print("  Offset:");
+        dtostrf(configuration.azimuth_offset,0,2,tempstring);
+        debug.print(tempstring);
         debug.println("");
-
-   
 
         #ifdef FEATURE_ELEVATION_CONTROL
           debug.print("\tEL:");
           switch (el_state) {
             case IDLE: debug.print("IDLE"); break;
-            #ifndef HARDWARE_EA4TX_ARS_USB
-              case SLOW_START_UP: debug.print("SLOW_START_UP"); break;
-              case SLOW_START_DOWN: debug.print("SLOW_START_DOWN"); break;
-            #endif //ifndef HARDWARE_EA4TX_ARS_USB
+            case SLOW_START_UP: debug.print("SLOW_START_UP"); break;
+            case SLOW_START_DOWN: debug.print("SLOW_START_DOWN"); break;
             case NORMAL_UP: debug.print("NORMAL_UP"); break;
             case NORMAL_DOWN: debug.print("NORMAL_DOWN"); break;
-            #ifndef HARDWARE_EA4TX_ARS_USB
-              case SLOW_DOWN_DOWN: debug.print("SLOW_DOWN_DOWN"); break;
-              case SLOW_DOWN_UP: debug.print("SLOW_DOWN_UP"); break;
-              case TIMED_SLOW_DOWN_UP: debug.print("TIMED_SLOW_DOWN_UP"); break;
-              case TIMED_SLOW_DOWN_DOWN: debug.print("TIMED_SLOW_DOWN_DOWN"); break;
-            #endif //ifndef HARDWARE_EA4TX_ARS_USB
+            case SLOW_DOWN_DOWN: debug.print("SLOW_DOWN_DOWN"); break;
+            case SLOW_DOWN_UP: debug.print("SLOW_DOWN_UP"); break;
+            case TIMED_SLOW_DOWN_UP: debug.print("TIMED_SLOW_DOWN_UP"); break;
+            case TIMED_SLOW_DOWN_DOWN: debug.print("TIMED_SLOW_DOWN_DOWN"); break;
           }
 
           debug.print("  Q:");
@@ -3443,20 +2827,8 @@ void output_debug(){
             debug.print("-");
             dtostrf(configuration.analog_el_max_elevation,0,0,tempstring);
             debug.print(tempstring);
-            //debug.print(") ");
           #endif // FEATURE_EL_POSITION_POTENTIOMETER
          
-          #ifndef HARDWARE_EA4TX_ARS_USB
-            debug.print("  EL_Speed_Norm:");
-            debug.print(normal_el_speed_voltage);
-
-
-            debug.print("  Current:");
-            debug.print(current_el_speed_voltage);
-
-            debug.print("  Offset:");
-            debug.print(configuration.elevation_offset, 2);
-          #endif //ifndef HARDWARE_EA4TX_ARS_USB
           debug.println("");
         #endif // FEATURE_ELEVATION_CONTROL
 
@@ -3500,77 +2872,6 @@ void output_debug(){
 
           } // if (timed_buffer_status != EMPTY)
         #endif // FEATURE_TIMED_BUFFER
-
-
-        #if defined(FEATURE_MASTER_WITH_SERIAL_SLAVE) || defined(FEATURE_MASTER_WITH_ETHERNET_SLAVE)
-          /*debug.print("\tRemote Slave: Command: ");
-          debug.print(remote_unit_command_submitted);*/
-          debug.print("\tRemote_Slave: Good:");
-          debug.print(remote_unit_good_results,0);
-          debug.print(" Bad:");
-          debug.print(remote_unit_bad_results);
-          /*debug.print(" Index: ");
-          debug.print(remote_unit_port_buffer_index);*/
-          debug.print(" CmdTouts:");
-          debug.print(remote_unit_command_timeouts);
-          debug.print(" BuffTouts:");
-          debug.print(remote_unit_incoming_buffer_timeouts);
-          /*debug.print(" Result: ");
-          debug.print(remote_unit_command_result_float,2);*/
-          debug.println("");
-        #endif // defined(FEATURE_MASTER_WITH_SERIAL_SLAVE) || defined(FEATURE_MASTER_WITH_ETHERNET_SLAVE)
-
-        #if defined(FEATURE_MASTER_WITH_ETHERNET_SLAVE)
-          debug.print("\tEthernet Slave TCP Link State:");
-          switch(ethernetslavelinkclient0_state){
-            case ETHERNET_SLAVE_DISCONNECTED: debug.print("DIS");
-            case ETHERNET_SLAVE_CONNECTED: debug.print("CONNECTED");
-          }
-          debug.print(" Reconnects:");
-          debug.print(ethernet_slave_reconnects);  
-          debug.println("");
-        #endif // defined(FEATURE_MASTER_WITH_ETHERNET_SLAVE)  
-
-        #ifdef DEBUG_POSITION_PULSE_INPUT
-          static unsigned long last_pulse_count_time = 0;
-          static unsigned long last_az_pulse_counter = 0;
-          static unsigned long last_el_pulse_counter = 0;
-          debug.print("\tPulse_counters: AZ:");
-          debug.print(az_pulse_counter);
-          debug.print("  AZ_Ambiguous:");
-          debug.print(az_pulse_counter_ambiguous);
-          debug.print("  EL:");
-          debug.print(el_pulse_counter);
-          debug.print("  EL_Ambiguous:");
-          debug.print(el_pulse_counter_ambiguous);
-          debug.print("  Rate_per_sec: AZ:");
-          debug.print(((az_pulse_counter - last_az_pulse_counter) / ((millis() - last_pulse_count_time) / 1000.0)),2);
-          debug.print("   EL:");
-          debug.print(((el_pulse_counter - last_el_pulse_counter) / ((millis() - last_pulse_count_time) / 1000.0)),2);
-          debug.println("");
-          last_az_pulse_counter = az_pulse_counter;
-          last_el_pulse_counter = el_pulse_counter;
-          last_pulse_count_time = millis();
-        #endif // DEBUG_POSITION_PULSE_INPUT
-
-
-        #if defined(FEATURE_AZ_POSITION_INCREMENTAL_ENCODER) && defined(DEBUG_AZ_POSITION_INCREMENTAL_ENCODER)
-          debug.print("\taz_position_incremental_encoder_interrupt:");
-          debug.print(az_position_incremental_encoder_interrupt);
-          debug.print("  az_incremental_encoder_position:");
-          debug.print(az_incremental_encoder_position,0);
-        #endif // DEBUG_AZ_POSITION_INCREMENTAL_ENCODER
-        #if defined(FEATURE_EL_POSITION_INCREMENTAL_ENCODER) && defined(DEBUG_EL_POSITION_INCREMENTAL_ENCODER)
-          debug.print("\n\tel_position_incremental_encoder_interrupt:");
-          debug.print(el_position_incremental_encoder_interrupt,0);
-          debug.print("  el_incremental_encoder_position: ");
-          debug.print(el_incremental_encoder_position);
-        #endif // DEBUG_EL_POSITION_INCREMENTAL_ENCODER
-        #if (defined(FEATURE_AZ_POSITION_INCREMENTAL_ENCODER) && defined(DEBUG_AZ_POSITION_INCREMENTAL_ENCODER)) || (defined(FEATURE_EL_POSITION_INCREMENTAL_ENCODER) && defined(DEBUG_EL_POSITION_INCREMENTAL_ENCODER))
-          debug.println("");
-        #endif
-
-
 
 
         #ifdef FEATURE_MOON_TRACKING
@@ -3666,12 +2967,8 @@ void output_debug(){
             debug.println(F("b free"));
           }
         #endif
-
-
         debug.println("\n\n\n");
-
         last_debug_output_time = millis(); 
-
       }
     #endif // defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_EASYCOM_EMULATION)
     
@@ -3679,27 +2976,13 @@ void output_debug(){
 
 } /* output_debug */
 
-void print_to_port(char * print_this,byte port){
-
-  #if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_EASYCOM_EMULATION)
-  
-  switch(port){
-    case CONTROL_PORT0: control_port->println(print_this);break;
-    #ifdef FEATURE_ETHERNET
-    case ETHERNET_PORT0: ethernetclient0.print(print_this); break;
-    #ifdef ETHERNET_TCP_PORT_1
-    case ETHERNET_PORT1: ethernetclient1.print(print_this); break;
-    #endif //ETHERNET_TCP_PORT_1
-    #endif //FEATURE_ETHERNET
-  }
-  
-  #endif //defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_EASYCOM_EMULATION)
-
+void print_to_port(char * print_this,byte port) {
+    switch(port) {
+      case CONTROL_PORT0: control_port->println(print_this);break;
+    }
 }
 
-
-// --------------------------------------------------------------
-void print_help(byte port){
+void print_help(byte port) {
 
   // The H command
 
@@ -3733,10 +3016,9 @@ void print_help(byte port){
 
 } /* print_help */
 
-// --------------- Elevation -----------------------
-
 #ifdef FEATURE_ELEVATION_CONTROL
-void el_check_operation_timeout(){
+
+void el_check_operation_timeout() {
 
   // check if the last executed rotation operation has been going on too long
 
@@ -3748,23 +3030,13 @@ void el_check_operation_timeout(){
       }
     #endif // DEBUG_EL_CHECK_OPERATION_TIMEOUT
   }
-}
-#endif
+  
+} /* el_check_operation_timeout */
 
-#ifdef FEATURE_ELEVATION_CONTROL
-void read_elevation(byte force_read){
-
-  #ifdef FEATURE_EL_POSITION_INCREMENTAL_ENCODER
-    read_elevation_lock = 1;
-  #endif
-
+void read_elevation(byte force_read) {
 
   unsigned int previous_elevation = elevation;
   static unsigned long last_measurement_time = 0;
-
-  #ifdef FEATURE_EL_POSITION_INCREMENTAL_ENCODER
-    static unsigned int incremental_encoder_previous_elevation = elevation;
-  #endif
 
   if (heading_reading_inhibit_pin) {
     if (digitalReadEnhanced(heading_reading_inhibit_pin)) {
@@ -3778,15 +3050,7 @@ void read_elevation(byte force_read){
     static float average_read_time = 0;
   #endif // DEBUG_HEADING_READING_TIME
 
-  #ifdef DEBUG_HH12
-    static unsigned long last_hh12_debug = 0;
-  #endif // DEBUG_HH12
-
-  #ifndef FEATURE_EL_POSITION_GET_FROM_REMOTE_UNIT
   if (((millis() - last_measurement_time) > ELEVATION_MEASUREMENT_FREQUENCY_MS) || (force_read)) {
-  #else
-  if (1) {
-  #endif
 
     #ifdef FEATURE_EL_POSITION_POTENTIOMETER
       analog_el = analogReadEnhanced(rotator_analog_el);
@@ -3803,322 +3067,13 @@ void read_elevation(byte force_read){
       }
     #endif // FEATURE_EL_POSITION_POTENTIOMETER
 
-
-    #ifdef FEATURE_EL_POSITION_ROTARY_ENCODER
-      static byte el_position_encoder_state = 0;
-      el_position_encoder_state = ttable[el_position_encoder_state & 0xf][((digitalReadEnhanced(el_rotary_position_pin2) << 1) | digitalReadEnhanced(el_rotary_position_pin1))];
-      byte el_position_encoder_result = el_position_encoder_state & 0x30;
-      if (el_position_encoder_result) {
-        if (el_position_encoder_result == DIR_CW) {
-          configuration.last_elevation = configuration.last_elevation + EL_POSITION_ROTARY_ENCODER_DEG_PER_PULSE;
-          #ifdef DEBUG_POSITION_ROTARY_ENCODER
-            if (debug_mode) {
-              debug.print(F("read_elevation: EL_POSITION_ROTARY_ENCODER: CW/UP\n"));
-            }
-          #endif // DEBUG_POSITION_ROTARY_ENCODER
-        }
-        if (el_position_encoder_result == DIR_CCW) {
-          configuration.last_elevation = configuration.last_elevation - EL_POSITION_ROTARY_ENCODER_DEG_PER_PULSE;
-          #ifdef DEBUG_POSITION_ROTARY_ENCODER
-            if (debug_mode) {
-              debug.print(F("read_elevation: EL_POSITION_ROTARY_ENCODER: CCW/DWN\n"));
-            }
-          #endif // DEBUG_POSITION_ROTARY_ENCODER
-        }
-          #ifdef OPTION_EL_POSITION_ROTARY_ENCODER_HARD_LIMIT
-            if (configuration.last_elevation < 0) {
-              configuration.last_elevation = 0;
-            }
-            if (configuration.last_elevation > ELEVATION_MAXIMUM_DEGREES) {
-              configuration.last_elevation = ELEVATION_MAXIMUM_DEGREES;
-            }
-          #endif
-        elevation = int(configuration.last_elevation * HEADING_MULTIPLIER);
-        #ifdef FEATURE_ELEVATION_CORRECTION
-          elevation = (correct_elevation(elevation / (float) HEADING_MULTIPLIER) * HEADING_MULTIPLIER);
-        #endif // FEATURE_ELEVATION_CORRECTION
-        configuration_dirty = 1;
-      }
-    #endif // FEATURE_EL_POSITION_ROTARY_ENCODER
-
-
-    #ifdef FEATURE_EL_POSITION_ROTARY_ENCODER_USE_PJRC_LIBRARY
-      encoder_pjrc_current_el_position = encoder_pjrc_el.read();
-      if (encoder_pjrc_current_el_position != encoder_pjrc_previous_el_position){
-        configuration.last_elevation = configuration.last_elevation + ((encoder_pjrc_current_el_position - encoder_pjrc_previous_el_position) * EL_POSITION_ROTARY_ENCODER_DEG_PER_PULSE);
-            
-        #ifdef DEBUG_POSITION_ROTARY_ENCODER_USE_PJRC_LIBRARY 
-          if ((encoder_pjrc_current_el_position - encoder_pjrc_previous_el_position ) < 0){
-            debug.print("read_elevation: EL_POSITION_ROTARY_PJRC_ENCODER: CCW/Down - ");
-          } else { 
-            debug.print("read_elevation: EL_POSITION_ROTARY_PJRC_ENCODER: CW/Up - ");
-          } 
-          debug.print("Encoder Count: ");
-          debug.print(encoder_pjrc_current_el_position);
-          debug.print(" - configuration.last_elevation : ");
-          debug.print(configuration.last_elevation );
-          debug.print(" - raw_elevation : ");
-          debug.println(elevation);
-        #endif // DEBUG_POSITION_ROTARY_ENCODER_USE_PJRC_LIBRARY
-
-        #ifdef OPTION_EL_POSITION_ROTARY_ENCODER_HARD_LIMIT
-          if (configuration.last_elevation < 0){
-            configuration.last_elevation = 0;
-          }
-          if (configuration.last_elevation > ELEVATION_MAXIMUM_DEGREES) {
-            configuration.last_elevation = ELEVATION_MAXIMUM_DEGREES;
-          }
-        #endif
-            
-        elevation = int(configuration.last_elevation * HEADING_MULTIPLIER);
-        #ifdef FEATURE_ELEVATION_CORRECTION
-          elevation = (correct_elevation(elevation / (float) HEADING_MULTIPLIER) * HEADING_MULTIPLIER);
-        #endif // FEATURE_ELEVATION_CORRECTION
-        configuration_dirty = 1;
-        
-         #ifdef OPTION_EL_POSITION_ROTARY_ENCODER_HARD_LIMIT
-          if (configuration.last_elevation < 0){
-            configuration.last_elevation = 0;
-          }
-          if (configuration.last_elevation > ELEVATION_MAXIMUM_DEGREES){
-            configuration.last_elevation = ELEVATION_MAXIMUM_DEGREES;
-          }
-        #endif
-            
-        elevation = int(configuration.last_elevation * HEADING_MULTIPLIER);
-
-        #ifdef FEATURE_ELEVATION_CORRECTION
-          elevation = (correct_elevation(elevation / (float) HEADING_MULTIPLIER) * HEADING_MULTIPLIER);
-        #endif // FEATURE_ELEVATION_CORRECTION
-
-        configuration_dirty = 1; 
-          
-      }
-    #endif // FEATURE_EL_POSITION_ROTARY_ENCODER_USE_PJRC_LIBRARY
-
-    #ifdef FEATURE_EL_POSITION_ADXL345_USING_LOVE_ELECTRON_LIB
-      AccelerometerRaw raw = accel.ReadRawAxis();
-      AccelerometerScaled scaled = accel.ReadScaledAxis();
-      #ifdef DEBUG_ACCEL
-        if (debug_mode) {
-          debug.print(F("read_elevation: raw.YAxis: "));
-          debug.print(raw.yAxis);
-          debug.print(F(" ZAxis: "));
-          debug.println(raw.ZAxis);
-        }
-      #endif // DEBUG_ACCEL
-      elevation = (atan2(scaled.YAxis, scaled.ZAxis) * 180 * HEADING_MULTIPLIER) / M_PI;
-      #ifdef FEATURE_ELEVATION_CORRECTION
-        elevation = (correct_elevation(elevation / (float) HEADING_MULTIPLIER) * HEADING_MULTIPLIER);
-      #endif // FEATURE_ELEVATION_CORRECTION
-      elevation = elevation + (configuration.elevation_offset * HEADING_MULTIPLIER);
-      if (ELEVATION_SMOOTHING_FACTOR > 0) {
-        elevation = (elevation * (1 - (ELEVATION_SMOOTHING_FACTOR / 100))) + (previous_elevation * (ELEVATION_SMOOTHING_FACTOR / 100));
-      }
-    #endif // FEATURE_EL_POSITION_ADXL345_USING_LOVE_ELECTRON_LIB
-
-    #ifdef FEATURE_EL_POSITION_ADXL345_USING_ADAFRUIT_LIB
-      sensors_event_t event;
-      accel.getEvent(&event);
-      #ifdef DEBUG_ACCEL
-        if (debug_mode) {
-          debug.print(F("read_elevation: event.acceleration.y: "));
-          debug.print(event.acceleration.y);      
-          debug.print(F(" z: "));
-          debug.println(event.acceleration.z);
-        }
-      #endif // DEBUG_ACCEL
-      elevation = (atan2(event.acceleration.y, event.acceleration.z) * 180 * HEADING_MULTIPLIER) / M_PI;
-      #ifdef FEATURE_ELEVATION_CORRECTION
-        elevation = (correct_elevation(elevation / (float) HEADING_MULTIPLIER) * HEADING_MULTIPLIER);
-      #endif // FEATURE_ELEVATION_CORRECTION
-      elevation = elevation + (configuration.elevation_offset * HEADING_MULTIPLIER);
-    #endif // FEATURE_EL_POSITION_ADXL345_USING_ADAFRUIT_LIB
-
-
-
-    #ifdef FEATURE_EL_POSITION_ADAFRUIT_LSM303
-      lsm.read();
-      #ifdef DEBUG_ACCEL
-          if (debug_mode) {
-            debug.print(F("read_elevation: lsm.accelData.y: "));
-            debug.print(lsm.accelData.y);
-            debug.print(F(" z: "));
-            control_port->println(lsm.accelData.z);
-          }
-      #endif // DEBUG_ACCEL
-      elevation = (atan2(lsm.accelData.y, lsm.accelData.z) * 180 * HEADING_MULTIPLIER) / M_PI;
-      #ifdef FEATURE_ELEVATION_CORRECTION
-        elevation = (correct_elevation(elevation / (float) HEADING_MULTIPLIER) * HEADING_MULTIPLIER);
-      #endif // FEATURE_ELEVATION_CORRECTION
-      elevation = elevation + (configuration.elevation_offset * HEADING_MULTIPLIER);
-    #endif // FEATURE_EL_POSITION_ADAFRUIT_LSM303
-
-    #ifdef FEATURE_EL_POSITION_POLOLU_LSM303
-      compass.read();
-      #ifdef DEBUG_ACCEL
-        if (debug_mode) {
-          debug.print(F("read_elevation: compass.a.y: "));
-          debug.print(compass.a.y);
-          debug.print(F(" z: "));
-          control_port->println(compass.a.z);
-        }
-      #endif // DEBUG_ACCEL
-      elevation = (atan2(compass.a.x, compass.a.z) * -180 * HEADING_MULTIPLIER) / M_PI; //lsm.accelData.y
-      #ifdef FEATURE_ELEVATION_CORRECTION
-        elevation = (correct_elevation(elevation / (float) HEADING_MULTIPLIER) * HEADING_MULTIPLIER);
-      #endif // FEATURE_ELEVATION_CORRECTION
-      elevation = elevation + (configuration.elevation_offset * HEADING_MULTIPLIER);
-    #endif // FEATURE_EL_POSITION_POLOLU_LSM303
-
-
-    #ifdef FEATURE_EL_POSITION_PULSE_INPUT
-    #ifdef DEBUG_POSITION_PULSE_INPUT
-    //    if (el_position_pule_interrupt_handler_flag) {
-    //      control_port->print(F("read_elevation: el_position_pule_interrupt_handler_flag: "));
-    //      control_port->println(el_position_pule_interrupt_handler_flag);
-    //      el_position_pule_interrupt_handler_flag = 0;
-    //    }
-    #endif // DEBUG_POSITION_PULSE_INPUT
-
-    static float last_el_position_pulse_input_elevation = el_position_pulse_input_elevation;
-
-    if (el_position_pulse_input_elevation != last_el_position_pulse_input_elevation) {
-      #ifdef DEBUG_POSITION_PULSE_INPUT
-      //      if (debug_mode){
-      //        control_port->print(F("read_elevation: el_position_pulse_input_elevation:"));
-      //        control_port->println(el_position_pulse_input_elevation);
-      //      }
-      #endif // DEBUG_POSITION_PULSE_INPUT
-      configuration.last_elevation = el_position_pulse_input_elevation;
-      configuration_dirty = 1;
-      last_el_position_pulse_input_elevation = el_position_pulse_input_elevation;
-      elevation = int(configuration.last_elevation * HEADING_MULTIPLIER);
-      #ifdef FEATURE_ELEVATION_CORRECTION
-        elevation = (correct_elevation(elevation / (float) HEADING_MULTIPLIER) * HEADING_MULTIPLIER);
-      #endif FEATURE_ELEVATION_CORRECTION
-      elevation = elevation + (configuration.elevation_offset * HEADING_MULTIPLIER);
-    }
-    #endif // FEATURE_EL_POSITION_PULSE_INPUT
-
-    #ifdef FEATURE_EL_POSITION_GET_FROM_REMOTE_UNIT
-    #if defined(FEATURE_MASTER_WITH_SERIAL_SLAVE) || defined(FEATURE_MASTER_WITH_ETHERNET_SLAVE)
-    static unsigned long last_remote_unit_el_query_time = 0;
-    // do we have a command result waiting for us?
-    if (remote_unit_command_results_available == REMOTE_UNIT_EL_COMMAND) {
-
-      #ifdef DEBUG_HEADING_READING_TIME
-      average_read_time = (average_read_time + (millis() - last_time)) / 2.0;
-      last_time = millis();
-
-      if (debug_mode) {
-        if ((millis() - last_print_time) > 1000) {
-          debug.print(F("read_elevation: avg read frequency: "));
-          control_port->println(average_read_time, 2);
-          last_print_time = millis();
-        }
-      }
-      #endif // DEBUG_HEADING_READING_TIME
-      elevation = remote_unit_command_result_float * HEADING_MULTIPLIER;
-      #ifdef FEATURE_ELEVATION_CORRECTION
-      elevation = (correct_elevation(elevation / (float) HEADING_MULTIPLIER) * HEADING_MULTIPLIER);
-      #endif // FEATURE_ELEVATION_CORRECTION
-      elevation = elevation + (configuration.elevation_offset * HEADING_MULTIPLIER);
-      if (ELEVATION_SMOOTHING_FACTOR > 0) {
-        elevation = (elevation * (1 - (ELEVATION_SMOOTHING_FACTOR / 100))) + (previous_elevation * (ELEVATION_SMOOTHING_FACTOR / 100));
-      }
-      remote_unit_command_results_available = 0;
-    } else {
-      // is it time to request the elevation?
-      if ((millis() - last_remote_unit_el_query_time) > EL_REMOTE_UNIT_QUERY_TIME_MS) {
-        if (submit_remote_command(REMOTE_UNIT_EL_COMMAND, 0, 0)) {
-          last_remote_unit_el_query_time = millis();
-        }
-      }
-    }
-    #endif // defined(FEATURE_MASTER_WITH_SERIAL_SLAVE) || defined(FEATURE_MASTER_WITH_ETHERNET_SLAVE)
-    #endif // FEATURE_EL_POSITION_GET_FROM_REMOTE_UNIT
-
-
-    #ifdef FEATURE_EL_POSITION_HH12_AS5045_SSI
-      #if defined(OPTION_REVERSE_EL_HH12_AS5045) 
-        elevation = int((360.0-elevation_hh12.heading()) * HEADING_MULTIPLIER);
-      #else
-        elevation = int(elevation_hh12.heading() * HEADING_MULTIPLIER);
-      #endif
-      #ifdef DEBUG_HH12
-        if ((millis() - last_hh12_debug) > 5000) {
-          debug.print(F("read_elevation: HH-12 from device: "));
-          debug.print(elevation_hh12.heading());
-          debug.print(F(" uncorrected: "));
-          debug.println(elevation/HEADING_MULTIPLIER);
-          // control_port->println(elevation);
-          last_hh12_debug = millis();
-        }
-      #endif // DEBUG_HH12
-      #ifdef FEATURE_ELEVATION_CORRECTION
-        elevation = (correct_elevation(elevation / (float) HEADING_MULTIPLIER) * HEADING_MULTIPLIER);
-      #endif // FEATURE_ELEVATION_CORRECTION
-      elevation = elevation + (configuration.elevation_offset * HEADING_MULTIPLIER);
-      if (elevation > (180 * HEADING_MULTIPLIER)) {
-        elevation = elevation - (360 * HEADING_MULTIPLIER);
-      }
-    #endif // FEATURE_EL_POSITION_HH12_AS5045_SSI
-
-
-    #ifdef FEATURE_EL_POSITION_INCREMENTAL_ENCODER
-    elevation = ((((el_incremental_encoder_position) / (EL_POSITION_INCREMENTAL_ENCODER_PULSES_PER_REV*4.)) * 360.0) * HEADING_MULTIPLIER);
-    #ifdef FEATURE_ELEVATION_CORRECTION
-    elevation = (correct_elevation(elevation / (float) HEADING_MULTIPLIER) * HEADING_MULTIPLIER);
-    #endif // FEATURE_ELEVATION_CORRECTION
-    if (incremental_encoder_previous_elevation != elevation) {
-      configuration.last_el_incremental_encoder_position = el_incremental_encoder_position;
-      configuration_dirty = 1;
-      incremental_encoder_previous_elevation = elevation;
-    }
-    elevation = elevation + (configuration.elevation_offset * HEADING_MULTIPLIER);
-    #endif // FEATURE_EL_POSITION_INCREMENTAL_ENCODER
-
-    #ifdef FEATURE_EL_POSITION_MEMSIC_2125
-    unsigned int pulseY = pulseIn(pin_memsic_2125_y,HIGH,250000);
-    pulseY = pulseIn(pin_memsic_2125_y,HIGH,250000);
-    double Yangle = (asin(((( pulseY / 10. ) - 500.) * 8.) / 1000.0 )) * (360. / (2. * M_PI));
-    #ifdef DEBUG_MEMSIC_2125
-    debug.print("read_elevation: memsic2125 pulseY:");
-    debug.print(pulseY);
-    debug.println("");
-    #endif //DEBUG_MEMSIC_2125
-    elevation = Yangle * HEADING_MULTIPLIER;    
-    #ifdef FEATURE_ELEVATION_CORRECTION
-    elevation = (correct_elevation(elevation / (float) HEADING_MULTIPLIER) * HEADING_MULTIPLIER);
-    #endif //FEATURE_ELEVATION_CORRECTION
-    #endif //FEATURE_EL_POSITION_MEMSIC_2125
-
     last_measurement_time = millis();
+    
   }
 
-  #ifdef FEATURE_EL_POSITION_A2_ABSOLUTE_ENCODER
-    elevation = el_a2_encoder * HEADING_MULTIPLIER;
-    #ifdef FEATURE_ELEVATION_CORRECTION
-    elevation = (correct_elevation(elevation / (float) HEADING_MULTIPLIER) * HEADING_MULTIPLIER);
-    #endif //FEATURE_ELEVATION_CORRECTION
-    elevation = elevation + (configuration.elevation_offset * HEADING_MULTIPLIER);
-  #endif //FEATURE_EL_POSITION_A2_ABSOLUTE_ENCODER  
-
-
-  #ifdef FEATURE_EL_POSITION_INCREMENTAL_ENCODER
-  read_elevation_lock = 0;
-  #endif
-
-
 } /* read_elevation */
-#endif /* ifdef FEATURE_ELEVATION_CONTROL */
 
-
-// --------------------------------------------------------------
-#ifdef FEATURE_ELEVATION_CONTROL
-void update_el_variable_outputs(byte speed_voltage){
-
+void update_el_variable_outputs(byte speed_voltage) {
 
   #ifdef DEBUG_VARIABLE_OUTPUTS
   debug.print("update_el_variable_outputs: speed_voltage: ");
@@ -4147,7 +3102,6 @@ void update_el_variable_outputs(byte speed_voltage){
     analogWriteEnhanced(rotate_up_down_pwm, speed_voltage);
   }
 
-
   if (((el_state == SLOW_START_UP) || (el_state == NORMAL_UP) || (el_state == SLOW_DOWN_UP) || (el_state == TIMED_SLOW_DOWN_UP)) && (rotate_up_freq)) {
     #ifdef DEBUG_VARIABLE_OUTPUTS
     debug.print("\trotate_up_freq");
@@ -4162,47 +3116,20 @@ void update_el_variable_outputs(byte speed_voltage){
     tone(rotate_down_freq, map(speed_voltage, 0, 255, EL_VARIABLE_FREQ_OUTPUT_LOW, EL_VARIABLE_FREQ_OUTPUT_HIGH));
   }
 
-  #ifdef FEATURE_STEPPER_MOTOR
-
-  unsigned int el_tone = 0;
-
-  if (((el_state == SLOW_START_UP) || (el_state == NORMAL_UP) || (el_state == SLOW_DOWN_UP) || (el_state == TIMED_SLOW_DOWN_UP) || (el_state == SLOW_START_DOWN) || (el_state == NORMAL_DOWN) || (el_state == SLOW_DOWN_DOWN) || (el_state == TIMED_SLOW_DOWN_DOWN)) && (el_stepper_motor_pulse)) {
-    #ifdef DEBUG_VARIABLE_OUTPUTS
-    debug.print("\tel_stepper_motor_pulse: ");
-    #endif // DEBUG_VARIABLE_OUTPUTS
-    el_tone = map(speed_voltage, 0, 255, EL_VARIABLE_FREQ_OUTPUT_LOW, EL_VARIABLE_FREQ_OUTPUT_HIGH);
-
-    #ifdef FEATURE_STEPPER_MOTOR
-    set_el_stepper_freq(el_tone);
-    #endif
-
-
-
-
-    #ifdef DEBUG_VARIABLE_OUTPUTS
-    debug.print(el_tone);
-    #endif // DEBUG_VARIABLE_OUTPUTS
-
-  }
-  #endif //FEATURE_STEPPER_MOTOR
-
   if (elevation_speed_voltage) {
     analogWriteEnhanced(elevation_speed_voltage, speed_voltage);
   }
 
   #ifdef DEBUG_VARIABLE_OUTPUTS
-  debug.println("");
+    debug.println("");
   #endif // DEBUG_VARIABLE_OUTPUTS
 
   current_el_speed_voltage = speed_voltage;
 
-
 } /* update_el_variable_outputs */
 #endif // FEATURE_ELEVATION_CONTROL
 
-// --------------------------------------------------------------
 void update_az_variable_outputs(byte speed_voltage){
-
 
   #ifdef DEBUG_VARIABLE_OUTPUTS  
   int temp_int = 0;
@@ -4253,7 +3180,6 @@ void update_az_variable_outputs(byte speed_voltage){
     analogWriteEnhanced(rotate_cw_ccw_pwm, speed_voltage);
   }
 
-
   if (((az_state == SLOW_START_CW) || (az_state == NORMAL_CW) || (az_state == SLOW_DOWN_CW) || (az_state == TIMED_SLOW_DOWN_CW)) && (rotate_cw_freq)) {
     #ifdef DEBUG_VARIABLE_OUTPUTS
     debug.print("\trotate_cw_freq: ");
@@ -4276,22 +3202,6 @@ void update_az_variable_outputs(byte speed_voltage){
     #endif // DEBUG_VARIABLE_OUTPUTS
   }
 
-  #ifdef FEATURE_STEPPER_MOTOR
-
-  unsigned int az_tone = 0;
-
-  if (((az_state == SLOW_START_CW) || (az_state == NORMAL_CW) || (az_state == SLOW_DOWN_CW) || (az_state == TIMED_SLOW_DOWN_CW) || (az_state == SLOW_START_CCW) || (az_state == NORMAL_CCW) || (az_state == SLOW_DOWN_CCW) || (az_state == TIMED_SLOW_DOWN_CCW)) && (az_stepper_motor_pulse)) {
-    #ifdef DEBUG_VARIABLE_OUTPUTS
-    debug.print("\taz_stepper_motor_pulse: ");
-    #endif // DEBUG_VARIABLE_OUTPUTS
-    az_tone = map(speed_voltage, 0, 255, AZ_VARIABLE_FREQ_OUTPUT_LOW, AZ_VARIABLE_FREQ_OUTPUT_HIGH);
-    set_az_stepper_freq(az_tone);
-    #ifdef DEBUG_VARIABLE_OUTPUTS
-    debug.print(az_tone);
-    #endif // DEBUG_VARIABLE_OUTPUTS 
-  }
-  #endif //FEATURE_STEPPER_MOTOR
-
   if (azimuth_speed_voltage) {
     analogWriteEnhanced(azimuth_speed_voltage, speed_voltage);
   }
@@ -4304,37 +3214,35 @@ void update_az_variable_outputs(byte speed_voltage){
 
 } /* update_az_variable_outputs */
 
-// --------------------------------------------------------------
-
 void rotator(byte rotation_action, byte rotation_type) {
 
   #ifdef DEBUG_ROTATOR
-  if (debug_mode) {
-    control_port->flush();
-    debug.print(F("rotator: rotation_action:"));
-    debug.print(rotation_action);
-    debug.print(F(" rotation_type:"));
-    control_port->flush();
-    debug.print(rotation_type);
-    debug.print(F("->"));
-    control_port->flush();
-    // delay(1000);
-  }
+    if (debug_mode) {
+      control_port->flush();
+      debug.print(F("rotator: rotation_action:"));
+      debug.print(rotation_action);
+      debug.print(F(" rotation_type:"));
+      control_port->flush();
+      debug.print(rotation_type);
+      debug.print(F("->"));
+      control_port->flush();
+      // delay(1000);
+    }
   #endif // DEBUG_ROTATOR
 
   switch (rotation_type) {
     case CW:
-    #ifdef DEBUG_ROTATOR
-      if (debug_mode) {
-        debug.print(F("CW ")); control_port->flush();
-      }
-    #endif // DEBUG_ROTATOR
-      if (rotation_action == ACTIVATE) {
       #ifdef DEBUG_ROTATOR
         if (debug_mode) {
-          debug.print(F("ACTIVATE\n"));
+          debug.print(F("CW ")); control_port->flush();
         }
       #endif // DEBUG_ROTATOR
+      if (rotation_action == ACTIVATE) {
+        #ifdef DEBUG_ROTATOR
+          if (debug_mode) {
+            debug.print(F("ACTIVATE\n"));
+          }
+        #endif // DEBUG_ROTATOR
         brake_release(AZ, BRAKE_RELEASE_ON);
         if (az_slowstart_active) {
           if (rotate_cw_pwm) {
@@ -4352,13 +3260,6 @@ void rotator(byte rotation_action, byte rotation_type) {
           if (rotate_ccw_freq) {
             noTone(rotate_ccw_freq);
           }       
-          #ifdef FEATURE_STEPPER_MOTOR
-          if (az_stepper_motor_pulse) {
-            set_az_stepper_freq(0);
-            digitalWriteEnhanced(az_stepper_motor_pulse,LOW);
-          }      
-          #endif //FEATURE_STEPPER_MOTOR
-
         } else {
           if (rotate_cw_pwm) {
             analogWriteEnhanced(rotate_cw_pwm, normal_az_speed_voltage);
@@ -4375,11 +3276,6 @@ void rotator(byte rotation_action, byte rotation_type) {
           if (rotate_ccw_freq) {
             noTone(rotate_ccw_freq);
           }  
-          #ifdef FEATURE_STEPPER_MOTOR
-          if (az_stepper_motor_pulse) {
-            set_az_stepper_freq(map(normal_az_speed_voltage, 0, 255, AZ_VARIABLE_FREQ_OUTPUT_LOW, AZ_VARIABLE_FREQ_OUTPUT_HIGH));
-          }
-          #endif //FEATURE_STEPPER_MOTOR                 
         }
         if (rotate_cw) {
           digitalWriteEnhanced(rotate_cw, ROTATE_PIN_ACTIVE_VALUE);
@@ -4397,18 +3293,18 @@ void rotator(byte rotation_action, byte rotation_type) {
           digitalWriteEnhanced(rotate_cw_ccw, ROTATE_PIN_ACTIVE_VALUE);
         }
         #ifdef DEBUG_ROTATOR
-        if (debug_mode) {
-          debug.print(F("rotator: normal_az_speed_voltage:"));
-          control_port->println(normal_az_speed_voltage);
-          //control_port->flush();
-        }
+          if (debug_mode) {
+            debug.print(F("rotator: normal_az_speed_voltage:"));
+            control_port->println(normal_az_speed_voltage);
+            //control_port->flush();
+          }
         #endif // DEBUG_ROTATOR
       } else {
-          #ifdef DEBUG_ROTATOR
-        if (debug_mode) {
-          debug.print(F("DEACTIVATE\n"));
-        }
-          #endif // DEBUG_ROTATOR
+        #ifdef DEBUG_ROTATOR
+          if (debug_mode) {
+            debug.print(F("DEACTIVATE\n"));
+          }
+        #endif // DEBUG_ROTATOR
         if (rotate_cw_pwm) {
           analogWriteEnhanced(rotate_cw_pwm, 0); digitalWriteEnhanced(rotate_cw_pwm, LOW);
         }
@@ -4427,27 +3323,20 @@ void rotator(byte rotation_action, byte rotation_type) {
         if (rotate_cw_freq) {
           noTone(rotate_cw_freq);
         }
-
-        #ifdef FEATURE_STEPPER_MOTOR
-        if (az_stepper_motor_pulse) {
-          set_az_stepper_freq(0);
-          digitalWriteEnhanced(az_stepper_motor_pulse,HIGH);
-        }      
-        #endif //FEATURE_STEPPER_MOTOR             
       }
       break;
     case CCW:
       #ifdef DEBUG_ROTATOR
-      if (debug_mode) {
-        debug.print(F("CCW ")); control_port->flush();
-      }
-        #endif // DEBUG_ROTATOR
+        if (debug_mode) {
+          debug.print(F("CCW ")); control_port->flush();
+        }
+      #endif // DEBUG_ROTATOR
       if (rotation_action == ACTIVATE) {
-          #ifdef DEBUG_ROTATOR
-            if (debug_mode) {
-              debug.print(F("ACTIVATE\n"));
-            }
-          #endif // DEBUG_ROTATOR
+        #ifdef DEBUG_ROTATOR
+          if (debug_mode) {
+            debug.print(F("ACTIVATE\n"));
+          }
+        #endif // DEBUG_ROTATOR
         brake_release(AZ, BRAKE_RELEASE_ON);
         if (az_slowstart_active) {
           if (rotate_cw_pwm) {
@@ -4465,12 +3354,6 @@ void rotator(byte rotation_action, byte rotation_type) {
           if (rotate_ccw_freq) {
             noTone(rotate_ccw_freq);
           } 
-          #ifdef FEATURE_STEPPER_MOTOR
-          if (az_stepper_motor_pulse) {
-            set_az_stepper_freq(0);
-            digitalWriteEnhanced(az_stepper_motor_pulse,LOW);
-          }      
-          #endif //FEATURE_STEPPER_MOTOR                
         } else {
           if (rotate_cw_pwm) {
             analogWriteEnhanced(rotate_cw_pwm, 0); digitalWriteEnhanced(rotate_cw_pwm, LOW);
@@ -4487,11 +3370,6 @@ void rotator(byte rotation_action, byte rotation_type) {
           if (rotate_ccw_freq) {
             tone(rotate_ccw_freq, map(normal_az_speed_voltage, 0, 255, AZ_VARIABLE_FREQ_OUTPUT_LOW, AZ_VARIABLE_FREQ_OUTPUT_HIGH));
           }  
-          #ifdef FEATURE_STEPPER_MOTOR
-          if (az_stepper_motor_pulse) {
-            set_az_stepper_freq(map(normal_az_speed_voltage, 0, 255, AZ_VARIABLE_FREQ_OUTPUT_LOW, AZ_VARIABLE_FREQ_OUTPUT_HIGH));
-          }
-          #endif //FEATURE_STEPPER_MOTOR 
         }
         if (rotate_cw) {
           digitalWriteEnhanced(rotate_cw, ROTATE_PIN_INACTIVE_VALUE);
@@ -4508,29 +3386,12 @@ void rotator(byte rotation_action, byte rotation_type) {
         if (rotate_cw_ccw){
           digitalWriteEnhanced(rotate_cw_ccw, ROTATE_PIN_ACTIVE_VALUE);
         }      
-        /* 
-        #ifdef FEATURE_STEPPER_MOTOR
-        if (az_stepper_motor_direction){
-          if (configuration.az_stepper_motor_last_direction != STEPPER_CCW){
-            if (configuration.az_stepper_motor_last_pin_state == LOW){
-              digitalWriteEnhanced(az_stepper_motor_direction,HIGH);
-              configuration.az_stepper_motor_last_pin_state = HIGH;
-            } else {
-              digitalWriteEnhanced(az_stepper_motor_direction,LOW);
-              configuration.az_stepper_motor_last_pin_state = LOW;             
-            }
-            configuration.az_stepper_motor_last_direction = STEPPER_CCW;
-            configuration_dirty = 1;
-          }
-        }
-        #endif //FEATURE_STEPPER_MOTOR
-        */
         #ifdef DEBUG_ROTATOR
-        if (debug_mode) {
-          debug.print(F("rotator: normal_az_speed_voltage:"));
-          control_port->println(normal_az_speed_voltage);
-          control_port->flush();
-        }
+          if (debug_mode) {
+            debug.print(F("rotator: normal_az_speed_voltage:"));
+            control_port->println(normal_az_speed_voltage);
+            control_port->flush();
+          }
         #endif // DEBUG_ROTATOR
       } else {
         #ifdef DEBUG_ROTATOR
@@ -4552,10 +3413,6 @@ void rotator(byte rotation_action, byte rotation_type) {
         }
       }
       break;
-
-    #ifdef FEATURE_ELEVATION_CONTROL
-
-
     case UP:
     #ifdef DEBUG_ROTATOR
       if (debug_mode) {
@@ -4563,11 +3420,11 @@ void rotator(byte rotation_action, byte rotation_type) {
       }
     #endif // DEBUG_ROTATOR
       if (rotation_action == ACTIVATE) {
-      #ifdef DEBUG_ROTATOR
-        if (debug_mode) {
-          debug.print(F("ACTIVATE\n")); 
-        }
-      #endif // DEBUG_ROTATOR
+        #ifdef DEBUG_ROTATOR
+          if (debug_mode) {
+            debug.print(F("ACTIVATE\n")); 
+          }
+        #endif // DEBUG_ROTATOR
         brake_release(EL, BRAKE_RELEASE_ON);
         if (el_slowstart_active) {
           if (rotate_up_pwm) {
@@ -4585,12 +3442,6 @@ void rotator(byte rotation_action, byte rotation_type) {
           if (rotate_down_freq) {
             noTone(rotate_down_freq);
           }
-          #ifdef FEATURE_STEPPER_MOTOR
-          if (el_stepper_motor_pulse) {
-            set_el_stepper_freq(0);
-            digitalWriteEnhanced(el_stepper_motor_pulse,LOW);
-          }      
-          #endif //FEATURE_STEPPER_MOTOR    
         } else {
           if (rotate_up_pwm) {
             analogWriteEnhanced(rotate_up_pwm, normal_el_speed_voltage);
@@ -4604,11 +3455,6 @@ void rotator(byte rotation_action, byte rotation_type) {
           if (rotate_up_freq) {
             tone(rotate_up_freq, map(normal_el_speed_voltage, 0, 255, EL_VARIABLE_FREQ_OUTPUT_LOW, EL_VARIABLE_FREQ_OUTPUT_HIGH));
           }
-          #ifdef FEATURE_STEPPER_MOTOR
-          if (el_stepper_motor_pulse) {
-            set_el_stepper_freq(map(normal_el_speed_voltage, 0, 255, EL_VARIABLE_FREQ_OUTPUT_LOW, EL_VARIABLE_FREQ_OUTPUT_HIGH));
-          }
-          #endif //FEATURE_STEPPER_MOTOR  
           if (rotate_down_freq) {
             noTone(rotate_down_freq);
           }
@@ -4628,29 +3474,12 @@ void rotator(byte rotation_action, byte rotation_type) {
         if (rotate_up_or_down) {
           digitalWriteEnhanced(rotate_up_or_down, ROTATE_PIN_ACTIVE_VALUE);
         } 
-        /*
-        #ifdef FEATURE_STEPPER_MOTOR
-        if (el_stepper_motor_direction){
-          if (configuration.el_stepper_motor_last_direction != STEPPER_UP){
-             if (configuration.el_stepper_motor_last_pin_state == LOW){
-               digitalWriteEnhanced(el_stepper_motor_direction,HIGH);
-               configuration.el_stepper_motor_last_pin_state = HIGH;
-             } else {
-               digitalWriteEnhanced(el_stepper_motor_direction,LOW);
-               configuration.el_stepper_motor_last_pin_state = LOW;             
-             }
-             configuration.el_stepper_motor_last_direction = STEPPER_UP;
-             configuration_dirty = 1;
-          }
-        }
-        #endif //FEATURE_STEPPER_MOTOR  
-        */         
       } else {
-      #ifdef DEBUG_ROTATOR
-        if (debug_mode) {
-          debug.print(F("DEACTIVATE\n"));
-        }
-      #endif // DEBUG_ROTATOR
+        #ifdef DEBUG_ROTATOR
+          if (debug_mode) {
+            debug.print(F("DEACTIVATE\n"));
+          }
+        #endif // DEBUG_ROTATOR
         if (rotate_up) {
           digitalWriteEnhanced(rotate_up, ROTATE_PIN_INACTIVE_VALUE);
           #if defined(pin_led_up)
@@ -4668,27 +3497,20 @@ void rotator(byte rotation_action, byte rotation_type) {
         }
         if (rotate_up_or_down) {
           digitalWriteEnhanced(rotate_up_or_down, ROTATE_PIN_INACTIVE_VALUE);
-        }   
-        #ifdef FEATURE_STEPPER_MOTOR
-        if (el_stepper_motor_pulse) {
-          set_el_stepper_freq(0);
-          digitalWriteEnhanced(el_stepper_motor_pulse,HIGH);
-        }      
-        #endif //FEATURE_STEPPER_MOTOR   
+        }
       }
       break;
-
     case DOWN:
       #ifdef DEBUG_ROTATOR
-      if (debug_mode) {
-        debug.print(F("ROTATION_DOWN "));
-      }
+        if (debug_mode) {
+          debug.print(F("ROTATION_DOWN "));
+        }
       #endif // DEBUG_ROTATOR
       if (rotation_action == ACTIVATE) {
         #ifdef DEBUG_ROTATOR
-        if (debug_mode) {
-          debug.print(F("ACTIVATE\n"));
-        }
+          if (debug_mode) {
+            debug.print(F("ACTIVATE\n"));
+          }
         #endif // DEBUG_ROTATOR
         brake_release(EL, BRAKE_RELEASE_ON);
         if (el_slowstart_active) {
@@ -4707,12 +3529,6 @@ void rotator(byte rotation_action, byte rotation_type) {
           if (rotate_down_freq) {
             noTone(rotate_down_freq);
           }
-          #ifdef FEATURE_STEPPER_MOTOR
-          if (el_stepper_motor_pulse) {
-            set_el_stepper_freq(0);
-            digitalWriteEnhanced(el_stepper_motor_pulse,LOW);        
-          }      
-          #endif //FEATURE_STEPPER_MOTOR             
         } else {
           if (rotate_down_pwm) {
             analogWriteEnhanced(rotate_down_pwm, normal_el_speed_voltage);
@@ -4729,12 +3545,6 @@ void rotator(byte rotation_action, byte rotation_type) {
           if (rotate_up_freq) {
             noTone(rotate_up_freq);
           }
-          #ifdef FEATURE_STEPPER_MOTOR
-          if (el_stepper_motor_pulse) {
-            set_el_stepper_freq(map(normal_el_speed_voltage, 0, 255, EL_VARIABLE_FREQ_OUTPUT_LOW, EL_VARIABLE_FREQ_OUTPUT_HIGH));
-            digitalWriteEnhanced(el_stepper_motor_pulse,LOW);           
-          }      
-          #endif //FEATURE_STEPPER_MOTOR             
         }
         if (rotate_up) {
           digitalWriteEnhanced(rotate_up, ROTATE_PIN_INACTIVE_VALUE);
@@ -4751,29 +3561,12 @@ void rotator(byte rotation_action, byte rotation_type) {
         if (rotate_up_or_down) {
           digitalWriteEnhanced(rotate_up_or_down, ROTATE_PIN_ACTIVE_VALUE);
         }      
-        /*   
-        #ifdef FEATURE_STEPPER_MOTOR
-        if (el_stepper_motor_direction){
-          if (configuration.el_stepper_motor_last_direction != STEPPER_DOWN){
-             if (configuration.el_stepper_motor_last_pin_state == LOW){
-               digitalWriteEnhanced(el_stepper_motor_direction,HIGH);
-               configuration.el_stepper_motor_last_pin_state = HIGH;
-             } else {
-               digitalWriteEnhanced(el_stepper_motor_direction,LOW);
-               configuration.el_stepper_motor_last_pin_state = LOW;          
-             }
-             configuration.el_stepper_motor_last_direction = STEPPER_DOWN;
-             configuration_dirty = 1;
-          }
-        }
-        #endif //FEATURE_STEPPER_MOTOR
-        */  
       } else {
-          #ifdef DEBUG_ROTATOR
-        if (debug_mode) {
-          debug.print(F("DEACTIVATE\n"));
-        }
-          #endif // DEBUG_ROTATOR
+        #ifdef DEBUG_ROTATOR
+          if (debug_mode) {
+            debug.print(F("DEACTIVATE\n"));
+          }
+        #endif // DEBUG_ROTATOR
         if (rotate_down) {
           digitalWriteEnhanced(rotate_down, ROTATE_PIN_INACTIVE_VALUE);
           #if defined(pin_led_down)
@@ -4792,25 +3585,17 @@ void rotator(byte rotation_action, byte rotation_type) {
         if (rotate_up_or_down) {
           digitalWriteEnhanced(rotate_up_or_down, ROTATE_PIN_INACTIVE_VALUE);
         }        
-        #ifdef FEATURE_STEPPER_MOTOR
-        if (el_stepper_motor_pulse) {
-          set_el_stepper_freq(0);
-          digitalWriteEnhanced(el_stepper_motor_pulse,HIGH);          
-        }      
-        #endif //FEATURE_STEPPER_MOTOR 
       }
       break;
-          #endif // FEATURE_ELEVATION_CONTROL
   } /* switch */
   #ifdef DEBUG_ROTATOR
-  if (debug_mode) {
-    debug.print(F("rotator: exiting\n"));
-    control_port->flush();
-  }
+    if (debug_mode) {
+      debug.print(F("rotator: exiting\n"));
+      control_port->flush();
+    }
   #endif // DEBUG_ROTATOR
 } /* rotator */
 
-// --------------------------------------------------------------
 void initialize_interrupts(){
 
   #ifdef DEBUG_LOOP
