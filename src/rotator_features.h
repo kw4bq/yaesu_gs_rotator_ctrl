@@ -3,7 +3,7 @@
 #define FEATURE_ELEVATION_CONTROL      // uncomment this for AZ/EL rotators
 #define FEATURE_YAESU_EMULATION
 
-#if defined(FEATURE_YAESU_EMULATION) 
+#if defined(FEATURE_YAESU_EMULATION)
   #define CONTROL_PROTOCOL_EMULATION
 #endif
 
@@ -20,7 +20,7 @@
 
 #define FEATURE_AZ_POSITION_POTENTIOMETER
 #define FEATURE_EL_POSITION_POTENTIOMETER
-   
+
 // #define FEATURE_4_BIT_LCD_DISPLAY // Uncomment for classic 4 bit LCD display (most common)
 #define FEATURE_SUNFOUNDER_I2C_LCD
 
@@ -34,7 +34,7 @@
 // #define FEATURE_LIMIT_SENSE
 #define FEATURE_TIMED_BUFFER           // Support for Yaesu timed buffer commands
 #define OPTION_SERIAL_HELP_TEXT        // Yaesu help command prints help
-// #define OPTION_AZ_MANUAL_ROTATE_LIMITS    // this option will automatically stop the L and R commands when hitting a CCW or CW limit (settings are AZ_MANUAL_ROTATE_CCW_LIMIT, AZ_MANUAL_ROTATE_CW_LIMIT) 
+// #define OPTION_AZ_MANUAL_ROTATE_LIMITS    // this option will automatically stop the L and R commands when hitting a CCW or CW limit (settings are AZ_MANUAL_ROTATE_CCW_LIMIT, AZ_MANUAL_ROTATE_CW_LIMIT)
 // #define OPTION_EL_MANUAL_ROTATE_LIMITS    // (settings are EL_MANUAL_ROTATE_DOWN_LIMIT, EL_MANUAL_ROTATE_UP_LIMIT)
 
 
@@ -70,23 +70,22 @@
 // #define OPTION_DISPLAY_SUN_TRACKING_CONTINUOUSLY
 
 #define OPTION_DISPLAY_MOON_OR_SUN_TRACKING_CONDITIONAL
-#define OPTION_DISPLAY_VERSION_ON_STARTUP 
+#define OPTION_DISPLAY_VERSION_ON_STARTUP
 // #define OPTION_LCD_HEADING_FIELD_FIXED_DECIMAL_PLACE
 
 // #define FEATURE_POWER_SWITCH
-// #define OPTION_EXTERNAL_ANALOG_REFERENCE 
+// #define OPTION_EXTERNAL_ANALOG_REFERENCE
 
 // #define OPTION_NO_ELEVATION_CHECK_TARGET_DELAY
 // #define OPTION_BLINK_OVERLAP_LED
 
-// #define OPTION_DONT_READ_GPS_PORT_AS_OFTEN  
+// #define OPTION_DONT_READ_GPS_PORT_AS_OFTEN
 // #define OPTION_GPS_DO_PORT_FLUSHES
-// #define OPTION_SEND_STRING_OUT_CONTROL_PORT_WHEN_INITIALIZING  // change OPTION_SEND_STRING_OUT_CONTROL_PORT_WHEN_INITIALIZING_STRING in settings file  
+// #define OPTION_SEND_STRING_OUT_CONTROL_PORT_WHEN_INITIALIZING  // change OPTION_SEND_STRING_OUT_CONTROL_PORT_WHEN_INITIALIZING_STRING in settings file
 // #define OPTION_GPS_EXCLUDE_MISSING_LF_CR_HANDLING
 // #define OPTION_MORE_SERIAL_CHECKS
-// #define OPTION_STEPPER_MOTOR_USE_TIMER_ONE_INSTEAD_OF_FIVE  
 
-#define DEFAULT_DEBUG_STATE 1 // 1 = activate debug mode at startup; this should be set to zero unless you're debugging something at startup
+#define DEFAULT_DEBUG_STATE 1 // 1 = activate debug mode at startup
 
 #define DEBUG_DUMP  // normally compile with this activated unless you're really trying to save memory
 // #define DEBUG_LOOP
@@ -110,8 +109,7 @@
 // #define DEBUG_SUBMIT_REQUEST
 // #define DEBUG_SERVICE_ROTATION
 // #define DEBUG_POSITION_ROTARY_ENCODER
-// #define DEBUG_POSITION_ROTARY_ENCODER_USE_PJRC_LIBRARY  
-// #define DEBUG_PROFILE_LOOP_TIME
+// #define DEBUG_POSITION_ROTARY_ENCODER_USE_PJRC_LIBRARY
 // #define DEBUG_POSITION_PULSE_INPUT
 // #define DEBUG_ACCEL
 // #define DEBUG_SVC_REMOTE_COMM_INCOMING_BUFFER
@@ -142,4 +140,4 @@
 // #define DEBUG_AUTOCORRECT
 // #define DEBUG_A2_ENCODER
 // #define DEBUG_A2_ENCODER_LOOPBACK_TEST
-// #define DEBUG_QMC5883  
+// #define DEBUG_QMC5883
