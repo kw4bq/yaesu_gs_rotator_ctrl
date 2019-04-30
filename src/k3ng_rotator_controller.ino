@@ -1,413 +1,3 @@
-/* Arduino Rotator Controller
-
-   Anthony Good
-   K3NG
-   anthony.good@gmail.com
-  
-  Documentation: https://github.com/k3ng/k3ng_rotator_controller/wiki
-
-  Support: https://groups.yahoo.com/neo/groups/radioartisan/info
-  
-   Code contributions, testing, ideas, bug fixes, hardware, support, encouragement, and/or bourbon provided by:
-     John W3SA
-     Gord VO1GPK
-     Anthony M0UPU
-     Pete VE5VA
-     Marcin SP5IOU
-     Hjalmar OZ1JHM
-     Sverre LA3ZA
-     Bent OZ1CT
-     Erick WB6KCN
-     Norm N3YKF
-     Jan OK2ZAW
-     Jim M0CKE
-     Mike AD0CZ
-     Paolo IT9IPQ
-     Antonio IZ7DDA
-     Johan PA3FPQ
-     Jurgen PE1LWT
-     Gianfranco IZ8EWD 
-     Jasper PA2J
-     Pablo EA4TX
-     Máximo EA1DDO
-     Matt VK5ZM
-     ...and others
-  
-   Translations provided by
-     Máximo EA1DDO
-     Jan OK2ZAW
-     Paolo IT9IPQ
-     Ismael PY4PI
-     Robert DL5ROB
-     David ON4BDS
-
-
-   (If you contributed something and I forgot to put your name and call in here, *please* email me!)
-  
- ***************************************************************************************************************
- *
- *  This program is licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License
- *
- *                            http://creativecommons.org/licenses/by-nc-sa/3.0/
- *
- *                        http://creativecommons.org/licenses/by-nc-sa/3.0/legalcode
- *
- *
- ***************************************************************************************************************
-  
-  
-  
-  
-                            All copyrights are the property of their respective owners
-  
- 
- 
- Full documentation is currently located here: https://github.com/k3ng/k3ng_rotator_controller/wiki
-
-      Rules for using this code:
-
-          Rule #1: Read the documentation at https://github.com/k3ng/k3ng_rotator_controller/wiki
-  
-          Rule #2: Refer to rule #1.
-
-          Rule #3: Help others.
-
-          Rule #4: Have fun.
-
-
-    Recent Update History
-
-    Prior to 2.0.2015040401 (May still need to be documented in the wiki):
-
-        DEBUG_POLOLU_LSM303_CALIBRATION (rotator_features.h)
-        OPTION_HAMLIB_EASYCOM_AZ_EL_COMMAND_HACK
-        LANGUAGE_PORTUGUESE_BRASIL (thanks Ismael, PY4PI)
-        AZ_INCREMENTAL_ENCODER_ZERO_PULSE_POSITION
-        EL_INCREMENTAL_ENCODER_ZERO_PULSE_POSITION
-        OPTION_BLINK_OVERLAP_LED and OPTION_OVERLAP_LED_BLINK_MS setting
-        FEATURE_SUN_PUSHBUTTON_AZ_EL_CALIBRATION and FEATURE_MOON_PUSHBUTTON_AZ_EL_CALIBRATION; pin_sun_pushbutton_calibration, pin_moon_pushbutton_calibration
-        Working on FEATURE_AUTOCORRECT
-        OPTION_EL_PULSE_DEBOUNCE code - (thanks Gianfranco, IZ8EWD)
-        #define EL_POSITION_PULSE_DEBOUNCE 500  // in ms
-        OPTION_HH12_10_BIT_READINGS in hh12.h (thanks Johan PA3FPQ)
-        #define BRAKE_ACTIVE_STATE HIGH
-        #define BRAKE_INACTIVE_STATE LOW
-        OPTION_SCANCON_2RMHF3600_INC_ENCODER - thanks Jasper, PA2J
-        Added remote slave commands:
-          RC - read coordinates (returns RCxx.xxxx -xxx.xxxx)
-          GS - query GPS status (returns GS0 (no sync) or GS1 (sync))  
-        OPTION_SYNC_MASTER_COORDINATES_TO_SLAVE 
-        reset_pin
-        OPTION_RESET_METHOD_JMP_ASM_0
-        Change /E command to do setup() for system reset
-
-    2.0.2015040401 Changed configuration.azimuth_offset to use raw_azimuth rather than azimuth for calculation
-
-    2.0.2015040402 Fixed bug with compiling FEATURE_MASTER_WITH_ETHERNET_SLAVE without FEATURE_CLOCK
-
-    2.0.2015050401 Fixed bug with WNW being display on LCD direction indicator rather than WSW (Thanks Radek, OK2NMA)
-
-    2.0.2015051301
-      Fixed bug with remote slave AZ and EL commands not returning decimal places (i.e. xxx.000000)
-      Working on remote unit double backslash commands
-
-    2.0.2015051901 LANGUAGE_GERMAN (Thanks Ronny, DM2RM)  (documented in wiki)
-
-    2.0.2015052501
-      Working on SEI Bus and A2 Encoders
-      Working on remote unit double backslash commands
-
-    2.0.2015061601  
-      Working on converting over LCD display code to k3ngdisplay library
-      #define DISPLAY_DEGREES_STRING "\xDF"
-      last_az_incremental_encoder_position & az_incremental_encoder_position changed to long
-      k3ng_remote_rotator_controller class
-
-    2.0.2015070301
-      Fixed compile error involving clock_temp_string in display code when compiling multiple clock display widgets is attempted  
-      Still working on new display code and local/remote unit code
-
-    2.0.2015070302
-      FEATURE_AZ_POSITION_INCREMENTAL_ENCODER conversion to long data types (Thanks Daniel Cussen)
-
-    2.0.2015070401
-      gps_sync pin bug fixed  
-
-    2.0.2015071201
-      FEATURE_YWROBOT_I2C_DISPLAY (code provided by Máximo EA1DDO)
-
-    2.0.2015071701  
-      FEATURE_AZ_POSITION_INCREMENTAL_ENCODER code fixed (Thanks Daniel Cussen)
-
-    2.0.2015090401
-      Breaking out portions of ino file into .h files...
-        #include "rotator_clock_and_gps.h"
-        #include "rotator_command_processing.h" 
-        #include "rotator_moon_and_sun.h"
-        #include "rotator_ethernet.h"
-        #include "rotator_stepper.h"
-
-    2.0.2015090402
-        #include "rotator_language.h"
-        OPTION_SAVE_MEMORY_EXCLUDE_REMOTE_CMDS
-        /?FS command - Full Status Report
-
-    2.0.2015090601
-      Updates to rotator_language.h
-      Fixed k3ngdisplay.h / LiquidCrystal.h compilation problems with Arduino IDE
-      Integrated DebugClass (debug.h and debug.cpp) contributed from Matt VK5ZM
-
-
-    2.0.2015092001
-      LANGUAGE_FRENCH (contributed by Marc-Andre, VE2EVN) 
-      fixed issue with rotator_analog_az inferring with other pins if defined but not used 
-
-    2.0.2015092002
-      Fixed issue with compiling DEBUG_GPS 
-
-    2.0.2015111501
-      Fixed issues with compilation under Arduino 1.6.6 (gave up on various include files... I'll do things the right way in the rewrite)   
-
-    2.0.2015111502
-      LANGUAGE_DUTCH courtesy of David, ON4BDS
-
-    2.0.2015121801
-      Fixed bug in update_display() with display always showing DOWN with elevation rotation (Thanks, UA9OLB)
-
-    2.0.2015122001
-      Created OPTION_REVERSE_AZ_HH12_AS5045 and OPTION_REVERSE_EL_HH12_AS5045
-
-    2.0.2015122801
-      Bug fixes involving OPTION_CLOCK_ALWAYS_HAVE_HOUR_LEADING_ZERO (Thanks, UA9OLB)  
-
-    2.0.2015122802
-      Bug fixes involving buttons and OPTION_EL_MANUAL_ROTATE_LIMITS (Thanks, UA9OLB)
-
-    2.0.2015122901  
-      Corrections to bug fixes involving OPTION_CLOCK_ALWAYS_HAVE_HOUR_LEADING_ZERO (Thanks, UA9OLB)
-  
-    2.0.2016011801
-      Fixed compilation bug involving last_moon_tracking_check_time and last_sun_tracking_check_time with some combinations of features
-
-    2.0.2016012001
-      Fixed bug with DEBUG_GPS_SERIAL and also improved GPS port reading  
-
-    2.0.2016012101
-      Fixed bug with OPTION_REVERSE_AZ_HH12_AS5045 and OPTION_REVERSE_EL_HH12_AS5045
-
-    2.0.2016012102  
-      Fixed issues with k3ngdisplay.h / k3ngdisplay.cpp
-
-    2.0.2016012301
-      Further work to get k3ngdisplay files to play with Arduino IDE 1.6.7
-
-    2.0.2016021601
-      DEBUG_HH12 more information output
-
-    2.0.2016030101
-       FEATURE_AZ_POSITION_HH12_AS5045_SSI: AZIMUTH_STARTING_POINT_DEFAULT used in heading calculation now    
-
-    2.0.2016030201
-      Fixed FEATURE_ADAFRUIT_BUTTONS to work with k3ngdisplay library and updated k3ngdisplay library to support Adafruit RGB display buttons   
-
-    2.0.2016030401   
-      Changed I2C_LCD_COLOR default to WHITE 
-
-    2.0.2016030402
-      OPTION_SEND_STRING_OUT_CONTROL_PORT_WHEN_INITIALIZING
-
-    2.0.2016030501
-      FEATURE_SAINSMART_I2C_LCD
-
-    2.0.2016031001
-      OPTION_DISPLAY_HEADING_AZ_ONLY with settings LCD_AZ_ONLY_HEADING_ROW, LCD_AZ_ONLY_HEADING_FIELD_SIZE
-      OPTION_DISPLAY_HEADING_EL_ONLY with settings LCD_EL_ONLY_HEADING_ROW, LCD_EL_ONLY_HEADING_FIELD_SIZE
-
-    2.0.2016032901
-      Fixed issues with FEATURE_RFROBOT_I2C_DISPLAY compiling
-      Corrected notes in features files about customizing features in rotator_k3ngdisplay.h 
-
-    2.0.2016042801
-      Fixed compilation error with FEATURE_AZIMUTH_CORRECTION and FEATURE_ELEVATION_CORRECTION 
-
-    2.0.2016051501
-      Fixed bug in submit_request() with slow down (Thanks Olli, DH2WQ)   
-
-    2.0.2016071801
-      Fixed bug with Maidenhead not being calculated when FEATURE_MOON_TRACKING or FEATURE_SUN_TRACKING wasn't compiled  
-
-    2.0.2016083001
-      Re-merged changes manually from dfannin submitted issue 30 - incorrect index for row_override; pull request 31
-      (Couldn't get pull from git to compile correctly, not sure why)
-
-    2.0.20160090701
-      I screwed up.  I blew away F6FVY's pull request 29.  Restoring that.  There was a bug in the merged code that caused compile issue I was working on in 2.0.2016083001
-        New Commands (which need to be documented):
-
-            \Ix[x][x] - set az starting point
-            \I - display the current az starting point
-            \Jx[x][x] - set az rotation capability
-            \J - display the current az rotation capability
-            \Kx - force disable the az brake even if a pin is defined (x: 0 = enable, 1 = disable)
-            \K - display the current az brake state
-            \Q - Save settings in the EEPROM and restart
-
-    2.0.2016090702
-      Implemented simpler fix for issue 30 - incorrect index for row_override: byte row_override[LCD_ROWS+1]
-
-    2.0.2016090801
-      Corrected error in FEATURE_ROTARY_ENCODER_SUPPORT ttable (thanks, frye.dale)
-
-    2.0.2016092501
-      Working on FEATURE_AZ_POSITION_ROTARY_ENCODER_USE_PJRC_LIBRARY and FEATURE_EL_POSITION_ROTARY_ENCODER_USE_PJRC_LIBRARY
-      Fixed bug with last row of LCD display getting blanked out
-      FEATURE_TEST_DISPLAY_AT_STARTUP
-      Noted in various settings files that AZIMUTH_STARTING_POINT_DEFAULT and AZIMUTH_ROTATION_CAPABILITY_DEFAULT are used only for initializing EEPROM
-      Fixed an issue with FEATURE_AZ_POSITION_HH12_AS5045_SSI and FEATURE_AZ_POSITION_INCREMENTAL_ENCODER using AZIMUTH_STARTING_POINT_DEFAULT rather than azimuth_starting_point variable
-
-    2.0.2016100301
-      FEATURE_AZ_POSITION_ROTARY_ENCODER_USE_PJRC_LIBRARY and FEATURE_EL_POSITION_ROTARY_ENCODER_USE_PJRC_LIBRARY ready for testing
-
-    2.0.2016102201
-      Fixed bug with FEATURE_AZ_POSITION_HH12_AS5045_SSI, negative offset, and crossing between 359 and 0 degrees
-
-    2.0.2017010101
-      Minor update in comments in settings files  
-
-    2.0.2017010102
-      Fixed bug in FEATURE_ELEVATION_CONTROL with brake control (Thanks, zoobie40)
-
-    2.0.2017041901
-      Fixed bug - when azimithal rotation was in progress and an azimuth heading that was within the tolerance was submitted, rotation was not stopped (Thanks, Laurent, F6FVY)
-
-    2.0.2017042401
-      configuration.brake_az_disabled is now set to 0 (not disabled) when initializing eeprom (Thanks, Patrick, TK5EP)
-
-    2017.05.13.01
-      Added the \V command to FEATURE_CLOCK to set timezone offset  
-
-    2017.05.13.02
-      Fixed bug with timezone offset functionality  
-
-    2017.07.24.01
-      Fixed bug with "strcat(workstring." (Thanks, Russ, K0WFS)
-
-    2017.07.24.02
-      Fixed typos in a few places with "or" in if statements.  Not sure how that happened :-/  (Thanks, Russ, K0WFS)
-
-    2017.07.31.01
-      Fixed various LCD display clock options to display local time
-
-    2017.08.01.01
-      Fixed local time display bugs and local time calculation for negative offset timezones (UTC-x)
-
-    2017.08.02.01
-      FEATURE_AUTOPARK created and documented here https://github.com/k3ng/k3ng_rotator_controller/wiki/705-Park-and-AutoPark
-
-    2017.08.14.01
-      Added \+ command which switched LCD azimuth display mode between normal, raw, and +overlap modes  
-
-    2017.09.03.01
-      Added auxiliary pins for rotate LEDs: pin_led_cw, pin_led_ccw, pin_led_up, and pin_led_down, and related settings PIN_LED_ACTIVE_STATE, PIN_LED_INACTIVE_STATE  
-
-    2017.09.03.02
-      Added pins pin_autopark_disable and pin_autopark_timer_reset for FEATURE_AUTOPARK
-
-    2017.09.05.01
-      Added FEATURE_AUDIBLE_ALERT documented here: https://github.com/k3ng/k3ng_rotator_controller/wiki/455-Human-Interface:-Audible-Alert
-
-    2017.11.14.01
-      Merged pulled request #42 - allowing functions to return their calculated values https://github.com/k3ng/k3ng_rotator_controller/pull/42 (Thanks, SQ6EMM)  
-
-    2018.01.25.01
-      FEATURE_AZ_POSITION_HMC5883L_USING_JARZEBSKI_LIBRARY
-      {need to document in wiki after someone tests}
-
-    2018.01.25.02
-      FEATURE_AZ_POSITION_DFROBOT_QMC5883
-      {need to document in wiki after someone tests}
-
-    2018.01.28.01
-      Enhanced master/slave link TX sniff output  
-
-    2018.02.01.01
-      Added serial port support for ARDUINO_MAPLE_MINI,ARDUINO_AVR_PROMICRO,ARDUINO_AVR_LEONARDO,ARDUINO_AVR_MICRO,ARDUINO_AVR_YUN,ARDUINO_AVR_ESPLORA,ARDUINO_AVR_LILYPAD_USB,ARDUINO_AVR_ROBOT_CONTROL,ARDUINO_AVR_ROBOT_MOTOR,ARDUINO_AVR_LEONARDO_ETH,TEENSYDUINO  
-
-    2018.02.02.01
-      Minor updates to DEBUG_ACCEL
-
-    2018.02.05.01
-      Disabled free memory check in DEBUG_DUMP for TEENSYDUINO to fix compilation erroring out (Thanks, Martin, HS0ZED)
-
-    2018.02.11.01
-      Merge of https://github.com/k3ng/k3ng_rotator_controller/pull/45 (Thanks, IT9IPQ) 
-
-    2018.02.24.01
-      Added OPTION_GPS_DO_PORT_FLUSHES   
-
-    2018.02.25.01
-      Small change to FEATURE_GPS and gps_port_read
-
-    2018.03.02.01
-      Added code to handle GPS serial data that is missing terminator characters.  Created OPTION_GPS_EXCLUDE_MISSING_LF_CR_HANDLING which disables this function. 
-
-    2018.03.03.01
-      Changed some formatting of the debug log output
-      Added the /?CV command to query software version
-
-    2018.03.04.01
-      GPS serial port reading is now paused if the GPS library has a valid sentence processed 
-
-    2018.03.06.01
-      Additional DEBUG_GPS code and OPTION_MORE_SERIAL_CHECKS for some GPS problem troubleshooting
-
-    2018.03.08.01
-      Added OPTION_MORE_SERIAL_CHECKS
-      Added OPTION_RFROBOT_I2C_DISPLAY_BACKLIGHT_OFF to rotator_k3ngdisplay.h
-     
-    2018.03.11.01
-      GPS performance tweak - now ignoring gps_data_available and reading all data available on GPS port
-
-    2018.03.14.01
-      SET_I2C_BUS_SPEED in settings file; set I2C bus speed to help address I2C I/O time impact serial port performance
-
-    2018.04.21.01
-      Added OPTION_STEPPER_MOTOR_USE_TIMER_ONE_INSTEAD_OF_FIVE for FEATURE_STEPPER_MOTOR.  Also added TimerOne library to Github.
-
-    2018.05.16.01
-      Added FEATURE_AZ_POSITION_MECHASOLUTION_QMC5883 - QMC5883 digital compass support using Mechasolution library at https://github.com/keepworking/Mecha_QMC5883L
-      Modified MechaQMC5883.cpp to get rid of compiler warning about ::read
-
-    2018.10.17.01
-      Added FEATURE_MIDAS_I2C_DISPLAY 
-
-    2018.10.17.02
-      Added OVERLAP_LED_ACTIVE_STATE and OVERLAP_LED_INACTIVE_STATE settings
-
-    2018.10.19.01
-      Added OPTION_SAVE_MEMORY_EXCLUDE_BACKSLASH_CMDS
-
-    2018.10.19.02
-      Added Hygain DCU-1 protocol emulation - FEATURE_DCU_1_EMULATION
-
-    2018.10.19.03
-      Added FEATURE_FABO_LCD_PCF8574_DISPLAY
-      Added PRESET_ENCODER_CHANGE_TIME_MS in settings files  
-
-     2018.12.25.01     
-       Fixed bug in RTC sync timing affecting SYNC_WITH_RTC_SECONDS (Thanks, Fred, VK2EFL for fix, and Steve, N4TTY for discovery)
-
-     2019.01.03.01
-       Updated GS-232 M and W commands to accept azimuths over 360 degrees and improved parameter verification  
-
-    All library files should be placed in directories likes \sketchbook\libraries\library1\ , \sketchbook\libraries\library2\ , etc.
-    Anything rotator_*.* should be in the ino directory!
-    
-  Documentation: https://github.com/k3ng/k3ng_rotator_controller/wiki
-
-  Support: https://groups.yahoo.com/neo/groups/radioartisan/info
-
-  */
 
 #define CODE_VERSION "2019.01.03.01"
 
@@ -416,93 +6,13 @@
 #include <math.h>
 #include <avr/wdt.h>
 
-
 #include "rotator_hardware.h"
-
-#ifdef HARDWARE_EA4TX_ARS_USB
-  #include "rotator_features_ea4tx_ars_usb.h"
-#endif
-#ifdef HARDWARE_WB6KCN
-  #include "rotator_features_wb6kcn.h"
-#endif
-#ifdef HARDWARE_M0UPU
-  #include "rotator_features_m0upu.h"
-#endif
-#ifdef HARDWARE_TEST
-  #include "rotator_features_test.h"
-#endif    
-#if !defined(HARDWARE_CUSTOM)
-  #include "rotator_features.h" 
-#endif      
-  
+#include "rotator_features.h" 
 #include "rotator_dependencies.h"
 
-#ifdef FEATURE_4_BIT_LCD_DISPLAY
-  #include <LiquidCrystal.h>  // required for classic 4 bit interface LCD display (FEATURE_4_BIT_LCD_DISPLAY)
-#endif // FEATURE_4_BIT_LCD_DISPLAY
-
-#if defined(FEATURE_ADAFRUIT_I2C_LCD)
-  #include <Adafruit_MCP23017.h> // required for Adafruit I2C LCD display
-  #include <Adafruit_RGBLCDShield.h> // required for Adafruit I2C LCD display
-#endif
-
-#if defined(FEATURE_YOURDUINO_I2C_LCD) || defined(FEATURE_RFROBOT_I2C_DISPLAY) || defined(FEATURE_SAINSMART_I2C_LCD)
-  #include <LiquidCrystal_I2C.h> // required for YourDuino.com or DFRobot I2C LCD display
-#endif
-
-#if defined(FEATURE_YOURDUINO_I2C_LCD)
-  #include <LCD.h>   // required for YourDuino.com I2C LCD display
-#endif  
-
-#if defined(FEATURE_MIDAS_I2C_DISPLAY)
-  #include <LCD_C0220BiZ.h>
-  #include <ST7036.h>
-#endif
-
-
-#if defined(FEATURE_FABO_LCD_PCF8574_DISPLAY)
-  #include <FaBoLCD_PCF8574.h>
-#endif
-
-#ifdef FEATURE_LCD_DISPLAY
-  #include "rotator_k3ngdisplay.h"
-#endif    
-
-#ifdef FEATURE_WIRE_SUPPORT
-  #include <Wire.h>  // required for FEATURE_I2C_LCD, any ADXL345 feature, FEATURE_AZ_POSITION_HMC5883L, FEATURE_EL_POSITION_ADAFRUIT_LSM303
-#endif
-
-#if defined(FEATURE_AZ_POSITION_HMC5883L) || defined(FEATURE_AZ_POSITION_HMC5883L_USING_JARZEBSKI_LIBRARY)
-  #include <HMC5883L.h> // required for HMC5883L digital compass support
-#endif
-
-#if defined(FEATURE_AZ_POSITION_DFROBOT_QMC5883)
-  #include <DFRobot_QMC5883.h>
-#endif  
-
-#if defined(FEATURE_AZ_POSITION_MECHASOLUTION_QMC5883)
-  #include <MechaQMC5883.h>
-#endif 
-
-#if defined(FEATURE_EL_POSITION_ADXL345_USING_ADAFRUIT_LIB) || defined(FEATURE_AZ_POSITION_ADAFRUIT_LSM303) || defined(FEATURE_EL_POSITION_ADAFRUIT_LSM303)
-  #include <Adafruit_Sensor.h>    // required for any Adafruit sensor libraries
-#endif
-
-#if defined(FEATURE_EL_POSITION_ADXL345_USING_LOVE_ELECTRON_LIB)
-  #include <ADXL345.h>  // required for elevation ADXL345 accelerometer using Love Electronics ADXL345 library
-#endif
-
-#if defined(FEATURE_EL_POSITION_ADXL345_USING_ADAFRUIT_LIB)
-  #include <Adafruit_ADXL345_U.h>   // required for elevation ADXL345 accelerometer using Adafruit ADXL345 library (FEATURE_EL_POSITION_ADXL345_USING_ADAFRUIT_LIB)
-#endif
-
-#if defined(FEATURE_EL_POSITION_ADAFRUIT_LSM303) || defined(FEATURE_AZ_POSITION_ADAFRUIT_LSM303)
-  #include <Adafruit_LSM303.h>     // required for azimuth and/or elevation using LSM303 compass and/or accelerometer
-#endif
-
-#ifdef FEATURE_AZ_POSITION_POLOLU_LSM303
-  #include <LSM303.h>
-#endif
+#include <LiquidCrystal_I2C.h>
+#include "rotator_k3ngdisplay.h"
+#include <Wire.h>  
 
 #if defined(FEATURE_MOON_TRACKING) || defined(FEATURE_SUN_TRACKING)
   #include <moon2.h>
@@ -529,52 +39,9 @@
   #include <Ethernet.h>
 #endif
 
-#if defined(FEATURE_AZ_POSITION_ROTARY_ENCODER_USE_PJRC_LIBRARY) || defined(FEATURE_EL_POSITION_ROTARY_ENCODER_USE_PJRC_LIBRARY)
-  //#define ENCODER_OPTIMIZE_INTERRUPTS
-  #include <Encoder.h>
-#endif    
-
 #include "rotator.h"
-
-#ifdef HARDWARE_EA4TX_ARS_USB
-  #include "rotator_pins_ea4tx_ars_usb.h"
-#endif
-#ifdef HARDWARE_M0UPU
-  #include "rotator_pins_m0upu.h"
-#endif
-#ifdef HARDWARE_WB6KCN
-  #include "rotator_pins_wb6kcn.h"
-#endif
-#ifdef HARDWARE_TEST
-  #include "rotator_pins_test.h"
-#endif
-#if !defined(HARDWARE_CUSTOM)
-  #include "rotator_pins.h"
-#endif
-
-#ifdef HARDWARE_EA4TX_ARS_USB
-  #include "rotator_settings_ea4tx_ars_usb.h"
-#endif
-#ifdef HARDWARE_WB6KCN
-  #include "rotator_settings_wb6kcn.h"
-#endif
-#ifdef HARDWARE_M0UPU
-  #include "rotator_settings_m0upu.h"
-#endif
-#ifdef HARDWARE_TEST
-  #include "rotator_settings_test.h"
-#endif      
-#if !defined(HARDWARE_CUSTOM)
-  #include "rotator_settings.h"
-#endif
-
-#ifdef FEATURE_STEPPER_MOTOR
-  #ifdef OPTION_STEPPER_MOTOR_USE_TIMER_ONE_INSTEAD_OF_FIVE
-    #include <TimerOne.h>
-  #else
-    #include <TimerFive.h>
-  #endif
-#endif
+#include "rotator_pins.h"
+#include "rotator_settings.h"
 
 #include "rotator_language.h"
 #include "rotator_debug.h"
@@ -586,24 +53,12 @@ byte incoming_serial_byte = 0;
 
 byte reset_the_unit = 0;
 
-#ifdef FEATURE_TWO_DECIMAL_PLACE_HEADINGS
-  long azimuth = 0;
-  long raw_azimuth = 0;
-  long target_azimuth = 0;
-  long target_raw_azimuth = 0;
-  long azimuth_starting_point = AZIMUTH_STARTING_POINT_DEFAULT;
-  long azimuth_rotation_capability = AZIMUTH_ROTATION_CAPABILITY_DEFAULT;
-#else
-  int azimuth = 0;
-  int raw_azimuth = 0;
-  int target_azimuth = 0;
-  int target_raw_azimuth = 0;
-  int azimuth_starting_point = AZIMUTH_STARTING_POINT_DEFAULT;
-  int azimuth_rotation_capability = AZIMUTH_ROTATION_CAPABILITY_DEFAULT;
-#endif
-
-
-
+int azimuth = 0;
+int raw_azimuth = 0;
+int target_azimuth = 0;
+int target_raw_azimuth = 0;
+int azimuth_starting_point = AZIMUTH_STARTING_POINT_DEFAULT;
+int azimuth_rotation_capability = AZIMUTH_ROTATION_CAPABILITY_DEFAULT;
 
 byte control_port_buffer[COMMAND_BUFFER_SIZE];
 int control_port_buffer_index = 0;
@@ -640,7 +95,6 @@ struct config_t {
   int analog_el_max_elevation;
   float last_azimuth;
   float last_elevation;
-  //int last_az_incremental_encoder_position;  
   long last_az_incremental_encoder_position;
   int last_el_incremental_encoder_position;
   float azimuth_offset;
@@ -649,13 +103,10 @@ struct config_t {
   byte el_stepper_motor_last_pin_state;
   byte az_stepper_motor_last_direction;
   byte el_stepper_motor_last_direction;
-#ifdef FEATURE_TWO_DECIMAL_PLACE_HEADINGS
-  long azimuth_starting_point;
-  long azimuth_rotation_capability;
-#else
+
   int azimuth_starting_point;
   int azimuth_rotation_capability;
-#endif
+  
   byte brake_az_disabled;
   float clock_timezone_offset;
   byte autopark_active;
@@ -14072,5 +13523,6 @@ void service_autopark(){
 
 
 // that's all, folks !
+
 
 
