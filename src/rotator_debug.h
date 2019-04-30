@@ -10,39 +10,9 @@
 #endif
 
 #include "rotator.h"
+#include "rotator_features.h" 
 
-#ifdef HARDWARE_EA4TX_ARS_USB
-  #include "rotator_features_ea4tx_ars_usb.h"
-#endif
-#ifdef HARDWARE_WB6KCN
-  #include "rotator_features_wb6kcn.h"
-#endif
-#ifdef HARDWARE_M0UPU
-  #include "rotator_features_m0upu.h"
-#endif
-#ifdef HARDWARE_TEST
-  #include "rotator_features_test.h"
-#endif    
-#if !defined(HARDWARE_CUSTOM)
-  #include "rotator_features.h" 
-#endif 
-
-// Serial port class definitions for various devices
-
-#if defined(ARDUINO_MAPLE_MINI)
-  #define SERIAL_PORT_CLASS USBSerial
-#elif defined(ARDUINO_AVR_PROMICRO) || defined(ARDUINO_AVR_LEONARDO) || defined(ARDUINO_AVR_MICRO) || defined(ARDUINO_AVR_YUN) || defined(ARDUINO_AVR_ESPLORA) || defined(ARDUINO_AVR_LILYPAD_USB) || defined(ARDUINO_AVR_ROBOT_CONTROL) || defined(ARDUINO_AVR_ROBOT_MOTOR) || defined(ARDUINO_AVR_LEONARDO_ETH)
-  #define SERIAL_PORT_CLASS Serial_
-#elif defined(TEENSYDUINO)
-  #define SERIAL_PORT_CLASS usb_serial_class
-#else
-  #define SERIAL_PORT_CLASS HardwareSerial
-#endif
-
-// #ifdef FEATURE_ETHERNET
-//   #include <SPI.h>
-//   #include <Ethernet.h>
-// #endif
+#define SERIAL_PORT_CLASS HardwareSerial
 
 class DebugClass
 {
