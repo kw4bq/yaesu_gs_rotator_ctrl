@@ -161,66 +161,9 @@ byte current_az_speed_voltage = 0;
   byte push_lcd_update = 0;
 #endif // FEATURE_LCD_DISPLAY
 
-#ifdef FEATURE_ROTARY_ENCODER_SUPPORT
-  #ifdef OPTION_ENCODER_HALF_STEP_MODE      // Use the half-step state table (emits a code at 00 and 11)
-    const unsigned char ttable[6][4] = {
-      { 0x3,  0x2,  0x1, 0x0  }, { 0x23, 0x0,  0x1, 0x0  },
-      { 0x13, 0x2,  0x0, 0x0  }, { 0x3,  0x5,  0x4, 0x0  },
-      { 0x3,  0x3,  0x4, 0x10 }, { 0x3,  0x5,  0x3, 0x20 }
-    };
-  #else                                      // Use the full-step state table (emits a code at 00 only)
-    // const unsigned char ttable[7][4] = {                   // corrected 2016-09-08 
-    //   { 0x0, 0x2, 0x4, 0x0  }, { 0x3, 0x0, 0x1, 0x10 },
-    //   { 0x3, 0x2, 0x0, 0x0  }, { 0x3, 0x2, 0x1, 0x0  },
-    //   { 0x6, 0x0, 0x4, 0x0  }, { 0x6, 0x5, 0x0, 0x10 },
-    //   { 0x6, 0x5, 0x4, 0x0  },
-    // };
-
-    const unsigned char ttable[7][4] = {
-      {0x0, 0x2, 0x4,  0x0}, {0x3, 0x0, 0x1, 0x10},
-      {0x3, 0x2, 0x0,  0x0}, {0x3, 0x2, 0x1,  0x0},
-      {0x6, 0x0, 0x4,  0x0}, {0x6, 0x5, 0x0, 0x20},
-      {0x6, 0x5, 0x4,  0x0},
-    };
-
-
-  #endif // OPTION_ENCODER_HALF_STEP_MODE
-
-  #ifdef FEATURE_AZ_PRESET_ENCODER            // Rotary Encoder State Tables
-    #if defined(FEATURE_ONE_DECIMAL_PLACE_HEADINGS) || defined(FEATURE_TWO_DECIMAL_PLACE_HEADINGS)
-      double az_encoder_raw_degrees = 0;
-    #else
-      int az_encoder_raw_degrees = 0;
-    #endif
-    volatile unsigned char az_encoder_state = 0;
-    #ifdef FEATURE_EL_PRESET_ENCODER
-      volatile unsigned char el_encoder_state = 0;
-      #if defined(FEATURE_ONE_DECIMAL_PLACE_HEADINGS) || defined(FEATURE_TWO_DECIMAL_PLACE_HEADINGS)
-        double el_encoder_degrees = 0;
-      #else
-        int el_encoder_degrees = 0;
-      #endif
-    #endif // FEATURE_EL_PRESET_ENCODER
-    byte preset_encoders_state = ENCODER_IDLE;
-  #endif // FEATURE_AZ_PRESET_ENCODER
-#endif // FEATURE_ROTARY_ENCODER_SUPPORT
-
 #ifdef DEBUG_PROFILE_LOOP_TIME
   float average_loop_time = 0;
 #endif // DEBUG_PROFILE_LOOP_TIME
-
-#ifdef FEATURE_AZ_POSITION_PULSE_INPUT
-  volatile float az_position_pulse_input_azimuth = 0;
-  volatile byte last_known_az_state = 0;
-#endif // FEATURE_AZ_POSITION_PULSE_INPUT
-
-#ifdef FEATURE_EL_POSITION_PULSE_INPUT
-  volatile float el_position_pulse_input_elevation = 0;
-  volatile byte last_known_el_state = 0;
-  #ifdef OPTION_EL_PULSE_DEBOUNCE
-    unsigned long last_el_pulse_debounce = 0;
-  #endif //OPTION_EL_PULSE_DEBOUNCE
-#endif // FEATURE_EL_POSITION_PULSE_INPUT
 
 #if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_MASTER_WITH_SERIAL_SLAVE) 
   byte serial_read_event_flag[] = { 0, 0, 0, 0, 0 };
@@ -249,49 +192,10 @@ byte current_az_speed_voltage = 0;
 #endif //FEATURE_MASTER_WITH_SERIAL_SLAVE
 
 
-#ifdef DEBUG_POSITION_PULSE_INPUT
-  // unsigned int az_position_pule_interrupt_handler_flag = 0;
-  // unsigned int el_position_pule_interrupt_handler_flag = 0;
-  volatile unsigned long az_pulse_counter = 0;
-  volatile unsigned long el_pulse_counter = 0;
-  volatile unsigned int az_pulse_counter_ambiguous = 0;
-  volatile unsigned int el_pulse_counter_ambiguous = 0;
-#endif // DEBUG_POSITION_PULSE_INPUT
-
 #ifdef FEATURE_PARK
   byte park_status = NOT_PARKED;
   byte park_serial_initiated = 0;
 #endif // FEATURE_PARK
-
-#ifdef FEATURE_AZ_POSITION_INCREMENTAL_ENCODER
-  volatile long az_incremental_encoder_position = 0;
-  volatile byte az_3_phase_encoder_last_phase_a_state = 0;
-  volatile byte az_3_phase_encoder_last_phase_b_state = 0;
-  #ifdef DEBUG_AZ_POSITION_INCREMENTAL_ENCODER
-    volatile long az_position_incremental_encoder_interrupt = 0;
-  #endif // DEBUG_AZ_POSITION_INCREMENTAL_ENCODER
-#endif // FEATURE_AZ_POSITION_INCREMENTAL_ENCODER
-
-#ifdef FEATURE_EL_POSITION_INCREMENTAL_ENCODER
-  volatile long el_incremental_encoder_position = 0;
-  volatile byte el_3_phase_encoder_last_phase_a_state = 0;
-  volatile byte el_3_phase_encoder_last_phase_b_state = 0;
-  #ifdef DEBUG_EL_POSITION_INCREMENTAL_ENCODER
-    volatile long el_position_incremental_encoder_interrupt = 0;
-  #endif // DEBUG_EL_POSITION_INCREMENTAL_ENCODER
-#endif // FEATURE_EL_POSITION_INCREMENTAL_ENCODER
-
-#ifdef FEATURE_AZ_POSITION_INCREMENTAL_ENCODER
-  volatile byte read_azimuth_lock = 0;
-#endif
-
-#ifdef FEATURE_EL_POSITION_INCREMENTAL_ENCODER
-  volatile byte read_elevation_lock = 0;
-#endif
-
-#if defined(FEATURE_AZ_POSITION_INCREMENTAL_ENCODER) || defined(FEATURE_EL_POSITION_INCREMENTAL_ENCODER)
-  volatile byte service_rotation_lock = 0;
-#endif
 
 #if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(CONTROL_PROTOCOL_EMULATION) || defined(FEATURE_CLOCK) || defined(UNDER_DEVELOPMENT_REMOTE_UNIT_COMMANDS)
   SERIAL_PORT_CLASS * control_port;
@@ -385,13 +289,6 @@ byte current_az_speed_voltage = 0;
   unsigned long last_activity_time = 0;
 #endif //FEATURE_POWER_SWITCH
 
-#ifdef FEATURE_STEPPER_MOTOR
-  volatile unsigned int az_stepper_freq_count = 0;
-  #ifdef FEATURE_ELEVATION_CONTROL
-    volatile unsigned int el_stepper_freq_count = 0;
-  #endif //FEATURE_ELEVATION_CONTROL
-  volatile unsigned long service_stepper_motor_pulse_pins_count = 0;
-#endif //FEATURE_STEPPER_MOTOR
 
 #ifdef FEATURE_AZIMUTH_CORRECTION
   const float azimuth_calibration_from[]  = AZIMUTH_CALIBRATION_FROM_ARRAY;    
@@ -422,51 +319,12 @@ byte current_az_speed_voltage = 0;
   float el_a2_encoder = 0;
 #endif //FEATURE_EL_POSITION_A2_ABSOLUTE_ENCODER 
 
+
 DebugClass debug;
 
 #if defined(FEATURE_LCD_DISPLAY)
   K3NGdisplay k3ngdisplay(LCD_COLUMNS,LCD_ROWS,LCD_UPDATE_TIME);
 #endif   
-
-#if defined(FEATURE_AZ_POSITION_HMC5883L) || defined(FEATURE_AZ_POSITION_HMC5883L_USING_JARZEBSKI_LIBRARY)
-  HMC5883L compass;
-#endif //FEATURE_AZ_POSITION_HMC5883L
-
-#if defined(FEATURE_AZ_POSITION_MECHASOLUTION_QMC5883)  
-  MechaQMC5883 compass;
-#endif //FEATURE_AZ_POSITION_MECHASOLUTION_QMC5883
-
-#if defined(FEATURE_AZ_POSITION_DFROBOT_QMC5883)  
-  DFRobot_QMC5883 compass;
-#endif //FEATURE_AZ_POSITION_DFROBOT_QMC5883  
-
-#ifdef FEATURE_EL_POSITION_ADXL345_USING_LOVE_ELECTRON_LIB
-  ADXL345 accel;
-#endif //FEATURE_EL_POSITION_ADXL345_USING_LOVE_ELECTRON_LIB
-
-#ifdef FEATURE_EL_POSITION_ADXL345_USING_ADAFRUIT_LIB
-  Adafruit_ADXL345_Unified accel = Adafruit_ADXL345_Unified(12345);
-#endif //FEATURE_EL_POSITION_ADXL345_USING_ADAFRUIT_LIB
-
-#if defined(FEATURE_EL_POSITION_ADAFRUIT_LSM303) || defined(FEATURE_AZ_POSITION_ADAFRUIT_LSM303)
-  Adafruit_LSM303 lsm;
-#endif
-
-#if defined(FEATURE_AZ_POSITION_POLOLU_LSM303) || defined(FEATURE_EL_POSITION_POLOLU_LSM303)
-  LSM303 compass;
-  LSM303::vector<int16_t> running_min = {32767, 32767, 32767}, running_max = {-32768, -32768, -32768};
-  char report[80];
-#endif //FEATURE_AZ_POSITION_POLOLU_LSM303
-
-#ifdef FEATURE_AZ_POSITION_HH12_AS5045_SSI
-  #include "hh12.h"
-  hh12 azimuth_hh12;
-#endif //FEATURE_AZ_POSITION_HH12_AS5045_SSI
-
-#ifdef FEATURE_EL_POSITION_HH12_AS5045_SSI
-  #include "hh12.h"
-  hh12 elevation_hh12;
-#endif //FEATURE_EL_POSITION_HH12_AS5045_SSI
 
 #ifdef FEATURE_GPS
   TinyGPS gps;
@@ -479,18 +337,6 @@ DebugClass debug;
 #ifdef FEATURE_RTC_PCF8583
   PCF8583 rtc(0xA0);
 #endif //FEATURE_RTC_PCF8583
-
-#ifdef HARDWARE_EA4TX_ARS_USB
-  #undef LCD_COLUMNS
-  #undef LCD_ROWS
-  #define LCD_COLUMNS 16
-  #define LCD_ROWS 2
-#endif //HARDWARE_EA4TX_ARS_USB
-
-#ifdef HARDWARE_M0UPU
-  #undef LCD_ROWS
-  #define LCD_ROWS 2
-#endif //HARDWARE_M0UPU
 
 #ifdef FEATURE_AZ_POSITION_A2_ABSOLUTE_ENCODER
   #define AZ_A2_ENCODER_RESOLUTION 32767 /*36000*/
@@ -513,17 +359,6 @@ DebugClass debug;
   #define SEI_BUS_COMMAND_TIMEOUT_MS 6000
 #endif
 
-#ifdef FEATURE_AZ_POSITION_ROTARY_ENCODER_USE_PJRC_LIBRARY
-  Encoder encoder_pjrc_az(az_rotary_position_pin1, az_rotary_position_pin2);
-  long encoder_pjrc_previous_az_position  = 0;
-  long encoder_pjrc_current_az_position;
-#endif
-
-#ifdef FEATURE_EL_POSITION_ROTARY_ENCODER_USE_PJRC_LIBRARY
-  Encoder encoder_pjrc_el(el_rotary_position_pin1, el_rotary_position_pin2);
-  long encoder_pjrc_previous_el_position  = 0;
-  long encoder_pjrc_current_el_position;
-#endif  
 
 #ifdef FEATURE_AUTOPARK
   unsigned long last_activity_time_autopark = 0;
@@ -13520,9 +13355,3 @@ void service_autopark(){
 
 }
 #endif //FEATURE_AUTOPARK
-
-
-// that's all, folks !
-
-
-
