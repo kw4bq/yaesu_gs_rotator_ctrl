@@ -191,12 +191,6 @@ byte current_az_speed_voltage = 0;
   #endif
 #endif //FEATURE_MASTER_WITH_SERIAL_SLAVE
 
-
-#ifdef FEATURE_PARK
-  byte park_status = NOT_PARKED;
-  byte park_serial_initiated = 0;
-#endif // FEATURE_PARK
-
 #if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(CONTROL_PROTOCOL_EMULATION) || defined(FEATURE_CLOCK) || defined(UNDER_DEVELOPMENT_REMOTE_UNIT_COMMANDS)
   SERIAL_PORT_CLASS * control_port;
 #endif
@@ -359,7 +353,6 @@ DebugClass debug;
   #define SEI_BUS_COMMAND_TIMEOUT_MS 6000
 #endif
 
-
 #ifdef FEATURE_AUTOPARK
   unsigned long last_activity_time_autopark = 0;
 #endif  
@@ -485,13 +478,6 @@ void loop() {
     service_rotation_indicator_pin();
   #endif // FEATURE_ROTATION_INDICATOR_PIN
 
-  #if defined(FEATURE_PARK)
-    service_park();
-    #if defined(FEATURE_AUTOPARK)
-      service_autopark();
-    #endif
-  #endif // FEATURE_PARK
-
   #ifdef FEATURE_LIMIT_SENSE
     check_limit_sense();
   #endif // FEATURE_LIMIT_SENSE
@@ -562,11 +548,6 @@ void loop() {
     service_a2_encoders();
   #endif //defined(FEATURE_AZ_POSITION_A2_ABSOLUTE_ENCODER) || defined(FEATURE_EL_POSITION_A2_ABSOLUTE_ENCODER)
 
-  #if defined(FEATURE_AUDIBLE_ALERT)
-    audible_alert(AUDIBLE_ALERT_SERVICE);
-  #endif //FEATURE_AUDIBLE_ALERT
-
-
   check_for_reset_flag();
 
   #ifdef OPTION_MORE_SERIAL_CHECKS
@@ -586,39 +567,6 @@ void loop() {
 
 ----------------------------------------------------------------------------------------------------- */
 
-
-#if defined(FEATURE_AUDIBLE_ALERT)
-  void audible_alert(byte how_called){
-
-    static unsigned long alert_start_time = 0;
-
-    switch(how_called){
-      case AUDIBLE_ALERT_SERVICE:
-        if ((alert_start_time) && ((millis() - alert_start_time) > AUDIBLE_ALERT_DURATION_MS)) {
-          if (AUDIBLE_ALERT_TYPE == 1){
-            digitalWriteEnhanced(pin_audible_alert, AUDIBLE_PIN_INACTIVE_STATE);
-          }
-          if (AUDIBLE_ALERT_TYPE == 2){
-            noTone(pin_audible_alert);
-          }
-          alert_start_time = 0;
-        }
-        break;
-      case AUDIBLE_ALERT_ACTIVATE:
-        if (AUDIBLE_ALERT_TYPE == 1){
-          digitalWriteEnhanced(pin_audible_alert, AUDIBLE_PIN_ACTIVE_STATE);
-        }
-        if (AUDIBLE_ALERT_TYPE == 2){
-          tone(pin_audible_alert, AUDIBLE_PIN_TONE_FREQ);
-        }
-        alert_start_time = millis();
-        break;  
-
-
-    }
-
-  }
-#endif //FEATURE_AUDIBLE_ALERT
 
 // --------------------------------------------------------------
 
@@ -2664,43 +2612,6 @@ void check_buttons(){
 
 #endif // FEATURE_ELEVATION_CONTROL
 
-
-#ifdef FEATURE_PARK
-  static byte park_button_pushed = 0;
-  static unsigned long last_time_park_button_pushed = 0;
-
-  if (button_park) {
-    if ((digitalReadEnhanced(button_park) == BUTTON_ACTIVE_STATE)) {
-      park_button_pushed = 1;
-      last_time_park_button_pushed = millis();
-    #ifdef DEBUG_BUTTONS
-    debug.println("check_buttons: button_park pushed");
-    #endif // DEBUG_BUTTONS   
-    } else {
-      if ((park_button_pushed) && ((millis() - last_time_park_button_pushed) >= 250)) {
-        if (park_status != PARK_INITIATED) {
-          #ifdef DEBUG_BUTTONS
-          debug.println("check_buttons: executing park");
-          #endif // DEBUG_BUTTONS
-          initiate_park();
-        } else {
-          #ifdef DEBUG_BUTTONS
-          debug.println("check_buttons: park aborted");
-          #endif // DEBUG_BUTTONS
-          submit_request(AZ, REQUEST_KILL, 0, 72);
-            #ifdef FEATURE_ELEVATION_CONTROL
-          submit_request(EL, REQUEST_KILL, 0, 73);
-            #endif // FEATURE_ELEVATION_CONTROL
-        }
-        park_button_pushed = 0;
-      }
-    }
-
-  }
-
-    #endif /* ifdef FEATURE_PARK */
-
-
   if (button_stop) {
     if ((digitalReadEnhanced(button_stop) == BUTTON_ACTIVE_STATE)) {
       #ifdef DEBUG_BUTTONS
@@ -3098,46 +3009,6 @@ void update_display(){
         row_override[LCD_STATUS_ROW] = 1;
       }
 
-      #if defined(FEATURE_PARK)
-        static byte last_park_status = NOT_PARKED;
-        static unsigned long last_park_message_update_time = 0;
-        static byte park_message_in_effect = 0;
-        if (park_status != last_park_status){
-          switch(park_status){
-            case PARKED: 
-              k3ngdisplay.print_center_fixed_field_size(PARKED_STRING,LCD_STATUS_ROW-1,LCD_STATUS_FIELD_SIZE);
-              row_override[LCD_STATUS_ROW] = 1;
-              park_message_in_effect = 1;
-              break;              
-            case PARK_INITIATED:
-              k3ngdisplay.print_center_fixed_field_size(PARKING_STRING,LCD_STATUS_ROW-1,LCD_STATUS_FIELD_SIZE);
-              row_override[LCD_STATUS_ROW] = 1;
-              park_message_in_effect = 1;
-              break;
-            case NOT_PARKED: 
-              park_message_in_effect = 0;
-              break;
-          }
-          last_park_status = park_status;
-          last_park_message_update_time = millis();
-        }
-       
-        if (park_message_in_effect){
-          if ((millis() - last_park_message_update_time) > PARKING_STATUS_DISPLAY_TIME_MS){
-            park_message_in_effect = 0;
-          } else {
-            row_override[LCD_STATUS_ROW] = 1;
-            switch(park_status){
-              case PARKED: 
-                k3ngdisplay.print_center_fixed_field_size(PARKED_STRING,LCD_STATUS_ROW-1,LCD_STATUS_FIELD_SIZE);                
-                break;              
-              case PARK_INITIATED:
-                k3ngdisplay.print_center_fixed_field_size(PARKING_STRING,LCD_STATUS_ROW-1,LCD_STATUS_FIELD_SIZE);
-                break;
-            }
-          }
-        }
-      #endif // FEATURE_PARK
 
       #ifdef FEATURE_AZ_PRESET_ENCODER 
         float target = 0; 
@@ -3222,46 +3093,6 @@ void update_display(){
         k3ngdisplay.print_center_fixed_field_size(workstring,LCD_STATUS_ROW-1,LCD_STATUS_FIELD_SIZE);
       } //<added
 
-      #if defined(FEATURE_PARK)
-        static byte last_park_status = NOT_PARKED;
-        static unsigned long last_park_message_update_time = 0;
-        static byte park_message_in_effect = 0;
-        if (park_status != last_park_status){
-          switch(park_status){
-            case PARKED: 
-              k3ngdisplay.print_center_fixed_field_size(PARKED_STRING,LCD_STATUS_ROW-1,LCD_STATUS_FIELD_SIZE);
-              row_override[LCD_STATUS_ROW] = 1;
-              park_message_in_effect = 1;
-              break;              
-            case PARK_INITIATED:
-              k3ngdisplay.print_center_fixed_field_size(PARKING_STRING,LCD_STATUS_ROW-1,LCD_STATUS_FIELD_SIZE);
-              row_override[LCD_STATUS_ROW] = 1;
-              park_message_in_effect = 1;
-              break;
-            case NOT_PARKED: 
-              park_message_in_effect = 0;
-              break;
-          }
-          last_park_status = park_status;
-          last_park_message_update_time = millis();
-        }
-       
-        if (park_message_in_effect){
-          if ((millis() - last_park_message_update_time) > PARKING_STATUS_DISPLAY_TIME_MS){
-            park_message_in_effect = 0;
-          } else {
-            row_override[LCD_STATUS_ROW] = 1;
-            switch(park_status){
-              case PARKED: 
-                k3ngdisplay.print_center_fixed_field_size(PARKED_STRING,LCD_STATUS_ROW-1,LCD_STATUS_FIELD_SIZE);                
-                break;              
-              case PARK_INITIATED:
-                k3ngdisplay.print_center_fixed_field_size(PARKING_STRING,LCD_STATUS_ROW-1,LCD_STATUS_FIELD_SIZE);
-                break;
-            }
-          }
-        }
-      #endif // FEATURE_PARK
 
       #if defined(FEATURE_AZ_PRESET_ENCODER) && !defined(FEATURE_EL_PRESET_ENCODER)
         float target = 0; 
@@ -3700,7 +3531,7 @@ void update_display(){
 
 // TODO: develop status row with HH:MM time, rotation status, direction, and GPS status?
 
-// TODO: FEATURE_PARK {done, need to test}, FEATURE_AZ_PRESET_ENCODER and FEATURE_EL_PRESET_ENCODER in status widget {done, need to test}
+// TODO: FEATURE_AZ_PRESET_ENCODER and FEATURE_EL_PRESET_ENCODER in status widget {done, need to test}
   
 
 //zzzzzz
@@ -4729,14 +4560,6 @@ void output_debug(){
         #ifdef FEATURE_DCU_1_EMULATION
           debug.print("DCU-1");
         #endif // FEATURE_DCU_1_EMULATION  
-
-        #ifdef FEATURE_PARK
-          switch (park_status) {
-            case NOT_PARKED: debug.print("\tNOT_PARKED"); break;
-            case PARK_INITIATED: debug.print("\tPARK_INITIATED"); break;
-            case PARKED: debug.print("\tPARKED"); break;
-          }
-        #endif // FEATURE_PARK
 
         debug.println("");
 
@@ -6480,13 +6303,6 @@ void initialize_pins(){
   }
   #endif // FEATURE_EL_POSITION_PULSE_INPUT
 
-  #ifdef FEATURE_PARK
-  if (button_park) {
-    pinModeEnhanced(button_park, INPUT);
-    digitalWriteEnhanced(button_park, HIGH);
-  }
-  #endif // FEATURE_PARK
-
   #ifdef FEATURE_ROTATION_INDICATOR_PIN
   if (rotation_indication_pin) {
     pinModeEnhanced(rotation_indication_pin, OUTPUT);
@@ -6494,26 +6310,6 @@ void initialize_pins(){
   }
   #endif // FEATURE_ROTATION_INDICATOR_PIN
 
-  #ifdef FEATURE_PARK
-  if (park_in_progress_pin) {
-    pinModeEnhanced(park_in_progress_pin, OUTPUT);
-    digitalWriteEnhanced(park_in_progress_pin, LOW);
-  }
-  if (parked_pin) {
-    pinModeEnhanced(parked_pin, OUTPUT);
-    digitalWriteEnhanced(parked_pin, LOW);
-  }
-    #ifdef FEATURE_AUTOPARK
-      if (pin_autopark_disable) {
-        pinModeEnhanced(pin_autopark_disable, INPUT);
-        digitalWriteEnhanced(pin_autopark_disable, HIGH);
-      }  
-      if (pin_autopark_timer_reset) {
-        pinModeEnhanced(pin_autopark_timer_reset, INPUT);
-        digitalWriteEnhanced(pin_autopark_timer_reset, HIGH);
-      }  
-    #endif //FEATURE_AUTOPARK
-  #endif // FEATURE_PARK
 
   if (blink_led) {
     pinModeEnhanced(blink_led, OUTPUT);
@@ -6630,13 +6426,7 @@ void initialize_pins(){
     digitalWriteEnhanced(pin_moon_pushbutton_calibration, HIGH);
   #endif //FEATURE_MOON_PUSHBUTTON_AZ_EL_CALIBRATION
 
-  #if defined(FEATURE_AUDIBLE_ALERT)
-    pinModeEnhanced(pin_audible_alert, OUTPUT);
-    digitalWriteEnhanced(pin_audible_alert, AUDIBLE_PIN_INACTIVE_STATE);
-    if (AUDIBLE_ALERT_AT_STARTUP){
-      audible_alert(AUDIBLE_ALERT_ACTIVATE);
-    }
-  #endif //FEATURE_AUDIBLE_ALERT
+
 
 } /* initialize_pins */
 
@@ -6889,10 +6679,6 @@ void submit_request(byte axis, byte request, int parm, byte called_by){
     debug.print(" ");
   #endif // DEBUG_SUBMIT_REQUEST
 
-  #ifdef FEATURE_PARK
-    park_status = NOT_PARKED;
-  #endif // FEATURE_PARK
-
   if (axis == AZ) {
     #ifdef DEBUG_SUBMIT_REQUEST
       debug.print("AZ "); 
@@ -7091,12 +6877,6 @@ void service_rotation(){
         az_state = IDLE;
         az_request_queue_state = NONE;
 
-        #if defined(FEATURE_AUDIBLE_ALERT)
-          if (AUDIBLE_ALERT_AT_AZ_TARGET){
-            audible_alert(AUDIBLE_ALERT_ACTIVATE);
-          }
-        #endif
-
       }
     }
 
@@ -7177,25 +6957,6 @@ void service_rotation(){
           #ifdef DEBUG_SERVICE_ROTATION
             debug.print("service_rotation: IDLE");
           #endif // DEBUG_SERVICE_ROTATION
-
-          #if defined(FEATURE_PARK) && !defined(FEATURE_ELEVATION_CONTROL)
-            if (park_status == PARK_INITIATED) {
-              park_status = PARKED;
-            }
-          #endif // defined(FEATURE_PARK) && !defined(FEATURE_ELEVATION_CONTROL)
-
-          #if defined(FEATURE_PARK) && defined(FEATURE_ELEVATION_CONTROL)
-            if ((park_status == PARK_INITIATED) && (el_state == IDLE)) {
-              park_status = PARKED;
-            }
-          #endif // defined(FEATURE_PARK) && !defined(FEATURE_ELEVATION_CONTROL)
-
-          #if defined(FEATURE_AUDIBLE_ALERT)
-            if (AUDIBLE_ALERT_AT_AZ_TARGET){
-              audible_alert(AUDIBLE_ALERT_ACTIVATE);
-            }
-          #endif
-
         }
       }
     } else {
@@ -7210,25 +6971,6 @@ void service_rotation(){
           #ifdef DEBUG_SERVICE_ROTATION
             debug.print("service_rotation: IDLE");
           #endif // DEBUG_SERVICE_ROTATION
-
-          #if defined(FEATURE_PARK) && !defined(FEATURE_ELEVATION_CONTROL)
-            if (park_status == PARK_INITIATED) {
-              park_status = PARKED;
-            }
-          #endif // defined(FEATURE_PARK) && !defined(FEATURE_ELEVATION_CONTROL)
-
-          #if defined(FEATURE_PARK) && defined(FEATURE_ELEVATION_CONTROL)
-            if ((park_status == PARK_INITIATED) && (el_state == IDLE)) {
-              park_status = PARKED;
-            }
-          #endif // defined(FEATURE_PARK) && !defined(FEATURE_ELEVATION_CONTROL)
-
-          #if defined(FEATURE_AUDIBLE_ALERT)
-            if (AUDIBLE_ALERT_AT_AZ_TARGET){
-              audible_alert(AUDIBLE_ALERT_ACTIVATE);
-            }
-          #endif
-
         }
       }
     }
@@ -7376,12 +7118,6 @@ void service_rotation(){
         el_state = IDLE;
         el_request_queue_state = NONE;
 
-        #if defined(FEATURE_AUDIBLE_ALERT)
-          if (AUDIBLE_ALERT_AT_EL_TARGET){
-            audible_alert(AUDIBLE_ALERT_ACTIVATE);
-          }
-        #endif
-
       }
     }
 
@@ -7465,19 +7201,6 @@ void service_rotation(){
             #ifdef DEBUG_SERVICE_ROTATION
           debug.print("service_rotation: IDLE");
           #endif // DEBUG_SERVICE_ROTATION
-
-          #if defined(FEATURE_AUDIBLE_ALERT)
-            if (AUDIBLE_ALERT_AT_EL_TARGET){
-              audible_alert(AUDIBLE_ALERT_ACTIVATE);
-            }
-          #endif
-
-          #if defined(FEATURE_PARK)
-            if ((park_status == PARK_INITIATED) && (az_state == IDLE)) {
-              park_status = PARKED;
-            }
-          #endif // defined(FEATURE_PARK)
-
         }
       }
     } else {
@@ -7495,18 +7218,6 @@ void service_rotation(){
           #ifdef DEBUG_SERVICE_ROTATION
           debug.print("service_rotation: IDLE");
           #endif // DEBUG_SERVICE_ROTATION
-
-          #if defined(FEATURE_AUDIBLE_ALERT)
-            if (AUDIBLE_ALERT_AT_EL_TARGET){
-              audible_alert(AUDIBLE_ALERT_ACTIVATE);
-            }
-          #endif
-
-          #if defined(FEATURE_PARK)
-            if ((park_status == PARK_INITIATED) && (az_state == IDLE)) {
-              park_status = PARKED;
-            }
-          #endif // defined(FEATURE_PARK)
         }
       }
     }
@@ -7561,9 +7272,6 @@ void service_request_queue(){
         debug.print("REQUEST_STOP");
         #endif // DEBUG_SERVICE_REQUEST_QUEUE
         stop_all_tracking();
-        #ifdef FEATURE_PARK
-          deactivate_park();
-        #endif // FEATURE_PARK
         if (az_state != IDLE) {
           if (az_slowdown_active) {
             if ((az_state == TIMED_SLOW_DOWN_CW) || (az_state == TIMED_SLOW_DOWN_CCW) || (az_state == SLOW_DOWN_CW) || (az_state == SLOW_DOWN_CCW)) {  // if we're already in timed slow down and we get another stop, do a hard stop
@@ -7816,9 +7524,6 @@ void service_request_queue(){
         debug.print("REQUEST_CW");
         #endif // DEBUG_SERVICE_REQUEST_QUEUE
         stop_all_tracking();
-        #ifdef FEATURE_PARK
-          deactivate_park();
-        #endif // FEATURE_PARK
         if (((az_state == SLOW_START_CCW) || (az_state == NORMAL_CCW) || (az_state == SLOW_DOWN_CCW) || (az_state == TIMED_SLOW_DOWN_CCW)) && (az_slowstart_active)) {
           az_state = INITIALIZE_DIR_CHANGE_TO_CW;
           #ifdef DEBUG_SERVICE_REQUEST_QUEUE
@@ -7848,9 +7553,6 @@ void service_request_queue(){
         debug.print("REQUEST_CCW");
         #endif // DEBUG_SERVICE_REQUEST_QUEUE
         stop_all_tracking();
-        #ifdef FEATURE_PARK
-          deactivate_park();
-        #endif // FEATURE_PARK
         if (((az_state == SLOW_START_CW) || (az_state == NORMAL_CW) || (az_state == SLOW_DOWN_CW) || (az_state == TIMED_SLOW_DOWN_CW)) && (az_slowstart_active)) {
           az_state = INITIALIZE_DIR_CHANGE_TO_CCW;
           #ifdef DEBUG_SERVICE_REQUEST_QUEUE
@@ -7878,9 +7580,6 @@ void service_request_queue(){
         debug.print("REQUEST_KILL");
         #endif // DEBUG_SERVICE_REQUEST_QUEUE
         stop_all_tracking();
-        #ifdef FEATURE_PARK
-          deactivate_park();
-        #endif // FEATURE_PARK
         rotator(DEACTIVATE, CW);
         rotator(DEACTIVATE, CCW);
         az_state = IDLE;
@@ -8002,9 +7701,6 @@ void service_request_queue(){
         }
         #endif // DEBUG_SERVICE_REQUEST_QUEUE
         stop_all_tracking();
-        #ifdef FEATURE_PARK
-          deactivate_park();
-        #endif // FEATURE_PARK
         if (((el_state == SLOW_START_DOWN) || (el_state == NORMAL_DOWN) || (el_state == SLOW_DOWN_DOWN) || (el_state == TIMED_SLOW_DOWN_DOWN)) && (el_slowstart_active)) {
           el_state = INITIALIZE_DIR_CHANGE_TO_UP;
           #ifdef DEBUG_SERVICE_REQUEST_QUEUE
@@ -8035,9 +7731,6 @@ void service_request_queue(){
         }
         #endif // DEBUG_SERVICE_REQUEST_QUEUE
         stop_all_tracking();
-        #ifdef FEATURE_PARK
-          deactivate_park();
-        #endif // FEATURE_PARK
         if (((el_state == SLOW_START_UP) || (el_state == NORMAL_UP) || (el_state == SLOW_DOWN_UP) || (el_state == TIMED_SLOW_DOWN_UP)) && (el_slowstart_active)) {
           el_state = INITIALIZE_DIR_CHANGE_TO_DOWN;
           #ifdef DEBUG_SERVICE_REQUEST_QUEUE
@@ -8068,9 +7761,6 @@ void service_request_queue(){
         }
         #endif // DEBUG_SERVICE_REQUEST_QUEUE
         stop_all_tracking();
-        #ifdef FEATURE_PARK
-          deactivate_park();
-        #endif // FEATURE_PARK
         if (el_state != IDLE) {
           if (el_slowdown_active) {
             if ((el_state == TIMED_SLOW_DOWN_UP) || (el_state == TIMED_SLOW_DOWN_DOWN) || (el_state == SLOW_DOWN_UP) || (el_state == SLOW_DOWN_DOWN)) {  // if we're already in timed slow down and we get another stop, do a hard stop
@@ -8112,9 +7802,6 @@ void service_request_queue(){
         }
         #endif // DEBUG_SERVICE_REQUEST_QUEUE
         stop_all_tracking();
-        #ifdef FEATURE_PARK
-          deactivate_park();
-        #endif // FEATURE_PARK
         rotator(DEACTIVATE, UP);
         rotator(DEACTIVATE, DOWN);
         el_state = IDLE;
@@ -9010,115 +8697,6 @@ void service_rotation_indicator_pin(){
 
 } /* service_rotation_indicator_pin */
       #endif // FEATURE_ROTATION_INDICATOR_PIN
-// --------------------------------------------------------------
-#ifdef FEATURE_PARK
-void deactivate_park(){
-
-  park_status = NOT_PARKED;
-  park_serial_initiated = 0;
-}
-#endif // FEATURE_PARK
-
-// --------------------------------------------------------------
-#ifdef FEATURE_PARK
-void initiate_park(){
-
-  #ifdef DEBUG_PARK
-    debug.print(F("initiate_park: park initiated\n"));
-  #endif // DEBUG_PARK
-
-  byte park_initiated = 0;
-
-  stop_all_tracking();
-
-  if (abs(raw_azimuth - PARK_AZIMUTH) > (AZIMUTH_TOLERANCE * HEADING_MULTIPLIER)) {
-    submit_request(AZ, REQUEST_AZIMUTH_RAW, PARK_AZIMUTH, 7);
-    park_initiated = 1;
-  }
-
-  #ifdef FEATURE_ELEVATION_CONTROL
-    if (abs(elevation - PARK_ELEVATION) > (ELEVATION_TOLERANCE * HEADING_MULTIPLIER)) {
-      submit_request(EL, REQUEST_ELEVATION, PARK_ELEVATION, 8);
-      park_initiated = 1;
-    }
-  #endif // FEATURE_ELEVATION_CONTROL
-
-  if (park_initiated) {
-    park_status = PARK_INITIATED;
-  } else {
-    park_status = PARKED;
-  }
-
-} /* initiate_park */
-  #endif // FEATURE_PARK
-
-// --------------------------------------------------------------
-#ifdef FEATURE_PARK
-void service_park(){
-
-  static byte last_park_status = NOT_PARKED;
-
-  if (park_status == PARKED) {
-    if (abs(raw_azimuth - PARK_AZIMUTH) > (AZIMUTH_TOLERANCE * HEADING_MULTIPLIER)) {
-      park_status = NOT_PARKED;
-    }
-    #ifdef FEATURE_ELEVATION_CONTROL
-    if (abs(elevation - PARK_ELEVATION) > (ELEVATION_TOLERANCE * HEADING_MULTIPLIER)) {
-      park_status = NOT_PARKED;
-    }
-    #endif // FEATURE_ELEVATION_CONTROL
-  }
-
-
-  if (park_status != last_park_status) {
-    switch (park_status) {
-      case NOT_PARKED:
-        if (park_in_progress_pin) {
-          digitalWriteEnhanced(park_in_progress_pin, LOW);
-        }
-        if (parked_pin) {
-          digitalWriteEnhanced(parked_pin, LOW);
-        }
-        #ifdef DEBUG_PARK
-          debug.print(F("service_park: park_in_progress_pin: LOW  parked_pin: LOW\n"));
-        #endif // DEBUG_PARK
-        break;
-      case PARK_INITIATED:
-        if (park_in_progress_pin) {
-          digitalWriteEnhanced(park_in_progress_pin, HIGH);
-        }
-        if (parked_pin) {
-          digitalWriteEnhanced(parked_pin, LOW);
-        }
-        #ifdef DEBUG_PARK
-          debug.print(F("service_park: park_in_progress_pin: HIGH  parked_pin: LOW\n"));
-        #endif // DEBUG_PARK
-        break;
-      case PARKED:
-        if (park_in_progress_pin) {
-          digitalWriteEnhanced(park_in_progress_pin, LOW);
-        }
-        if (parked_pin) {
-          digitalWriteEnhanced(parked_pin, HIGH);
-        }
-        if (park_serial_initiated) {
-        #if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_EASYCOM_EMULATION)
-          control_port->println(F("Parked."));
-        #endif
-          park_serial_initiated = 0;
-        }
-        #ifdef DEBUG_PARK
-          debug.print(F("service_park: park_in_progress_pin: LOW  parked_pin: HIGH\n"));
-        #endif // DEBUG_PARK
-        break;
-    } /* switch */
-  }
-
-  last_park_status = park_status;
-
-} /* service_park */
-#endif // FEATURE_PARK
-
 // --------------------------------------------------------------
 
 #ifdef FEATURE_LIMIT_SENSE
@@ -10869,14 +10447,6 @@ byte process_backslash_command(byte input_buffer[], int input_buffer_index, byte
       break;
       #endif // defined(FEATURE_SUN_TRACKING) || defined(FEATURE_MOON_TRACKING)
 
-    #ifdef FEATURE_PARK
-    case 'P':    // Park
-      strcpy(return_string, "Parking...");
-      initiate_park();
-      park_serial_initiated = 1;
-      break;
-      #endif // FEATURE_PARK
-
     #ifdef FEATURE_ANCILLARY_PIN_CONTROL
     case 'N':      // \Nxx - turn pin on; xx = pin number
       if ((((input_buffer[2] > 47) && (input_buffer[2] < 58)) || (toupper(input_buffer[2]) == 'A')) && (input_buffer[3] > 47) && (input_buffer[3] < 58) && (input_buffer_index == 4)) {
@@ -12203,9 +11773,6 @@ void process_yaesu_command(byte * yaesu_command_buffer, int yaesu_command_buffer
         #endif // DEBUG_PROCESS_YAESU
         submit_request(AZ, REQUEST_CCW, 0, 21);
         //strcpy(return_string,"\n");
-        #ifdef FEATURE_PARK
-        deactivate_park();
-        #endif // FEATURE_PARK
         break;
         
       #ifdef FEATURE_AZ_POSITION_POTENTIOMETER
@@ -12251,9 +11818,6 @@ void process_yaesu_command(byte * yaesu_command_buffer, int yaesu_command_buffer
         #endif // DEBUG_PROCESS_YAESU
         submit_request(AZ, REQUEST_CW, 0, 22);
         strcpy(return_string,"\n");
-        #ifdef FEATURE_PARK
-        deactivate_park();
-        #endif // FEATURE_PARK
         break;
         
       case 'A':  // A - CW/CCW rotation stop
@@ -12264,9 +11828,6 @@ void process_yaesu_command(byte * yaesu_command_buffer, int yaesu_command_buffer
         #endif // DEBUG_PROCESS_YAESU
         submit_request(AZ, REQUEST_STOP, 0, 23);
         //strcpy(return_string,"\n");
-        #ifdef FEATURE_PARK
-        deactivate_park();
-        #endif // FEATURE_PARK
         break;
         
       case 'S':         // S - all stop
@@ -12283,9 +11844,6 @@ void process_yaesu_command(byte * yaesu_command_buffer, int yaesu_command_buffer
         clear_timed_buffer();
         #endif // FEATURE_TIMED_BUFFER
         //strcpy(return_string,"");
-        #ifdef FEATURE_PARK
-        deactivate_park();
-        #endif // FEATURE_PARK
         break;
         
       case 'M': // M - auto azimuth rotation
@@ -12294,9 +11852,6 @@ void process_yaesu_command(byte * yaesu_command_buffer, int yaesu_command_buffer
           debug.print("yaesu_serial_command: M\n");
         }
         #endif // DEBUG_PROCESS_YAESU
-        #ifdef FEATURE_PARK
-        deactivate_park();
-        #endif // FEATURE_PARK
   
         if (yaesu_command_buffer_index > 4) {  // if there are more than 4 characters in the command buffer, we got a timed interval command
           #ifdef FEATURE_TIMED_BUFFER
@@ -12353,9 +11908,7 @@ void process_yaesu_command(byte * yaesu_command_buffer, int yaesu_command_buffer
           debug.print("yaesu_serial_command: N\n");
         }
         #endif // DEBUG_PROCESS_YAESU
-        #ifdef FEATURE_PARK
-        deactivate_park();
-        #endif // FEATURE_PARK
+
         sprintf(return_string,"%d",timed_buffer_number_entries_loaded);
         break;
         #endif // FEATURE_TIMED_BUFFER
@@ -12363,9 +11916,6 @@ void process_yaesu_command(byte * yaesu_command_buffer, int yaesu_command_buffer
       #ifdef FEATURE_TIMED_BUFFER
       case 'T': // T - initiate timed tracking
         initiate_timed_buffer(source_port);
-        #ifdef FEATURE_PARK
-        deactivate_park();
-        #endif // FEATURE_PARK
         break;           
         #endif // FEATURE_TIMED_BUFFER
         
@@ -12429,9 +11979,7 @@ void process_yaesu_command(byte * yaesu_command_buffer, int yaesu_command_buffer
           debug.print("yaesu_serial_command: U\n");
         }
         #endif // DEBUG_PROCESS_YAESU
-        #ifdef FEATURE_PARK
-        deactivate_park();
-        #endif // FEATURE_PARK
+
         submit_request(EL, REQUEST_UP, 0, 29);
         //strcpy(return_string,"\n");
         break;
@@ -12442,9 +11990,7 @@ void process_yaesu_command(byte * yaesu_command_buffer, int yaesu_command_buffer
           debug.print("yaesu_serial_command: D\n");
         }
         #endif // DEBUG_PROCESS_YAESU
-        #ifdef FEATURE_PARK
-        deactivate_park();
-        #endif // FEATURE_PARK
+
         submit_request(EL, REQUEST_DOWN, 0, 30);
         //strcpy(return_string,"\n");
         break;
@@ -12455,9 +12001,7 @@ void process_yaesu_command(byte * yaesu_command_buffer, int yaesu_command_buffer
           debug.print("yaesu_serial_command: E\n");
         }
         #endif // DEBUG_PROCESS_YAESU
-        #ifdef FEATURE_PARK
-        deactivate_park();
-        #endif // FEATURE_PARK
+
         submit_request(EL, REQUEST_STOP, 0, 31);
         //strcpy(return_string,"\n");
         break;
@@ -12490,9 +12034,6 @@ void process_yaesu_command(byte * yaesu_command_buffer, int yaesu_command_buffer
           debug.print("yaesu_serial_command: W\n");
         }
         #endif // DEBUG_PROCESS_YAESU
-        #ifdef FEATURE_PARK
-        deactivate_park();
-        #endif // FEATURE_PARK
         
         
         // parse out W command
