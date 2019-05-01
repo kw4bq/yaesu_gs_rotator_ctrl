@@ -22,91 +22,37 @@ void loop() {
 
   read_headings();
 
-  #ifdef FEATURE_LCD_DISPLAY
   update_display();
-  #endif
 
-  #ifdef DEBUG_DUMP
   output_debug();
-  #endif //DEBUG_DUMP
 
   read_headings();
 
   check_for_dirty_configuration();
 
-  #ifdef FEATURE_JOYSTICK_CONTROL
-  check_joystick();
-  #endif // FEATURE_JOYSTICK_CONTROL
-
-  #ifdef FEATURE_ROTATION_INDICATOR_PIN
-  service_rotation_indicator_pin();
-  #endif // FEATURE_ROTATION_INDICATOR_PIN
-
-  #ifdef FEATURE_LIMIT_SENSE
-  check_limit_sense();
-  #endif // FEATURE_LIMIT_SENSE
-
-  #ifdef FEATURE_MOON_TRACKING
-  service_moon_tracking();
-  #endif // FEATURE_MOON_TRACKING
-
-  #ifdef FEATURE_SUN_TRACKING
-  service_sun_tracking();
-  #endif // FEATURE_SUN_TRACKING
-
-  #ifdef FEATURE_GPS
-  service_gps();
-  #endif // FEATURE_GPS
-
   read_headings();
 
-  #ifdef FEATURE_RTC
-  service_rtc();
-  #endif // FEATURE_RTC
-
-  #ifdef FEATURE_POWER_SWITCH
-  service_power_switch();
-  #endif //FEATURE_POWER_SWITCH
-
   service_blink_led();
-
-  #ifdef FEATURE_ANALOG_OUTPUT_PINS
-  service_analog_output_pins();
-  #endif //FEATURE_ANALOG_OUTPUT_PINS
-
-  #if defined(FEATURE_SUN_PUSHBUTTON_AZ_EL_CALIBRATION) && defined(FEATURE_SUN_TRACKING)
-  check_sun_pushbutton_calibration();
-  #endif //defined(FEATURE_SUN_PUSHBUTTON_AZ_EL_CALIBRATION) && defined(FEATURE_SUN_TRACKING)
-
-  #if defined(FEATURE_MOON_PUSHBUTTON_AZ_EL_CALIBRATION) && defined(FEATURE_MOON_TRACKING)
-  check_moon_pushbutton_calibration();
-  #endif //defined(FEATURE_MOON_PUSHBUTTON_AZ_EL_CALIBRATION) && defined(FEATURE_MOON_TRACKING)
-
-  #if defined(FEATURE_AZ_POSITION_A2_ABSOLUTE_ENCODER) || defined(FEATURE_EL_POSITION_A2_ABSOLUTE_ENCODER)
-  service_a2_encoders();
-  #endif //defined(FEATURE_AZ_POSITION_A2_ABSOLUTE_ENCODER) || defined(FEATURE_EL_POSITION_A2_ABSOLUTE_ENCODER)
 
   check_for_reset_flag();
 
 } // loop
 
 void read_headings() {
+
   #ifdef DEBUG_LOOP
   debug.print("read_headings()\n");
   #endif // DEBUG_LOOP
 
   read_azimuth(0);
-
-  #ifdef FEATURE_ELEVATION_CONTROL
   read_elevation(0);
-  #endif
+
 } // read_headings
 
 void service_blink_led() {
   #ifdef blink_led
   static unsigned long last_blink_led_transition = 0;
   static byte blink_led_status = 0;
-
 
   if (((millis() - last_blink_led_transition) >= 1000) && (blink_led != 0)) {
     if (blink_led_status) {
@@ -384,7 +330,6 @@ void check_overlap() {
 } // check_overlap
 
 void clear_command_buffer() {
-
   control_port_buffer_index = 0;
   control_port_buffer[0] = 0;
 } // clear_command_buffer
@@ -400,196 +345,62 @@ void check_serial() {
   float tempfloat = 0;
   char return_string[100] = "";
 
-  #if defined(FEATURE_GPS)
-  static byte gps_port_read = 0;
-  static byte gps_port_read_data_sent = 0;
-  static byte gps_missing_terminator_flag = 0;
-  #endif
+  long place_multiplier = 0;
+  byte decimalplace = 0;
 
-  #ifdef FEATURE_CLOCK
-  int temp_year = 0;
-  byte temp_month = 0;
-  byte temp_day = 0;
-  byte temp_minute = 0;
-  byte temp_hour = 0;
-  #endif // FEATURE_CLOCK
+  #if defined(CONTROL_PROTOCOL_EMULATION)
 
-  #if defined(FEATURE_MOON_TRACKING) || defined(FEATURE_SUN_TRACKING)
-  char grid[10] = "";
-  byte hit_error = 0;
-  #endif // defined(FEATURE_MOON_TRACKING) || defined(FEATURE_SUN_TRACKING)
-
-  #ifdef FEATURE_GPS
-
-  if (gps_missing_terminator_flag){
-    gps.encode('$');
-    gps_missing_terminator_flag = 0;
-    gps_port_read_data_sent = 1;
-  } else {
-
-    #if defined(OPTION_DONT_READ_GPS_PORT_AS_OFTEN)
-    if (gps_port->available()) {
-      gps_port_read = gps_port->read();
-      #ifdef GPS_MIRROR_PORT
-      gps_mirror_port->write(gps_port_read);
-      #endif //GPS_MIRROR_PORT
-      #if defined(DEBUG_GPS_SERIAL)
-      debug.write(gps_port_read);
-      if (gps_port_read == 10){debug.write(13);}
-      #endif //DEBUG_GPS_SERIAL
-      #if defined(DEBUG_GPS_SERIAL) || defined(OPTION_GPS_DO_PORT_FLUSHES)
-      port_flush();
-      #endif
-
-      #if defined(OPTION_GPS_EXCLUDE_MISSING_LF_CR_HANDLING)
-      if (gps.encode(gps_port_read)) {
-        gps_data_available = 1;
-
-        #ifdef DEBUG_GPS
-        unsigned long gps_chars = 0;
-        unsigned short gps_good_sentences = 0;
-        unsigned short gps_failed_checksum = 0;
-        char gps_temp_string[12] = "";
-        float gps_lat_temp = 0;
-        float gps_long_temp = 0;
-
-        debug.print("\tGPS: satellites:");
-        gps_chars = gps.satellites();
-        //if (gps_chars == 255){gps_chars = 0;}
-        dtostrf(gps_chars,0,0,gps_temp_string);
-        debug.print(gps_temp_string);
-        unsigned long gps_fix_age_temp = 0;
-        gps.f_get_position(&gps_lat_temp,&gps_long_temp,&gps_fix_age_temp);
-        debug.print("  lat:");
-        debug.print(gps_lat_temp,4);
-        debug.print("  long:");
-        debug.print(gps_long_temp,4);
-        debug.print("  altitude(m):");
-        debug.print(gps.altitude()/100,0);
-        debug.print("  fix_age_mS:");
-        dtostrf(gps_fix_age_temp,0,0,gps_temp_string);
-        debug.print(gps_temp_string);
-        gps.stats(&gps_chars,&gps_good_sentences,&gps_failed_checksum);
-        debug.print("  data_chars:");
-        dtostrf(gps_chars,0,0,gps_temp_string);
-        debug.print(gps_temp_string);
-        debug.print("  good_sentences:");
-        dtostrf(gps_good_sentences,0,0,gps_temp_string);
-        debug.print(gps_temp_string);
-        debug.print("  failed_checksum:");
-        dtostrf(gps_failed_checksum,0,0,gps_temp_string);
-        debug.print(gps_temp_string);
-        debug.println("");
-        #endif //FEATURE_GPS
-
-
-      }
-      #else
-      if ((gps_port_read == '$') && (gps_port_read_data_sent)){ // handle missing LF/CR
-        if (gps.encode('\r')) {
-          gps_data_available = 1;
-          gps_missing_terminator_flag = 1;
-        } else {
-          gps.encode(gps_port_read);
-        }
-      } else {
-        if (gps.encode(gps_port_read)) {
-          gps_data_available = 1;
-          gps_port_read_data_sent = 0;
-
-          #ifdef DEBUG_GPS
-          unsigned long gps_chars = 0;
-          unsigned short gps_good_sentences = 0;
-          unsigned short gps_failed_checksum = 0;
-          char gps_temp_string[12] = "";
-          float gps_lat_temp = 0;
-          float gps_long_temp = 0;
-
-          debug.print("\tGPS: satellites:");
-          gps_chars = gps.satellites();
-          //if (gps_chars == 255){gps_chars = 0;}
-          dtostrf(gps_chars,0,0,gps_temp_string);
-          debug.print(gps_temp_string);
-          unsigned long gps_fix_age_temp = 0;
-          gps.f_get_position(&gps_lat_temp,&gps_long_temp,&gps_fix_age_temp);
-          debug.print("  lat:");
-          debug.print(gps_lat_temp,4);
-          debug.print("  long:");
-          debug.print(gps_long_temp,4);
-          debug.print("  fix_age_mS:");
-          dtostrf(gps_fix_age_temp,0,0,gps_temp_string);
-          debug.print(gps_temp_string);
-          gps.stats(&gps_chars,&gps_good_sentences,&gps_failed_checksum);
-          debug.print("  data_chars:");
-          dtostrf(gps_chars,0,0,gps_temp_string);
-          debug.print(gps_temp_string);
-          debug.print("  good_sentences:");
-          dtostrf(gps_good_sentences,0,0,gps_temp_string);
-          debug.print(gps_temp_string);
-          debug.print("  failed_checksum:");
-          dtostrf(gps_failed_checksum,0,0,gps_temp_string);
-          debug.print(gps_temp_string);
-          debug.println("");
-          #endif //FEATURE_GPS
-
-
-        } else {
-          gps_port_read_data_sent = 1;
-        }
-      }
-      #endif  //  OPTION_GPS_EXCLUDE_MISSING_LF_CR_HANDLING
-    }
-    #else //OPTION_DONT_READ_GPS_PORT_AS_OFTEN
-    while ((gps_port->available()) /*&& (!gps_data_available)*/) {
-      gps_port_read = gps_port->read();
-      #ifdef GPS_MIRROR_PORT
-      gps_mirror_port->write(gps_port_read);
-      #endif //GPS_MIRROR_PORT
-      #if defined(DEBUG_GPS_SERIAL)
-      debug.write(gps_port_read);
-      if (gps_port_read == 10){debug.write(13);}
-      #endif //DEBUG_GPS_SERIAL
-      #if defined(DEBUG_GPS_SERIAL) || defined(OPTION_GPS_DO_PORT_FLUSHES)
-      port_flush();
-      #endif
-      #if defined(OPTION_GPS_EXCLUDE_MISSING_LF_CR_HANDLING)
-      if (gps.encode(gps_port_read)) {
-        gps_data_available = 1;
-      }
-      #else
-      if ((gps_port_read == '$') && (gps_port_read_data_sent)){ // handle missing LF/CR
-        if (gps.encode('\r')) {
-          gps_data_available = 1;
-          gps_missing_terminator_flag = 1;
-        } else {
-          gps.encode(gps_port_read);
-        }
-      } else {
-        if (gps.encode(gps_port_read)) {
-          gps_data_available = 1;
-          gps_port_read_data_sent = 0;
-        } else {
-          gps_port_read_data_sent = 1;
-        }
-      }
-      #endif  //  OPTION_GPS_EXCLUDE_MISSING_LF_CR_HANDLING
-
-    }
-    #endif //OPTION_DONT_READ_GPS_PORT_AS_OFTEN
-
-  } // if (gps_missing_terminator_flag)
-
-  #endif // FEATURE_GPS
-
-  #if defined(GPS_MIRROR_PORT) && defined(FEATURE_GPS)
-  if (gps_mirror_port->available()) {
-    gps_port->write(gps_mirror_port->read());
+  if ((serial_led) && (serial_led_time != 0) && ((millis() - serial_led_time) > SERIAL_LED_TIME_MS)) {
+    digitalWriteEnhanced(serial_led, LOW);
+    serial_led_time = 0;
   }
-  #endif //defined(GPS_MIRROR_PORT) && defined(FEATURE_GPS)
 
-} // check_serial
+  if (control_port->available()) {
 
-#ifdef FEATURE_LCD_DISPLAY
+    if (serial_led) {
+      digitalWriteEnhanced(serial_led, HIGH);                      // blink the LED just to say we got something
+      serial_led_time = millis();
+    }
+
+    #ifdef DEBUG_SERIAL
+    int control_port_available = control_port->available();
+    #endif // DEBUG_SERIAL
+
+    incoming_serial_byte = control_port->read();
+    last_serial_receive_time = millis();
+
+    #ifdef DEBUG_SERIAL
+    debug.print("check_serial: control_port: ");
+    debug.print(control_port_available);
+    debug.print(":");
+    debug.print(incoming_serial_byte);
+    debug.println("");
+    #endif // DEBUG_SERIAL
+
+
+    if ((incoming_serial_byte > 96) && (incoming_serial_byte < 123)) {  // uppercase it
+      incoming_serial_byte = incoming_serial_byte - 32;
+    }
+
+    #if defined(FEATURE_YAESU_EMULATION)
+
+    if ((incoming_serial_byte != 10) && (incoming_serial_byte != 13)) {
+      // add it to the buffer if it's not a line feed or carriage return
+      control_port_buffer[control_port_buffer_index] = incoming_serial_byte;
+      control_port_buffer_index++;
+    }
+    
+    if (incoming_serial_byte == 13) {  // do we have a carriage return?
+      process_yaesu_command(control_port_buffer,control_port_buffer_index,CONTROL_PORT0,return_string);
+      control_port->println(return_string);
+      clear_command_buffer();
+    }
+    #endif
+
+  } // if (control_port->available())
+  #endif // CONTROL_PROTOCOL_EMULATION
+
+} /* check_serial */
 
 char * idle_status() {
   return azimuth_direction(azimuth);
@@ -1390,32 +1201,6 @@ void update_display() {
   }
 
 } // update_display
-
-#endif // FEATURE_LCD_DISPLAY
-
-#if defined(FEATURE_YAESU_EMULATION)
-
-void get_keystroke() {
-  while (control_port->available() == 0) {
-    // do nothing lol
-  }
-  while (control_port->available() > 0) {
-    incoming_serial_byte = control_port->read();
-  }
-}
-
-void print_wrote_to_memory() {
-  control_port->println(F("Wrote to memory"));
-}
-
-void clear_serial_buffer() {
-  delay(200);
-  while (control_port->available()) {
-    incoming_serial_byte = control_port->read();
-  }
-}
-
-#endif // FEATURE_YAESU_EMULATION
 
 void read_settings_from_eeprom(){
 
@@ -2956,507 +2741,6 @@ void submit_request(byte axis, byte request, int parm, byte called_by) {
 
 } // submit_request
 
-void service_rotation() {
-
-  static byte az_direction_change_flag = 0;
-  static byte az_initial_slow_down_voltage = 0;
-
-  #ifdef FEATURE_ELEVATION_CONTROL
-  static byte el_direction_change_flag = 0;
-  static byte el_initial_slow_down_voltage = 0;
-  #endif // FEATURE_ELEVATION_CONTROL
-
-  if (az_state == INITIALIZE_NORMAL_CW) {
-    update_az_variable_outputs(normal_az_speed_voltage);
-    rotator(ACTIVATE, CW);
-    az_state = NORMAL_CW;
-  }
-
-  if (az_state == INITIALIZE_NORMAL_CCW) {
-    update_az_variable_outputs(normal_az_speed_voltage);
-    rotator(ACTIVATE, CCW);
-    az_state = NORMAL_CCW;
-  }
-
-  if (az_state == INITIALIZE_SLOW_START_CW) {
-    update_az_variable_outputs(AZ_SLOW_START_STARTING_PWM);
-    rotator(ACTIVATE, CW);
-    az_slowstart_start_time = millis();
-    az_last_step_time = 0;
-    az_slow_start_step = 0;
-    az_state = SLOW_START_CW;
-    #ifdef DEBUG_SERVICE_ROTATION
-    debug.print("service_rotation: INITIALIZE_SLOW_START_CW -> SLOW_START_CW");
-    #endif // DEBUG_SERVICE_ROTATION
-  }
-
-  if (az_state == INITIALIZE_SLOW_START_CCW) {
-    update_az_variable_outputs(AZ_SLOW_START_STARTING_PWM);
-    rotator(ACTIVATE, CCW);
-    az_slowstart_start_time = millis();
-    az_last_step_time = 0;
-    az_slow_start_step = 0;
-    az_state = SLOW_START_CCW;
-    #ifdef DEBUG_SERVICE_ROTATION
-    debug.print("service_rotation: INITIALIZE_SLOW_START_CCW -> SLOW_START_CCW");
-    #endif // DEBUG_SERVICE_ROTATION
-  }
-
-  if (az_state == INITIALIZE_TIMED_SLOW_DOWN_CW) {
-    az_direction_change_flag = 0;
-    az_timed_slow_down_start_time = millis();
-    az_last_step_time = millis();
-    az_slow_down_step = AZ_SLOW_DOWN_STEPS - 1;
-    az_state = TIMED_SLOW_DOWN_CW;
-  }
-
-  if (az_state == INITIALIZE_TIMED_SLOW_DOWN_CCW) {
-    az_direction_change_flag = 0;
-    az_timed_slow_down_start_time = millis();
-    az_last_step_time = millis();
-    az_slow_down_step = AZ_SLOW_DOWN_STEPS - 1;
-    az_state = TIMED_SLOW_DOWN_CCW;
-  }
-
-  if (az_state == INITIALIZE_DIR_CHANGE_TO_CW) {
-    az_direction_change_flag = 1;
-    az_timed_slow_down_start_time = millis();
-    az_last_step_time = millis();
-    az_slow_down_step = AZ_SLOW_DOWN_STEPS - 1;
-    az_state = TIMED_SLOW_DOWN_CCW;
-  }
-
-  if (az_state == INITIALIZE_DIR_CHANGE_TO_CCW) {
-    az_direction_change_flag = 1;
-    az_timed_slow_down_start_time = millis();
-    az_last_step_time = millis();
-    az_slow_down_step = AZ_SLOW_DOWN_STEPS - 1;
-    az_state = TIMED_SLOW_DOWN_CW;
-  }
-
-  // slow start-------------------------------------------------------------------------------------------------
-  if ((az_state == SLOW_START_CW) || (az_state == SLOW_START_CCW)) {
-    if ((millis() - az_slowstart_start_time) >= AZ_SLOW_START_UP_TIME) {  // is it time to end slow start?
-      #ifdef DEBUG_SERVICE_ROTATION
-      debug.print("service_rotation: NORMAL_C");
-      #endif // DEBUG_SERVICE_ROTATION
-      if (az_state == SLOW_START_CW) {
-        az_state = NORMAL_CW;
-        #ifdef DEBUG_SERVICE_ROTATION
-        debug.print("W");
-        #endif // DEBUG_SERVICE_ROTATION
-      } else {
-        az_state = NORMAL_CCW;
-        #ifdef DEBUG_SERVICE_ROTATION
-        debug.print("CW");
-        #endif // DEBUG_SERVICE_ROTATION
-      }
-      update_az_variable_outputs(normal_az_speed_voltage);
-    } else {  // it's not time to end slow start yet, but let's check if it's time to step up the speed voltage
-    if (((millis() - az_last_step_time) > (AZ_SLOW_START_UP_TIME / AZ_SLOW_START_STEPS)) && (normal_az_speed_voltage > AZ_SLOW_START_STARTING_PWM)) {
-      #ifdef DEBUG_SERVICE_ROTATION
-      debug.print("service_rotation: step up: ");
-      debug.print(az_slow_start_step);
-      debug.print(" pwm: ");
-      debug.print((int)(AZ_SLOW_START_STARTING_PWM + ((normal_az_speed_voltage - AZ_SLOW_START_STARTING_PWM) * ((float)az_slow_start_step / (float)(AZ_SLOW_START_STEPS - 1)))));
-      debug.println("");
-      #endif // DEBUG_SERVICE_ROTATION
-      update_az_variable_outputs((AZ_SLOW_START_STARTING_PWM + ((normal_az_speed_voltage - AZ_SLOW_START_STARTING_PWM) * ((float)az_slow_start_step / (float)(AZ_SLOW_START_STEPS - 1)))));
-      az_last_step_time = millis();
-      az_slow_start_step++;
-    }
-  }
-} // ((az_state == SLOW_START_CW) || (az_state == SLOW_START_CCW))
-
-// timed slow down ------------------------------------------------------------------------------------------------------
-if (((az_state == TIMED_SLOW_DOWN_CW) || (az_state == TIMED_SLOW_DOWN_CCW)) && ((millis() - az_last_step_time) >= (TIMED_SLOW_DOWN_TIME / AZ_SLOW_DOWN_STEPS))) {
-  #ifdef DEBUG_SERVICE_ROTATION
-  debug.print("service_rotation: TIMED_SLOW_DOWN step down: ");
-  debug.print(az_slow_down_step);
-  debug.print(" pwm: ");
-  debug.print((int)(normal_az_speed_voltage * ((float)az_slow_down_step / (float)AZ_SLOW_DOWN_STEPS)));
-  debug.println("");
-  #endif // DEBUG_SERVICE_ROTATION
-  //updated 2016-05-15
-  //update_az_variable_outputs((int)(normal_az_speed_voltage * ((float)az_slow_down_step / (float)AZ_SLOW_DOWN_STEPS)));
-  update_az_variable_outputs((int)(current_az_speed_voltage * ((float)az_slow_down_step / (float)AZ_SLOW_DOWN_STEPS)));
-  az_last_step_time = millis();
-  if (az_slow_down_step > 0) {az_slow_down_step--;}
-
-  if (az_slow_down_step == 0) { // is it time to exit timed slow down?
-    #ifdef DEBUG_SERVICE_ROTATION
-    debug.print("service_rotation: TIMED_SLOW_DOWN->IDLE");
-    #endif // DEBUG_SERVICE_ROTATION
-    rotator(DEACTIVATE, CW);
-    rotator(DEACTIVATE, CCW);
-    if (az_direction_change_flag) {
-      if (az_state == TIMED_SLOW_DOWN_CW) {
-        //rotator(ACTIVATE, CCW);
-        if (az_slowstart_active) {
-          az_state = INITIALIZE_SLOW_START_CCW;
-        } else { az_state = NORMAL_CCW; };
-        az_direction_change_flag = 0;
-      }
-      if (az_state == TIMED_SLOW_DOWN_CCW) {
-        //rotator(ACTIVATE, CW);
-        if (az_slowstart_active) {
-          az_state = INITIALIZE_SLOW_START_CW;
-        } else { az_state = NORMAL_CW; };
-        az_direction_change_flag = 0;
-      }
-    } else {
-      az_state = IDLE;
-      az_request_queue_state = NONE;
-
-    }
-  }
-
-}  // ((az_state == TIMED_SLOW_DOWN_CW) || (az_state == TIMED_SLOW_DOWN_CCW))
-
-// slow down ---------------------------------------------------------------------------------------------------------------
-if ((az_state == SLOW_DOWN_CW) || (az_state == SLOW_DOWN_CCW)) {
-
-  // is it time to do another step down?
-  if (abs((target_raw_azimuth - raw_azimuth) / HEADING_MULTIPLIER) <= (((float)SLOW_DOWN_BEFORE_TARGET_AZ * ((float)az_slow_down_step / (float)AZ_SLOW_DOWN_STEPS)))) {
-    #ifdef DEBUG_SERVICE_ROTATION
-    debug.print("service_rotation: step down: ");
-    debug.print(az_slow_down_step);
-    debug.print(" pwm: ");
-    debug.print((int)(AZ_SLOW_DOWN_PWM_STOP + ((az_initial_slow_down_voltage - AZ_SLOW_DOWN_PWM_STOP) * ((float)az_slow_down_step / (float)AZ_SLOW_DOWN_STEPS))));
-    debug.println("");
-    #endif // DEBUG_SERVICE_ROTATION
-    update_az_variable_outputs((AZ_SLOW_DOWN_PWM_STOP + ((az_initial_slow_down_voltage - AZ_SLOW_DOWN_PWM_STOP) * ((float)az_slow_down_step / (float)AZ_SLOW_DOWN_STEPS))));
-    if (az_slow_down_step > 0) {az_slow_down_step--;}
-  }
-}  // ((az_state == SLOW_DOWN_CW) || (az_state == SLOW_DOWN_CCW))
-
-// normal -------------------------------------------------------------------------------------------------------------------
-// if slow down is enabled, see if we're ready to go into slowdown
-if (((az_state == NORMAL_CW) || (az_state == SLOW_START_CW) || (az_state == NORMAL_CCW) || (az_state == SLOW_START_CCW)) &&
-(az_request_queue_state == IN_PROGRESS_TO_TARGET) && az_slowdown_active && (abs((target_raw_azimuth - raw_azimuth) / HEADING_MULTIPLIER) <= SLOW_DOWN_BEFORE_TARGET_AZ)) {
-
-  byte az_state_was = az_state;
-
-  #ifdef DEBUG_SERVICE_ROTATION
-  debug.print("service_rotation: SLOW_DOWN_C");
-  #endif // DEBUG_SERVICE_ROTATION
-  az_slow_down_step = AZ_SLOW_DOWN_STEPS - 1;
-  if ((az_state == NORMAL_CW) || (az_state == SLOW_START_CW)) {
-    az_state = SLOW_DOWN_CW;
-    #ifdef DEBUG_SERVICE_ROTATION
-    debug.print("W");
-    #endif // DEBUG_SERVICE_ROTATION
-  } else {
-    az_state = SLOW_DOWN_CCW;
-    #ifdef DEBUG_SERVICE_ROTATION
-    debug.print("CW");
-    #endif // DEBUG_SERVICE_ROTATION
-  }
-
-  if ((az_state_was == SLOW_START_CW) || (az_state_was == SLOW_START_CCW)){
-    az_initial_slow_down_voltage = (AZ_INITIALLY_IN_SLOW_DOWN_PWM);
-    update_az_variable_outputs(az_initial_slow_down_voltage);
-    #ifdef DEBUG_SERVICE_ROTATION
-    debug.print(" SLOW_START -> SLOW_DOWN az_initial_slow_down_voltage:");
-    debug.print(az_initial_slow_down_voltage);
-    debug.print(" ");
-    #endif // DEBUG_SERVICE_ROTATION
-  } else {
-    if (AZ_SLOW_DOWN_PWM_START < current_az_speed_voltage) {
-      update_az_variable_outputs(AZ_SLOW_DOWN_PWM_START);
-      az_initial_slow_down_voltage = AZ_SLOW_DOWN_PWM_START;
-    } else {
-      az_initial_slow_down_voltage = current_az_speed_voltage;
-    }
-  }
-
-}
-
-// check rotation target --------------------------------------------------------------------------------------------------------
-if ((az_state != IDLE) && (az_request_queue_state == IN_PROGRESS_TO_TARGET) ) {
-  if ((az_state == NORMAL_CW) || (az_state == SLOW_START_CW) || (az_state == SLOW_DOWN_CW)) {
-    if ((abs(raw_azimuth - target_raw_azimuth) < (AZIMUTH_TOLERANCE * HEADING_MULTIPLIER)) || ((raw_azimuth > target_raw_azimuth) && ((raw_azimuth - target_raw_azimuth) < ((AZIMUTH_TOLERANCE + 5) * HEADING_MULTIPLIER)))) {
-      delay(50);
-      read_azimuth(0);
-      if ((abs(raw_azimuth - target_raw_azimuth) < (AZIMUTH_TOLERANCE * HEADING_MULTIPLIER)) || ((raw_azimuth > target_raw_azimuth) && ((raw_azimuth - target_raw_azimuth) < ((AZIMUTH_TOLERANCE + 5) * HEADING_MULTIPLIER)))) {
-        rotator(DEACTIVATE, CW);
-        rotator(DEACTIVATE, CCW);
-        az_state = IDLE;
-        az_request_queue_state = NONE;
-        #ifdef DEBUG_SERVICE_ROTATION
-        debug.print("service_rotation: IDLE");
-        #endif // DEBUG_SERVICE_ROTATION
-      }
-    }
-  } else {
-    if ((abs(raw_azimuth - target_raw_azimuth) < (AZIMUTH_TOLERANCE * HEADING_MULTIPLIER)) || ((raw_azimuth < target_raw_azimuth) && ((target_raw_azimuth - raw_azimuth) < ((AZIMUTH_TOLERANCE + 5) * HEADING_MULTIPLIER)))) {
-      delay(50);
-      read_azimuth(0);
-      if ((abs(raw_azimuth - target_raw_azimuth) < (AZIMUTH_TOLERANCE * HEADING_MULTIPLIER)) || ((raw_azimuth < target_raw_azimuth) && ((target_raw_azimuth - raw_azimuth) < ((AZIMUTH_TOLERANCE + 5) * HEADING_MULTIPLIER)))) {
-        rotator(DEACTIVATE, CW);
-        rotator(DEACTIVATE, CCW);
-        az_state = IDLE;
-        az_request_queue_state = NONE;
-        #ifdef DEBUG_SERVICE_ROTATION
-        debug.print("service_rotation: IDLE");
-        #endif // DEBUG_SERVICE_ROTATION
-      }
-    }
-  }
-}
-
-#ifdef FEATURE_ELEVATION_CONTROL
-if (el_state == INITIALIZE_NORMAL_UP) {
-  update_el_variable_outputs(normal_el_speed_voltage);
-  rotator(ACTIVATE, UP);
-  el_state = NORMAL_UP;
-}
-
-if (el_state == INITIALIZE_NORMAL_DOWN) {
-  update_el_variable_outputs(normal_el_speed_voltage);
-  rotator(ACTIVATE, DOWN);
-  el_state = NORMAL_DOWN;
-}
-
-if (el_state == INITIALIZE_SLOW_START_UP) {
-  update_el_variable_outputs(EL_SLOW_START_STARTING_PWM);
-  rotator(ACTIVATE, UP);
-  el_slowstart_start_time = millis();
-  el_last_step_time = 0;
-  el_slow_start_step = 0;
-  el_state = SLOW_START_UP;
-  #ifdef DEBUG_SERVICE_ROTATION
-  debug.print("service_rotation: INITIALIZE_SLOW_START_UP -> SLOW_START_UP");
-  #endif // DEBUG_SERVICE_ROTATION
-}
-
-if (el_state == INITIALIZE_SLOW_START_DOWN) {
-  update_el_variable_outputs(EL_SLOW_START_STARTING_PWM);
-  rotator(ACTIVATE, DOWN);
-  el_slowstart_start_time = millis();
-  el_last_step_time = 0;
-  el_slow_start_step = 0;
-  el_state = SLOW_START_DOWN;
-  #ifdef DEBUG_SERVICE_ROTATION
-  debug.print("service_rotation: INITIALIZE_SLOW_START_DOWN -> SLOW_START_DOWN");
-  #endif // DEBUG_SERVICE_ROTATION
-}
-
-if (el_state == INITIALIZE_TIMED_SLOW_DOWN_UP) {
-  el_direction_change_flag = 0;
-  el_timed_slow_down_start_time = millis();
-  el_last_step_time = millis();
-  el_slow_down_step = EL_SLOW_DOWN_STEPS - 1;
-  el_state = TIMED_SLOW_DOWN_UP;
-}
-
-if (el_state == INITIALIZE_TIMED_SLOW_DOWN_DOWN) {
-  el_direction_change_flag = 0;
-  el_timed_slow_down_start_time = millis();
-  el_last_step_time = millis();
-  el_slow_down_step = EL_SLOW_DOWN_STEPS - 1;
-  el_state = TIMED_SLOW_DOWN_DOWN;
-}
-
-if (el_state == INITIALIZE_DIR_CHANGE_TO_UP) {
-  el_direction_change_flag = 1;
-  el_timed_slow_down_start_time = millis();
-  el_last_step_time = millis();
-  el_slow_down_step = EL_SLOW_DOWN_STEPS - 1;
-  el_state = TIMED_SLOW_DOWN_DOWN;
-}
-
-if (el_state == INITIALIZE_DIR_CHANGE_TO_DOWN) {
-  el_direction_change_flag = 1;
-  el_timed_slow_down_start_time = millis();
-  el_last_step_time = millis();
-  el_slow_down_step = EL_SLOW_DOWN_STEPS - 1;
-  el_state = TIMED_SLOW_DOWN_UP;
-}
-
-// slow start-------------------------------------------------------------------------------------------------
-if ((el_state == SLOW_START_UP) || (el_state == SLOW_START_DOWN)) {
-  if ((millis() - el_slowstart_start_time) >= EL_SLOW_START_UP_TIME) {  // is it time to end slow start?
-    #ifdef DEBUG_SERVICE_ROTATION
-    debug.print("service_rotation: NORMAL_");
-    #endif // DEBUG_SERVICE_ROTATION
-    if (el_state == SLOW_START_UP) {
-      el_state = NORMAL_UP;
-      #ifdef DEBUG_SERVICE_ROTATION
-      debug.print("UP");
-      #endif // DEBUG_SERVICE_ROTATION
-    } else {
-      el_state = NORMAL_DOWN;
-      #ifdef DEBUG_SERVICE_ROTATION
-      debug.print("DOWN");
-      #endif // DEBUG_SERVICE_ROTATION
-    }
-    update_el_variable_outputs(normal_el_speed_voltage);
-  } else {  // it's not time to end slow start yet, but let's check if it's time to step up the speed voltage
-  if (((millis() - el_last_step_time) > (EL_SLOW_START_UP_TIME / EL_SLOW_START_STEPS)) && (normal_el_speed_voltage > EL_SLOW_START_STARTING_PWM)) {
-    #ifdef DEBUG_SERVICE_ROTATION
-    debug.print("service_rotation: step up: ");
-    debug.print(el_slow_start_step);
-    debug.print(" pwm: ");
-    debug.print((int)(EL_SLOW_START_STARTING_PWM + ((normal_el_speed_voltage - EL_SLOW_START_STARTING_PWM) * ((float)el_slow_start_step / (float)(EL_SLOW_START_STEPS - 1)))));
-    debug.println("");
-    #endif // DEBUG_SERVICE_ROTATION
-    update_el_variable_outputs((EL_SLOW_START_STARTING_PWM + ((normal_el_speed_voltage - EL_SLOW_START_STARTING_PWM) * ((float)el_slow_start_step / (float)(EL_SLOW_START_STEPS - 1)))));
-    el_last_step_time = millis();
-    el_slow_start_step++;
-  }
-}
-} // ((el_state == SLOW_START_UP) || (el_state == SLOW_START_DOWN))
-
-
-// timed slow down ------------------------------------------------------------------------------------------------------
-if (((el_state == TIMED_SLOW_DOWN_UP) || (el_state == TIMED_SLOW_DOWN_DOWN)) && ((millis() - el_last_step_time) >= (TIMED_SLOW_DOWN_TIME / EL_SLOW_DOWN_STEPS))) {
-  #ifdef DEBUG_SERVICE_ROTATION
-  debug.print("service_rotation: TIMED_SLOW_DOWN step down: ");
-  debug.print(el_slow_down_step);
-  debug.print(" pwm: ");
-  debug.print((int)(normal_el_speed_voltage * ((float)el_slow_down_step / (float)EL_SLOW_DOWN_STEPS)));
-  debug.println("");
-  #endif // DEBUG_SERVICE_ROTATION
-  update_el_variable_outputs((int)(normal_el_speed_voltage * ((float)el_slow_down_step / (float)EL_SLOW_DOWN_STEPS)));
-  el_last_step_time = millis();
-  if (el_slow_down_step > 0) {el_slow_down_step--;}
-
-  if (el_slow_down_step == 0) { // is it time to exit timed slow down?
-    #ifdef DEBUG_SERVICE_ROTATION
-    debug.print("service_rotation: TIMED_SLOW_DOWN->IDLE");
-    #endif // DEBUG_SERVICE_ROTATION
-    rotator(DEACTIVATE, UP);
-    rotator(DEACTIVATE, DOWN);
-    if (el_direction_change_flag) {
-      if (el_state == TIMED_SLOW_DOWN_UP) {
-        if (el_slowstart_active) {
-          el_state = INITIALIZE_SLOW_START_DOWN;
-        } else { el_state = NORMAL_DOWN; };
-        el_direction_change_flag = 0;
-      }
-      if (el_state == TIMED_SLOW_DOWN_DOWN) {
-        if (el_slowstart_active) {
-          el_state = INITIALIZE_SLOW_START_UP;
-        } else { el_state = NORMAL_UP; };
-        el_direction_change_flag = 0;
-      }
-    } else {
-      el_state = IDLE;
-      el_request_queue_state = NONE;
-
-    }
-  }
-
-}  // ((el_state == TIMED_SLOW_DOWN_UP) || (el_state == TIMED_SLOW_DOWN_DOWN))
-
-
-
-// slow down ---------------------------------------------------------------------------------------------------------------
-if ((el_state == SLOW_DOWN_UP) || (el_state == SLOW_DOWN_DOWN)) {
-  // is it time to do another step down?
-  if (abs((target_elevation - elevation) / HEADING_MULTIPLIER) <= (((float)SLOW_DOWN_BEFORE_TARGET_EL * ((float)el_slow_down_step / (float)EL_SLOW_DOWN_STEPS)))) {
-    #ifdef DEBUG_SERVICE_ROTATION
-    debug.print("service_rotation: step down: ");
-    debug.print(el_slow_down_step);
-    debug.print(" pwm: ");
-    debug.print((int)(EL_SLOW_DOWN_PWM_STOP + ((el_initial_slow_down_voltage - EL_SLOW_DOWN_PWM_STOP) * ((float)el_slow_down_step / (float)EL_SLOW_DOWN_STEPS))));
-    debug.println("");
-    #endif // DEBUG_SERVICE_ROTATION
-    update_el_variable_outputs((EL_SLOW_DOWN_PWM_STOP + ((el_initial_slow_down_voltage - EL_SLOW_DOWN_PWM_STOP) * ((float)el_slow_down_step / (float)EL_SLOW_DOWN_STEPS))));
-    if (el_slow_down_step > 0) {el_slow_down_step--;}
-  }
-}  // ((el_state == SLOW_DOWN_UP) || (el_state == SLOW_DOWN_DOWN))
-
-// normal -------------------------------------------------------------------------------------------------------------------
-// if slow down is enabled, see if we're ready to go into slowdown
-if (((el_state == NORMAL_UP) || (el_state == SLOW_START_UP) || (el_state == NORMAL_DOWN) || (el_state == SLOW_START_DOWN)) &&
-(el_request_queue_state == IN_PROGRESS_TO_TARGET) && el_slowdown_active && (abs((target_elevation - elevation) / HEADING_MULTIPLIER) <= SLOW_DOWN_BEFORE_TARGET_EL)) {
-
-  byte el_state_was = el_state;
-
-
-  #ifdef DEBUG_SERVICE_ROTATION
-  debug.print("service_rotation: SLOW_DOWN_");
-  #endif // DEBUG_SERVICE_ROTATION
-  el_slow_down_step = EL_SLOW_DOWN_STEPS - 1;
-  if ((el_state == NORMAL_UP) || (el_state == SLOW_START_UP)) {
-    el_state = SLOW_DOWN_UP;
-    #ifdef DEBUG_SERVICE_ROTATION
-    debug.print("UP");
-    #endif // DEBUG_SERVICE_ROTATION
-  } else {
-    el_state = SLOW_DOWN_DOWN;
-    #ifdef DEBUG_SERVICE_ROTATION
-    debug.print("DOWN");
-    #endif // DEBUG_SERVICE_ROTATION
-  }
-
-  if ((el_state_was == SLOW_START_UP) || (el_state_was == SLOW_START_DOWN)){
-    el_initial_slow_down_voltage = EL_INITIALLY_IN_SLOW_DOWN_PWM;
-    update_el_variable_outputs(el_initial_slow_down_voltage);
-    #ifdef DEBUG_SERVICE_ROTATION
-    debug.print(" SLOW_START -> SLOW_DOWN el_initial_slow_down_voltage:");
-    debug.print(el_initial_slow_down_voltage);
-    debug.print(" ");
-    #endif // DEBUG_SERVICE_ROTATION
-
-  } else {
-    if (EL_SLOW_DOWN_PWM_START < current_el_speed_voltage) {
-      update_el_variable_outputs(EL_SLOW_DOWN_PWM_START);
-      el_initial_slow_down_voltage = EL_SLOW_DOWN_PWM_START;
-    } else {
-      el_initial_slow_down_voltage = current_el_speed_voltage;
-    }
-  }
-}
-
-// check rotation target --------------------------------------------------------------------------------------------------------
-if ((el_state != IDLE) && (el_request_queue_state == IN_PROGRESS_TO_TARGET) ) {
-  read_elevation(0);
-  if ((el_state == NORMAL_UP) || (el_state == SLOW_START_UP) || (el_state == SLOW_DOWN_UP)) {
-    if ((abs(elevation - target_elevation) < (ELEVATION_TOLERANCE * HEADING_MULTIPLIER)) || ((elevation > target_elevation) && ((elevation - target_elevation) < ((ELEVATION_TOLERANCE + 5) * HEADING_MULTIPLIER)))) {
-      #ifndef OPTION_NO_ELEVATION_CHECK_TARGET_DELAY
-      delay(50);
-      #endif //OPTION_NO_ELEVATION_CHECK_TARGET_DELAY
-      read_elevation(0);
-      if ((abs(elevation - target_elevation) < (ELEVATION_TOLERANCE * HEADING_MULTIPLIER)) || ((elevation > target_elevation) && ((elevation - target_elevation) < ((ELEVATION_TOLERANCE + 5) * HEADING_MULTIPLIER)))) {
-        rotator(DEACTIVATE, UP);
-        rotator(DEACTIVATE, DOWN);
-        el_state = IDLE;
-        el_request_queue_state = NONE;
-        #ifdef DEBUG_SERVICE_ROTATION
-        debug.print("service_rotation: IDLE");
-        #endif // DEBUG_SERVICE_ROTATION
-      }
-    }
-  } else {
-    read_elevation(0);
-    if ((abs(elevation - target_elevation) <= (ELEVATION_TOLERANCE * HEADING_MULTIPLIER)) || ((elevation < target_elevation) && ((target_elevation - elevation) < ((ELEVATION_TOLERANCE + 5) * HEADING_MULTIPLIER)))) {
-      #ifndef OPTION_NO_ELEVATION_CHECK_TARGET_DELAY
-      delay(50);
-      #endif //OPTION_NO_ELEVATION_CHECK_TARGET_DELAY
-      read_elevation(0);
-      if ((abs(elevation - target_elevation) <= (ELEVATION_TOLERANCE * HEADING_MULTIPLIER)) || ((elevation < target_elevation) && ((target_elevation - elevation) < ((ELEVATION_TOLERANCE + 5) * HEADING_MULTIPLIER)))) {
-        rotator(DEACTIVATE, UP);
-        rotator(DEACTIVATE, DOWN);
-        el_state = IDLE;
-        el_request_queue_state = NONE;
-        #ifdef DEBUG_SERVICE_ROTATION
-        debug.print("service_rotation: IDLE");
-        #endif // DEBUG_SERVICE_ROTATION
-      }
-    }
-  }
-}
-
-
-
-
-#endif // FEATURE_ELEVATION_CONTROL
-
-} /* service_rotation */
-
 void stop_all_tracking() {
 
   #ifdef FEATURE_MOON_TRACKING
@@ -3467,576 +2751,6 @@ void stop_all_tracking() {
   sun_tracking_active = 0;
   #endif // FEATURE_SUN_TRACKING
 } // stop_all_tracking
-
-void service_request_queue() {
-
-  int work_target_raw_azimuth = 0;
-  byte direction_to_go = 0;
-  byte within_tolerance_flag = 0;
-
-  if (az_request_queue_state == IN_QUEUE) {
-
-    #ifdef FEATURE_POWER_SWITCH
-    last_activity_time = millis();
-    #endif //FEATURE_POWER_SWITCH
-
-    #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-    debug.print("service_request_queue: AZ ");
-    #endif // DEBUG_SERVICE_REQUEST_QUEUE
-
-    switch (az_request) {
-      case (REQUEST_STOP):
-      #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-      debug.print("REQUEST_STOP");
-      #endif // DEBUG_SERVICE_REQUEST_QUEUE
-      stop_all_tracking();
-      if (az_state != IDLE) {
-        if (az_slowdown_active) {
-          if ((az_state == TIMED_SLOW_DOWN_CW) || (az_state == TIMED_SLOW_DOWN_CCW) || (az_state == SLOW_DOWN_CW) || (az_state == SLOW_DOWN_CCW)) {  // if we're already in timed slow down and we get another stop, do a hard stop
-          rotator(DEACTIVATE, CW);
-          rotator(DEACTIVATE, CCW);
-          az_state = IDLE;
-          az_request_queue_state = NONE;
-        }
-        if ((az_state == SLOW_START_CW) || (az_state == NORMAL_CW)) {
-          az_state = INITIALIZE_TIMED_SLOW_DOWN_CW;
-          az_request_queue_state = IN_PROGRESS_TIMED;
-          az_last_rotate_initiation = millis();
-        }
-        if ((az_state == SLOW_START_CCW) || (az_state == NORMAL_CCW)) {
-          az_state = INITIALIZE_TIMED_SLOW_DOWN_CCW;
-          az_request_queue_state = IN_PROGRESS_TIMED;
-          az_last_rotate_initiation = millis();
-        }
-
-      } else {
-        rotator(DEACTIVATE, CW);
-        rotator(DEACTIVATE, CCW);
-        az_state = IDLE;
-        az_request_queue_state = NONE;
-      }
-    } else {
-      az_request_queue_state = NONE; // nothing to do - we clear the queue
-    }
-    #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-    if (debug_mode) {
-      control_port->println();
-    }
-    #endif // DEBUG_SERVICE_REQUEST_QUEUE
-    break; // REQUEST_STOP
-    case (REQUEST_AZIMUTH):
-    #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-    debug.print("REQUEST_AZIMUTH");
-    #endif // DEBUG_SERVICE_REQUEST_QUEUE
-    if ((az_request_parm >= 0) && (az_request_parm <= (360 * HEADING_MULTIPLIER))) {
-      target_azimuth = az_request_parm;
-      target_raw_azimuth = az_request_parm;
-      if (target_azimuth == (360 * HEADING_MULTIPLIER)) {
-        target_azimuth = 0;
-      }
-      if ((target_azimuth > (azimuth - (AZIMUTH_TOLERANCE * HEADING_MULTIPLIER))) && (target_azimuth < (azimuth + (AZIMUTH_TOLERANCE * HEADING_MULTIPLIER)))) {
-        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-        debug.print(" request within tolerance");
-        #endif // DEBUG_SERVICE_REQUEST_QUEUE
-        within_tolerance_flag = 1;
-        // az_request_queue_state = NONE;
-        if (az_state != IDLE){
-          submit_request(AZ, REQUEST_STOP, 0, 137);
-        } else {
-          az_request_queue_state = NONE;
-        }
-      } else {  // target azimuth is not within tolerance, we need to rotate
-        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-        debug.print(" ->A");
-        #endif // DEBUG_SERVICE_REQUEST_QUEUE
-        work_target_raw_azimuth = target_azimuth;
-        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-        debug.print(" work_target_raw_azimuth:");
-        debug.print(work_target_raw_azimuth / HEADING_MULTIPLIER);
-        debug.print(" azimuth_starting_point:");
-        debug.print(azimuth_starting_point);
-        debug.print(" ");
-        #endif // DEBUG_SERVICE_REQUEST_QUEUE
-
-        if (work_target_raw_azimuth < (azimuth_starting_point * HEADING_MULTIPLIER)) {
-          work_target_raw_azimuth = work_target_raw_azimuth + (360 * HEADING_MULTIPLIER);
-          target_raw_azimuth = work_target_raw_azimuth;
-          #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-          debug.print("->B");
-          #endif // DEBUG_SERVICE_REQUEST_QUEUE
-        }
-        if ((work_target_raw_azimuth + (360 * HEADING_MULTIPLIER)) < ((azimuth_starting_point + azimuth_rotation_capability) * HEADING_MULTIPLIER)) { // is there a second possible heading in overlap?
-          if (abs(raw_azimuth - work_target_raw_azimuth) < abs((work_target_raw_azimuth + (360 * HEADING_MULTIPLIER)) - raw_azimuth)) { // is second possible heading closer?
-            #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-            debug.print("->C");
-            #endif // DEBUG_SERVICE_REQUEST_QUEUE
-            if (work_target_raw_azimuth  > raw_azimuth) { // not closer, use position in non-overlap
-              direction_to_go = CW;
-              #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-              debug.print("->CW!");
-              #endif // DEBUG_SERVICE_REQUEST_QUEUE
-            } else {
-              direction_to_go = CCW;
-              #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-              debug.print("->CCW!");
-              #endif // DEBUG_SERVICE_REQUEST_QUEUE
-            }
-          } else { // go to position in overlap
-            #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-            debug.print("->D");
-            #endif // DEBUG_SERVICE_REQUEST_QUEUE
-            target_raw_azimuth = work_target_raw_azimuth + (360 * HEADING_MULTIPLIER);
-            if ((work_target_raw_azimuth + (360 * HEADING_MULTIPLIER)) > raw_azimuth) {
-              direction_to_go = CW;
-              #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-              debug.print("->CW!");
-              #endif // DEBUG_SERVICE_REQUEST_QUEUE
-            } else {
-              direction_to_go = CCW;
-              #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-              debug.print("->CCW!");
-              #endif // DEBUG_SERVICE_REQUEST_QUEUE
-            }
-          }
-        } else {  // no possible second heading in overlap
-          #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-          debug.print("->E");
-          #endif // DEBUG_SERVICE_REQUEST_QUEUE
-          if (work_target_raw_azimuth  > raw_azimuth) {
-            direction_to_go = CW;
-          } else {
-            direction_to_go = CCW;
-          }
-        }
-      }
-    } else {
-      #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-      debug.print("->F");
-      #endif // DEBUG_SERVICE_REQUEST_QUEUE
-      if ((az_request_parm > (360 * HEADING_MULTIPLIER)) && (az_request_parm <= ((azimuth_starting_point + azimuth_rotation_capability) * HEADING_MULTIPLIER))) {
-        target_azimuth = az_request_parm - (360 * HEADING_MULTIPLIER);
-        target_raw_azimuth = az_request_parm;
-        if (az_request_parm > raw_azimuth) {
-          direction_to_go = CW;
-        } else {
-          direction_to_go = CCW;
-        }
-      } else {
-        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-        debug.print(" error: bogus azimuth request:");
-        debug.print(az_request_parm);
-        debug.println("");
-        #endif // DEBUG_SERVICE_REQUEST_QUEUE
-        rotator(DEACTIVATE, CW);
-        rotator(DEACTIVATE, CCW);
-        az_state = IDLE;
-        az_request_queue_state = NONE;
-        return;
-      }
-    }
-    if (direction_to_go == CW) {
-      if (((az_state == SLOW_START_CCW) || (az_state == NORMAL_CCW) || (az_state == SLOW_DOWN_CCW) || (az_state == TIMED_SLOW_DOWN_CCW)) && (az_slowstart_active)) {
-        az_state = INITIALIZE_DIR_CHANGE_TO_CW;
-        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-        debug.print(" INITIALIZE_DIR_CHANGE_TO_CW");
-        #endif // DEBUG_SERVICE_REQUEST_QUEUE
-      } else {
-        if ((az_state != INITIALIZE_SLOW_START_CW) && (az_state != SLOW_START_CW) && (az_state != NORMAL_CW)) { // if we're already rotating CW, don't do anything
-        // rotator(ACTIVATE,CW);
-        if (az_slowstart_active) {
-          az_state = INITIALIZE_SLOW_START_CW;
-        } else { az_state = INITIALIZE_NORMAL_CW; };
-      }
-    }
-  }
-  if (direction_to_go == CCW) {
-    if (((az_state == SLOW_START_CW) || (az_state == NORMAL_CW) || (az_state == SLOW_DOWN_CW) || (az_state == TIMED_SLOW_DOWN_CW)) && (az_slowstart_active)) {
-      az_state = INITIALIZE_DIR_CHANGE_TO_CCW;
-      #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-      debug.print(" INITIALIZE_DIR_CHANGE_TO_CCW");
-      #endif // DEBUG_SERVICE_REQUEST_QUEUE
-    } else {
-      if ((az_state != INITIALIZE_SLOW_START_CCW) && (az_state != SLOW_START_CCW) && (az_state != NORMAL_CCW)) { // if we're already rotating CCW, don't do anything
-      // rotator(ACTIVATE,CCW);
-      if (az_slowstart_active) {
-        az_state = INITIALIZE_SLOW_START_CCW;
-      } else { az_state = INITIALIZE_NORMAL_CCW; };
-    }
-  }
-}
-if (!within_tolerance_flag) {
-  az_request_queue_state = IN_PROGRESS_TO_TARGET;
-  az_last_rotate_initiation = millis();
-}
-#ifdef DEBUG_SERVICE_REQUEST_QUEUE
-if (debug_mode) {
-  control_port->println();
-}
-#endif // DEBUG_SERVICE_REQUEST_QUEUE
-break; // REQUEST_AZIMUTH
-
-case (REQUEST_AZIMUTH_RAW):
-#ifdef DEBUG_SERVICE_REQUEST_QUEUE
-debug.print("REQUEST_AZIMUTH_RAW");
-#endif // DEBUG_SERVICE_REQUEST_QUEUE
-target_raw_azimuth = az_request_parm;
-target_azimuth = target_raw_azimuth;
-if (target_azimuth >= (360 * HEADING_MULTIPLIER)) {
-  target_azimuth = target_azimuth - (360 * HEADING_MULTIPLIER);
-}
-
-if (((abs(raw_azimuth - target_raw_azimuth) < (AZIMUTH_TOLERANCE * HEADING_MULTIPLIER))) && (az_state == IDLE)) {
-  #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-  debug.print(" request within tolerance");
-  #endif // DEBUG_SERVICE_REQUEST_QUEUE
-  if (az_state != IDLE){
-    submit_request(AZ, REQUEST_STOP, 0, 138);
-  } else {
-    az_request_queue_state = NONE;
-  }
-  within_tolerance_flag = 1;
-} else {
-  if (target_raw_azimuth > raw_azimuth) {
-    if (((az_state == SLOW_START_CCW) || (az_state == NORMAL_CCW) || (az_state == SLOW_DOWN_CCW) || (az_state == TIMED_SLOW_DOWN_CCW)) && (az_slowstart_active)) {
-      az_state = INITIALIZE_DIR_CHANGE_TO_CW;
-      #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-      debug.print(" INITIALIZE_DIR_CHANGE_TO_CW");
-      #endif // DEBUG_SERVICE_REQUEST_QUEUE
-    } else {
-      if ((az_state != INITIALIZE_SLOW_START_CW) && (az_state != SLOW_START_CW) && (az_state != NORMAL_CW)) { // if we're already rotating CW, don't do anything
-      if (az_slowstart_active) {
-        az_state = INITIALIZE_SLOW_START_CW;
-      } else { az_state = INITIALIZE_NORMAL_CW; };
-    }
-  }
-}
-if (target_raw_azimuth < raw_azimuth) {
-  if (((az_state == SLOW_START_CW) || (az_state == NORMAL_CW) || (az_state == SLOW_DOWN_CW) || (az_state == TIMED_SLOW_DOWN_CW)) && (az_slowstart_active)) {
-    az_state = INITIALIZE_DIR_CHANGE_TO_CCW;
-    #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-    debug.print(" INITIALIZE_DIR_CHANGE_TO_CCW");
-    #endif // DEBUG_SERVICE_REQUEST_QUEUE
-  } else {
-    if ((az_state != INITIALIZE_SLOW_START_CCW) && (az_state != SLOW_START_CCW) && (az_state != NORMAL_CCW)) { // if we're already rotating CCW, don't do anything
-    if (az_slowstart_active) {
-      az_state = INITIALIZE_SLOW_START_CCW;
-    } else { az_state = INITIALIZE_NORMAL_CCW; };
-  }
-}
-}
-if (!within_tolerance_flag) {
-  az_request_queue_state = IN_PROGRESS_TO_TARGET;
-  az_last_rotate_initiation = millis();
-}
-}
-#ifdef DEBUG_SERVICE_REQUEST_QUEUE
-if (debug_mode) {
-  control_port->println();
-}
-#endif // DEBUG_SERVICE_REQUEST_QUEUE
-break; // REQUEST_AZIMUTH_RAW
-
-case (REQUEST_CW):
-#ifdef DEBUG_SERVICE_REQUEST_QUEUE
-debug.print("REQUEST_CW");
-#endif // DEBUG_SERVICE_REQUEST_QUEUE
-stop_all_tracking();
-if (((az_state == SLOW_START_CCW) || (az_state == NORMAL_CCW) || (az_state == SLOW_DOWN_CCW) || (az_state == TIMED_SLOW_DOWN_CCW)) && (az_slowstart_active)) {
-  az_state = INITIALIZE_DIR_CHANGE_TO_CW;
-  #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-  debug.print(" INITIALIZE_DIR_CHANGE_TO_CW");
-  #endif // DEBUG_SERVICE_REQUEST_QUEUE
-} else {
-  if ((az_state != SLOW_START_CW) && (az_state != NORMAL_CW)) {
-    // rotator(ACTIVATE,CW);
-    if (az_slowstart_active) {
-      az_state = INITIALIZE_SLOW_START_CW;
-    } else {
-      az_state = INITIALIZE_NORMAL_CW;
-    };
-  }
-}
-az_request_queue_state = NONE;
-az_last_rotate_initiation = millis();
-#ifdef DEBUG_SERVICE_REQUEST_QUEUE
-if (debug_mode) {
-  control_port->println();
-}
-#endif // DEBUG_SERVICE_REQUEST_QUEUE
-break; // REQUEST_CW
-
-case (REQUEST_CCW):
-#ifdef DEBUG_SERVICE_REQUEST_QUEUE
-debug.print("REQUEST_CCW");
-#endif // DEBUG_SERVICE_REQUEST_QUEUE
-stop_all_tracking();
-if (((az_state == SLOW_START_CW) || (az_state == NORMAL_CW) || (az_state == SLOW_DOWN_CW) || (az_state == TIMED_SLOW_DOWN_CW)) && (az_slowstart_active)) {
-  az_state = INITIALIZE_DIR_CHANGE_TO_CCW;
-  #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-  debug.print(" INITIALIZE_DIR_CHANGE_TO_CCW");
-  #endif // DEBUG_SERVICE_REQUEST_QUEUE
-} else {
-  if ((az_state != SLOW_START_CCW) && (az_state != NORMAL_CCW)) {
-    // rotator(ACTIVATE,CCW);
-    if (az_slowstart_active) {
-      az_state = INITIALIZE_SLOW_START_CCW;
-    } else { az_state = INITIALIZE_NORMAL_CCW; };
-  }
-}
-az_request_queue_state = NONE;
-az_last_rotate_initiation = millis();
-#ifdef DEBUG_SERVICE_REQUEST_QUEUE
-if (debug_mode) {
-  control_port->println();
-}
-#endif // DEBUG_SERVICE_REQUEST_QUEUE
-break; // REQUEST_CCW
-
-case (REQUEST_KILL):
-#ifdef DEBUG_SERVICE_REQUEST_QUEUE
-debug.print("REQUEST_KILL");
-#endif // DEBUG_SERVICE_REQUEST_QUEUE
-stop_all_tracking();
-rotator(DEACTIVATE, CW);
-rotator(DEACTIVATE, CCW);
-az_state = IDLE;
-az_request_queue_state = NONE;
-#ifdef DEBUG_SERVICE_REQUEST_QUEUE
-debug.println("");
-#endif // DEBUG_SERVICE_REQUEST_QUEUE
-break; // REQUEST_KILL
-}
-
-#ifdef FEATURE_LCD_DISPLAY
-if (az_request_queue_state != IN_QUEUE) {push_lcd_update = 1;}
-#endif //FEATURE_LCD_DISPLAY
-}
-#ifdef FEATURE_ELEVATION_CONTROL
-if (el_request_queue_state == IN_QUEUE) {
-
-  #ifdef FEATURE_POWER_SWITCH
-  last_activity_time = millis();
-  #endif //FEATURE_POWER_SWITCH
-
-  within_tolerance_flag = 0;
-  #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-  debug.print("service_request_queue: EL ");
-  #endif // DEBUG_SERVICE_REQUEST_QUEUE
-  switch (el_request) {
-    case (REQUEST_ELEVATION):
-    #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-    debug.print("REQUEST_ELEVATION ");
-    #endif // DEBUG_SERVICE_REQUEST_QUEUE
-    target_elevation = el_request_parm;
-
-    if (target_elevation > (ELEVATION_MAXIMUM_DEGREES * HEADING_MULTIPLIER)) {
-      target_elevation = ELEVATION_MAXIMUM_DEGREES * HEADING_MULTIPLIER;
-      #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-      if (debug_mode) {
-        debug.print(F("REQUEST_ELEVATION: target_elevation > ELEVATION_MAXIMUM_DEGREES"));
-      }
-      #endif // DEBUG_SERVICE_REQUEST_QUEUE
-    }
-
-    #ifdef OPTION_EL_MANUAL_ROTATE_LIMITS
-    if (target_elevation < (EL_MANUAL_ROTATE_DOWN_LIMIT * HEADING_MULTIPLIER)) {
-      target_elevation = EL_MANUAL_ROTATE_DOWN_LIMIT * HEADING_MULTIPLIER;
-      #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-      if (debug_mode) {
-        debug.print(F("REQUEST_ELEVATION: target_elevation < EL_MANUAL_ROTATE_DOWN_LIMIT"));
-      }
-      #endif // DEBUG_SERVICE_REQUEST_QUEUE
-    }
-    if (target_elevation > (EL_MANUAL_ROTATE_UP_LIMIT * HEADING_MULTIPLIER)) {
-      target_elevation = EL_MANUAL_ROTATE_UP_LIMIT * HEADING_MULTIPLIER;
-      #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-      if (debug_mode) {
-        debug.print(F("REQUEST_ELEVATION: target_elevation > EL_MANUAL_ROTATE_UP_LIMIT"));
-      }
-      #endif // DEBUG_SERVICE_REQUEST_QUEUE
-    }
-    #endif // OPTION_EL_MANUAL_ROTATE_LIMITS
-
-    if (abs(target_elevation - elevation) < (ELEVATION_TOLERANCE * HEADING_MULTIPLIER)) {
-      #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-      if (debug_mode) {
-        debug.print(F("requested elevation within tolerance\n"));
-      }
-      #endif // DEBUG_SERVICE_REQUEST_QUEUE
-      within_tolerance_flag = 1;
-      el_request_queue_state = NONE;
-    } else {
-      if (target_elevation > elevation) {
-        if (((el_state == SLOW_START_DOWN) || (el_state == NORMAL_DOWN) || (el_state == SLOW_DOWN_DOWN) || (el_state == TIMED_SLOW_DOWN_DOWN)) && (el_slowstart_active)) {
-          el_state = INITIALIZE_DIR_CHANGE_TO_UP;
-          #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-          if (debug_mode) {
-            debug.print(F(" INITIALIZE_DIR_CHANGE_TO_UP\n"));
-          }
-          #endif // DEBUG_SERVICE_REQUEST_QUEUE
-        } else {
-          if ((el_state != INITIALIZE_SLOW_START_UP) && (el_state != SLOW_START_UP) && (el_state != NORMAL_UP)) { // if we're already rotating UP, don't do anything
-          if (el_slowstart_active) {
-            el_state = INITIALIZE_SLOW_START_UP;
-          } else { el_state = INITIALIZE_NORMAL_UP; };
-        }
-      }
-    } // (target_elevation > elevation)
-    if (target_elevation < elevation) {
-      if (((el_state == SLOW_START_UP) || (el_state == NORMAL_UP) || (el_state == SLOW_DOWN_UP) || (el_state == TIMED_SLOW_DOWN_UP)) && (el_slowstart_active)) {
-        el_state = INITIALIZE_DIR_CHANGE_TO_DOWN;
-        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-        if (debug_mode) {
-          debug.print(F(" INITIALIZE_DIR_CHANGE_TO_DOWN\n"));
-        }
-        #endif // DEBUG_SERVICE_REQUEST_QUEUE
-      } else {
-        if ((el_state != INITIALIZE_SLOW_START_DOWN) && (el_state != SLOW_START_DOWN) && (el_state != NORMAL_DOWN)) { // if we're already rotating DOWN, don't do anything
-        if (el_slowstart_active) {
-          el_state = INITIALIZE_SLOW_START_DOWN;
-        } else { el_state = INITIALIZE_NORMAL_DOWN; };
-      }
-    }
-  }  // (target_elevation < elevation)
-}  // (abs(target_elevation - elevation) < ELEVATION_TOLERANCE)
-if (!within_tolerance_flag) {
-  el_request_queue_state = IN_PROGRESS_TO_TARGET;
-  el_last_rotate_initiation = millis();
-}
-#ifdef DEBUG_SERVICE_REQUEST_QUEUE
-if (debug_mode) {
-  control_port->println();
-}
-#endif // DEBUG_SERVICE_REQUEST_QUEUE
-break; // REQUEST_ELEVATION
-
-case (REQUEST_UP):
-#ifdef DEBUG_SERVICE_REQUEST_QUEUE
-if (debug_mode) {
-  debug.print(F("REQUEST_UP\n"));
-}
-#endif // DEBUG_SERVICE_REQUEST_QUEUE
-stop_all_tracking();
-if (((el_state == SLOW_START_DOWN) || (el_state == NORMAL_DOWN) || (el_state == SLOW_DOWN_DOWN) || (el_state == TIMED_SLOW_DOWN_DOWN)) && (el_slowstart_active)) {
-  el_state = INITIALIZE_DIR_CHANGE_TO_UP;
-  #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-  if (debug_mode) {
-    debug.print(F("service_request_queue: INITIALIZE_DIR_CHANGE_TO_UP\n"));
-  }
-  #endif // DEBUG_SERVICE_REQUEST_QUEUE
-} else {
-  if ((el_state != SLOW_START_UP) && (el_state != NORMAL_UP)) {
-    if (el_slowstart_active) {
-      el_state = INITIALIZE_SLOW_START_UP;
-    } else { el_state = INITIALIZE_NORMAL_UP; };
-  }
-}
-el_request_queue_state = NONE;
-el_last_rotate_initiation = millis();
-#ifdef DEBUG_SERVICE_REQUEST_QUEUE
-if (debug_mode) {
-  control_port->println();
-}
-#endif // DEBUG_SERVICE_REQUEST_QUEUE
-break; // REQUEST_UP
-
-case (REQUEST_DOWN):
-#ifdef DEBUG_SERVICE_REQUEST_QUEUE
-if (debug_mode) {
-  debug.print(F("REQUEST_DOWN\n"));
-}
-#endif // DEBUG_SERVICE_REQUEST_QUEUE
-stop_all_tracking();
-if (((el_state == SLOW_START_UP) || (el_state == NORMAL_UP) || (el_state == SLOW_DOWN_UP) || (el_state == TIMED_SLOW_DOWN_UP)) && (el_slowstart_active)) {
-  el_state = INITIALIZE_DIR_CHANGE_TO_DOWN;
-  #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-  if (debug_mode) {
-    debug.print(F("service_request_queue: INITIALIZE_DIR_CHANGE_TO_DOWN\n"));
-  }
-  #endif // DEBUG_SERVICE_REQUEST_QUEUE
-} else {
-  if ((el_state != SLOW_START_DOWN) && (el_state != NORMAL_DOWN)) {
-    if (el_slowstart_active) {
-      el_state = INITIALIZE_SLOW_START_DOWN;
-    } else { el_state = INITIALIZE_NORMAL_DOWN; };
-  }
-}
-el_request_queue_state = NONE;
-el_last_rotate_initiation = millis();
-#ifdef DEBUG_SERVICE_REQUEST_QUEUE
-if (debug_mode) {
-  control_port->println();
-}
-#endif // DEBUG_SERVICE_REQUEST_QUEUE
-break; // REQUEST_DOWN
-
-case (REQUEST_STOP):
-#ifdef DEBUG_SERVICE_REQUEST_QUEUE
-if (debug_mode) {
-  debug.print(F("REQUEST_STOP\n"));
-}
-#endif // DEBUG_SERVICE_REQUEST_QUEUE
-stop_all_tracking();
-if (el_state != IDLE) {
-  if (el_slowdown_active) {
-    if ((el_state == TIMED_SLOW_DOWN_UP) || (el_state == TIMED_SLOW_DOWN_DOWN) || (el_state == SLOW_DOWN_UP) || (el_state == SLOW_DOWN_DOWN)) {  // if we're already in timed slow down and we get another stop, do a hard stop
-    rotator(DEACTIVATE, UP);
-    rotator(DEACTIVATE, DOWN);
-    el_state = IDLE;
-    el_request_queue_state = NONE;
-  }
-  if ((el_state == SLOW_START_UP) || (el_state == NORMAL_UP)) {
-    el_state = INITIALIZE_TIMED_SLOW_DOWN_UP;
-    el_request_queue_state = IN_PROGRESS_TIMED;
-    el_last_rotate_initiation = millis();
-  }
-  if ((el_state == SLOW_START_DOWN) || (el_state == NORMAL_DOWN)) {
-    el_state = INITIALIZE_TIMED_SLOW_DOWN_DOWN;
-    el_request_queue_state = IN_PROGRESS_TIMED;
-    el_last_rotate_initiation = millis();
-  }
-} else {
-  rotator(DEACTIVATE, UP);
-  rotator(DEACTIVATE, DOWN);
-  el_state = IDLE;
-  el_request_queue_state = NONE;
-}
-} else {
-  el_request_queue_state = NONE; // nothing to do, we're already in IDLE state
-}
-#ifdef DEBUG_SERVICE_REQUEST_QUEUE
-if (debug_mode) {
-  control_port->println();
-}
-#endif // DEBUG_SERVICE_REQUEST_QUEUE
-break; // REQUEST_STOP
-
-case (REQUEST_KILL):
-#ifdef DEBUG_SERVICE_REQUEST_QUEUE
-if (debug_mode) {
-  debug.print(F("REQUEST_KILL\n"));
-}
-#endif // DEBUG_SERVICE_REQUEST_QUEUE
-stop_all_tracking();
-rotator(DEACTIVATE, UP);
-rotator(DEACTIVATE, DOWN);
-el_state = IDLE;
-el_request_queue_state = NONE;
-#ifdef DEBUG_SERVICE_REQUEST_QUEUE
-if (debug_mode) {
-  control_port->println();
-}
-#endif // DEBUG_SERVICE_REQUEST_QUEUE
-break; // REQUEST_KILL
-} /* switch */
-
-#ifdef FEATURE_LCD_DISPLAY
-if (el_request_queue_state != IN_QUEUE) {push_lcd_update = 1;}
-#endif //FEATURE_LCD_DISPLAY
-
-} // (el_request_queue_state == IN_QUEUE)
-#endif // FEATURE_ELEVATION_CONTROL
-} /* service_request_queue */
 
 void check_for_dirty_configuration() {
 
@@ -4071,78 +2785,20 @@ byte current_el_state() {
   return NOT_DOING_ANYTHING;
 } // current_el_state
 
-#ifdef FEATURE_AZIMUTH_CORRECTION
-float correct_azimuth(float azimuth_in){
+byte get_analog_pin(byte pin_number) {
 
-  if (sizeof(azimuth_calibration_from) != sizeof(azimuth_calibration_to)) {
-    return azimuth_in;
+  byte return_output = 0;
+  switch (pin_number) {
+    case 0: return_output = A0; break;
+    case 1: return_output = A1; break;
+    case 2: return_output = A2; break;
+    case 3: return_output = A3; break;
+    case 4: return_output = A4; break;
+    case 5: return_output = A5; break;
+    case 6: return_output = A6; break;
   }
-  for (unsigned int x = 0; x < (sizeof(azimuth_calibration_from) - 2); x++) {
-    if ((azimuth_in >= azimuth_calibration_from[x]) && (azimuth_in <= azimuth_calibration_from[x + 1])) {
-      //return (map(azimuth_in * 10, azimuth_calibration_from[x] * 10, azimuth_calibration_from[x + 1] * 10, azimuth_calibration_to[x] * 10, azimuth_calibration_to[x + 1] * 10)) / 10.0;
-      return (azimuth_in - azimuth_calibration_from[x]) * (azimuth_calibration_to[x+1] - azimuth_calibration_to[x]) / (azimuth_calibration_from[x + 1] - azimuth_calibration_from[x]) + azimuth_calibration_to[x];
-    }
-  }
-  return(azimuth_in);
-
+  return return_output;
 }
-#endif // FEATURE_AZIMUTH_CORRECTION
-
-#ifdef FEATURE_ELEVATION_CORRECTION
-float correct_elevation(float elevation_in) {
-  if (sizeof(elevation_calibration_from) != sizeof(elevation_calibration_to)) {
-    return elevation_in;
-  }
-  for (int x = 0; x < (sizeof(elevation_calibration_from) - 2); x++) {
-    if ((elevation_in >= elevation_calibration_from[x]) && (elevation_in <= elevation_calibration_from[x + 1])) {
-      // changed this from map() 2015-03-28 due to it blowing up at compile time in Arduino 1.6.1
-      return (elevation_in - elevation_calibration_from[x]) * (elevation_calibration_to[x+1] - elevation_calibration_to[x]) / (elevation_calibration_from[x + 1] - elevation_calibration_from[x]) + elevation_calibration_to[x];
-    }
-  }
-
-  return(elevation_in);
-}
-#endif // FEATURE_ELEVATION_CORRECTION
-
-#ifdef FEATURE_ROTATION_INDICATOR_PIN
-void service_rotation_indicator_pin() {
-
-  static byte rotation_indication_pin_state = 0;
-  static unsigned long time_rotation_went_inactive = 0;
-
-  if ((!rotation_indication_pin_state) && ((az_state != IDLE) || (el_state != IDLE))) {
-    if (rotation_indication_pin) {
-      digitalWriteEnhanced(rotation_indication_pin, ROTATION_INDICATOR_PIN_ACTIVE_STATE);
-    }
-    rotation_indication_pin_state = 1;
-    #ifdef DEBUG_ROTATION_INDICATION_PIN
-    if (debug_mode) {
-      debug.print(F("service_rotation_indicator_pin: active\n"));
-    }
-    #endif
-  }
-
-  if ((rotation_indication_pin_state) && (az_state == IDLE) && (el_state == IDLE)) {
-    if (time_rotation_went_inactive == 0) {
-      time_rotation_went_inactive = millis();
-    } else {
-      if ((millis() - time_rotation_went_inactive) >= (((unsigned long)ROTATION_INDICATOR_PIN_TIME_DELAY_SECONDS * 1000) + ((unsigned long)ROTATION_INDICATOR_PIN_TIME_DELAY_MINUTES * 60 * 1000))) {
-        if (rotation_indication_pin) {
-          digitalWriteEnhanced(rotation_indication_pin, ROTATION_INDICATOR_PIN_INACTIVE_STATE);
-        }
-        rotation_indication_pin_state = 0;
-        time_rotation_went_inactive = 0;
-        #ifdef DEBUG_ROTATION_INDICATION_PIN
-        if (debug_mode) {
-          debug.print(F("service_rotation_indicator_pin: inactive\n"));
-        }
-        #endif
-      }
-    }
-  }
-
-} /* service_rotation_indicator_pin */
-#endif // FEATURE_ROTATION_INDICATOR_PIN
 
 void pinModeEnhanced(uint8_t pin, uint8_t mode) {
   #if !defined(FEATURE_MASTER_WITH_SERIAL_SLAVE) && !defined(FEATURE_MASTER_WITH_ETHERNET_SLAVE)
@@ -4184,38 +2840,6 @@ void port_flush() {
   gps_port->flush();
   #endif //defined(GPS_PORT_MAPPED_TO) && defined(FEATURE_GPS)
 }
-
-#ifdef FEATURE_POWER_SWITCH
-void service_power_switch(){
-
-  static byte power_switch_state = 1;
-
-  #ifdef FEATURE_ELEVATION_CONTROL
-  if ((az_state != IDLE) || (el_state != IDLE)){
-    last_activity_time = millis();
-  }
-  #else //FEATURE_ELEVATION_CONTROL
-  if (az_state != IDLE){
-    last_activity_time = millis();
-  }
-  #endif //FEATURE_ELEVATION_CONTROL
-
-
-  if ((millis()-last_activity_time) > ((unsigned long)60000 * (unsigned long)POWER_SWITCH_IDLE_TIMEOUT)) {
-    if (power_switch_state){
-      digitalWriteEnhanced(power_switch, LOW);
-      power_switch_state = 0;
-    }
-  } else {
-    if (!power_switch_state){
-      digitalWriteEnhanced(power_switch, HIGH);
-      power_switch_state = 1;
-    }
-  }
-
-
-}
-#endif //FEATURE_POWER_SWITCH
 
 char *coordinates_to_maidenhead(float latitude_degrees,float longitude_degrees) {
   static char temp_string[8] = "";  // I had to declare this static in Arduino 1.6, otherwise this won't work (it worked before)
@@ -4290,620 +2914,28 @@ void submit_autocorrect(byte axis,float heading){
 }
 #endif //FEATURE_AUTOCORRECT
 
-byte get_analog_pin(byte pin_number){
-
-  byte return_output = 0;
-  switch (pin_number) {
-    case 0: return_output = A0; break;
-    case 1: return_output = A1; break;
-    case 2: return_output = A2; break;
-    case 3: return_output = A3; break;
-    case 4: return_output = A4; break;
-    case 5: return_output = A5; break;
-    case 6: return_output = A6; break;
-  }
-  return return_output;
-}
-
-#if defined(FEATURE_MOON_TRACKING) || defined(FEATURE_SUN_TRACKING)
-
-void update_sun_position() {
-
-  update_time();
-  c_time.iYear = clock_years;
-  c_time.iMonth = clock_months;
-  c_time.iDay = clock_days;
-
-  c_time.dHours = clock_hours;
-  c_time.dMinutes = clock_minutes;
-  c_time.dSeconds = clock_seconds;
-
-  c_loc.dLongitude = longitude;
-  c_loc.dLatitude  = latitude;
-
-  c_sposn.dZenithAngle = 0;
-  c_sposn.dAzimuth = 0;
-
-  sunpos(c_time, c_loc, &c_sposn);
-
-  // Convert Zenith angle to elevation
-  sun_elevation = 90. - c_sposn.dZenithAngle;
-  sun_azimuth = c_sposn.dAzimuth;
-
-} /* update_sun_position */
-
-void update_moon_position() {
-  update_time();
-  double RA, Dec, topRA, topDec, LST, HA, dist;
-  update_time();
-  moon2(clock_years, clock_months, clock_days, (clock_hours + (clock_minutes / 60.0) + (clock_seconds / 3600.0)), longitude, latitude, &RA, &Dec, &topRA, &topDec, &LST, &HA, &moon_azimuth, &moon_elevation, &dist);
-}
-
-byte calibrate_az_el(float new_az, float new_el) {
-  #ifdef DEBUG_OFFSET
-  debug.print("calibrate_az_el: new_az:");
-  debug.print(new_az, 2);
-  debug.print(" new_el:");
-  control_port->println(new_el, 2);
-  #endif // DEBUG_OFFSET
-
-  if ((new_az >= 0 ) && (new_az <= 360) && (new_el >= 0) && (new_el <= 90)) {
-    configuration.azimuth_offset = 0;
-    configuration.elevation_offset = 0;
-    read_azimuth(1);
-    read_elevation(1);
-
-    #ifdef DEBUG_OFFSET
-    debug.print("calibrate_az_el: az:");
-    debug.print(azimuth / LCD_HEADING_MULTIPLIER, 2);
-    debug.print(" el:");
-    control_port->println(elevation / LCD_HEADING_MULTIPLIER, 2);
-    #endif // DEBUG_OFFSET
-
-
-    configuration.azimuth_offset = new_az - (float(raw_azimuth) / float(HEADING_MULTIPLIER));
-    #if defined(FEATURE_ELEVATION_CONTROL)
-    configuration.elevation_offset = new_el - (float(elevation) / float(HEADING_MULTIPLIER));
-    #endif
-    configuration_dirty = 1;
-    return 1;
-  } else {
-    return 0;
-  }
-
-} /* calibrate_az_el */
-
-char * az_el_calibrated_string() {
-
-  char return_string[48] = "";
-  char tempstring[16] = "";
-
-  read_azimuth(1);
-  read_elevation(1);
-  strcpy(return_string, "Heading calibrated.  Az: ");
-  dtostrf((azimuth / LCD_HEADING_MULTIPLIER), 0, LCD_DECIMAL_PLACES, tempstring);
-  strcat(return_string, tempstring);
-  #ifdef FEATURE_ELEVATION_CONTROL
-  strcat(return_string, " El: ");
-  dtostrf((elevation / LCD_HEADING_MULTIPLIER), 0, LCD_DECIMAL_PLACES, tempstring);
-  strcat(return_string, tempstring);
-  #endif //FEATURE_ELEVATION_CONTROL
-  return return_string;
-
-}
-
-#endif // defined(FEATURE_MOON_TRACKING) || defined(FEATURE_SUN_TRACKING)
-
-#ifdef FEATURE_CLOCK
-
-char * clock_status_string() {
-
-  switch (clock_status) {
-    case FREE_RUNNING: return("FREE_RUNNING"); break;
-    case GPS_SYNC: return("GPS_SYNC"); break;
-    case RTC_SYNC: return("RTC_SYNC"); break;
-    case SLAVE_SYNC: return("SLAVE_SYNC"); break;
-    case SLAVE_SYNC_GPS: return("SLAVE_SYNC_GPS"); break;
-  }
-}
-
-char * timezone_modified_clock_string() {
-
-  static char return_string[32] = "";
-  char temp_string[16] = "";
-
-  dtostrf(local_clock_years, 0, 0, temp_string);
-  strcpy(return_string, temp_string);
-  strcat(return_string, "-");
-  if (local_clock_months < 10) {
-    strcat(return_string, "0");
-  }
-  dtostrf(local_clock_months, 0, 0, temp_string);
-  strcat(return_string, temp_string);
-  strcat(return_string, "-");
-  if (local_clock_days < 10) {
-    strcat(return_string, "0");
-  }
-  dtostrf(local_clock_days, 0, 0, temp_string);
-  strcat(return_string, temp_string);
-  strcat(return_string, " ");
-
-  if (local_clock_hours < 10) {
-    strcat(return_string, "0");
-  }
-  dtostrf(local_clock_hours, 0, 0, temp_string);
-  strcat(return_string, temp_string);
-  strcat(return_string, ":");
-  if (local_clock_minutes < 10) {
-    strcat(return_string, "0");
-  }
-  dtostrf(local_clock_minutes, 0, 0, temp_string);
-  strcat(return_string, temp_string);
-  strcat(return_string, ":");
-  if (local_clock_seconds < 10) {
-    strcat(return_string, "0");
-  }
-  dtostrf(local_clock_seconds, 0, 0, temp_string);
-  strcat(return_string, temp_string);
-  if (configuration.clock_timezone_offset == 0){
-    strcat(return_string,"Z");
-  }
-  return return_string;
-
-} /* clock_string */
-
-char * zulu_clock_string() {
-
-  static char return_string[32] = "";
-  char temp_string[16] = "";
-
-  dtostrf(clock_years, 0, 0, temp_string);
-  strcpy(return_string, temp_string);
-  strcat(return_string, "-");
-  if (clock_months < 10) {
-    strcat(return_string, "0");
-  }
-  dtostrf(clock_months, 0, 0, temp_string);
-  strcat(return_string, temp_string);
-  strcat(return_string, "-");
-  if (clock_days < 10) {
-    strcat(return_string, "0");
-  }
-  dtostrf(clock_days, 0, 0, temp_string);
-  strcat(return_string, temp_string);
-  strcat(return_string, " ");
-
-  if (clock_hours < 10) {
-    strcat(return_string, "0");
-  }
-  dtostrf(clock_hours, 0, 0, temp_string);
-  strcat(return_string, temp_string);
-  strcat(return_string, ":");
-  if (clock_minutes < 10) {
-    strcat(return_string, "0");
-  }
-  dtostrf(clock_minutes, 0, 0, temp_string);
-  strcat(return_string, temp_string);
-  strcat(return_string, ":");
-  if (clock_seconds < 10) {
-    strcat(return_string, "0");
-  }
-  dtostrf(clock_seconds, 0, 0, temp_string);
-  strcat(return_string, temp_string);
-  strcat(return_string,"Z");
-  return return_string;
-
-} /* zulu_clock_string */
-
-void update_time() {
-  unsigned long runtime = millis() - millis_at_last_calibration;
-  // calculate UTC
-
-  unsigned long time = (3600L * clock_hour_set) + (60L * clock_min_set) + clock_sec_set + ((runtime + (runtime * INTERNAL_CLOCK_CORRECTION)) / 1000.0);
-
-  clock_years = clock_year_set;
-  clock_months = clock_month_set;
-  clock_days = time / 86400L;
-  time -= clock_days * 86400L;
-  clock_days += clock_day_set;
-  clock_hours = time / 3600L;
-
-  switch (clock_months) {
-
-    case 1:
-    case 3:
-    case 5:
-    case 7:
-    case 8:
-    case 10:
-    case 12:
-    if (clock_days > 31) {
-      clock_days = 1; clock_months++;
-    }
-    break;
-
-    case 2:
-    if ((float(clock_years) / 4.0) == 0.0) {  // do we have a leap year?
-      if (clock_days > 29) {
-        clock_days = 1; clock_months++;
-      }
-    } else {
-      if (clock_days > 28) {
-        clock_days = 1; clock_months++;
-      }
-    }
-    break;
-
-    case 4:
-    case 6:
-    case 9:
-    case 11:
-    if (clock_days > 30) {
-      clock_days = 1; clock_months++;
-    }
-    break;
-  } /* switch */
-
-  if (clock_months > 12) {
-    clock_months = 1; clock_years++;
-  }
-
-  time -= clock_hours * 3600L;
-  clock_minutes  = time / 60L;
-  time -= clock_minutes * 60L;
-  clock_seconds = time;
-
-  // calculate local time
-  long local_time = (configuration.clock_timezone_offset * 60L * 60L) + (3600L * clock_hour_set) + (60L * clock_min_set) + clock_sec_set + ((runtime + (runtime * INTERNAL_CLOCK_CORRECTION)) / 1000.0);
-
-  local_clock_years = clock_year_set;
-  local_clock_months = clock_month_set;
-  local_clock_days = clock_day_set;
-
-  if (local_time < 0){
-    local_time = local_time + (24L * 60L * 60L) - 1;
-    local_clock_days--;
-    if (local_clock_days < 1){
-      local_clock_months--;
-      switch (local_clock_months) {
-        case 0:
-        local_clock_months = 12;
-        local_clock_days = 31;
-        local_clock_years--;
-        break;
-        case 1:
-        case 3:
-        case 5:
-        case 7:
-        case 8:
-        case 10:
-        case 12:
-        local_clock_days = 31;
-        break;
-        case 2: //February
-        if ((float(local_clock_years) / 4.0) == 0.0) {  // do we have a leap year?
-          local_clock_days = 29;
-        } else {
-          local_clock_days = 28;
-        }
-        break;
-        case 4:
-        case 6:
-        case 9:
-        case 11:
-        local_clock_days = 30;
-        break;
-      } /* switch */
-    }
-    local_clock_hours = local_time / 3600L;
-    local_time -= local_clock_hours * 3600L;
-    local_clock_minutes  = local_time / 60L;
-    local_time -= local_clock_minutes * 60L;
-    local_clock_seconds = local_time;
-
-  } else {  //(local_time < 0)
-
-    local_clock_days = local_time / 86400L;
-    local_time -= local_clock_days * 86400L;
-    local_clock_days += clock_day_set;
-    local_clock_hours = local_time / 3600L;
-
-    switch (local_clock_months) {
-
-      case 1:
-      case 3:
-      case 5:
-      case 7:
-      case 8:
-      case 10:
-      case 12:
-      if (local_clock_days > 31) {
-        local_clock_days = 1;
-        local_clock_months++;
-      }
-      break;
-
-      case 2:
-      if ((float(local_clock_years) / 4.0) == 0.0) {  // do we have a leap year?
-        if (local_clock_days > 29) {
-          local_clock_days = 1;
-          local_clock_months++;
-        }
-      } else {
-        if (local_clock_days > 28) {
-          local_clock_days = 1;
-          local_clock_months++;
-        }
-      }
-      break;
-
-      case 4:
-      case 6:
-      case 9:
-      case 11:
-      if (local_clock_days > 30) {
-        local_clock_days = 1;
-        local_clock_months++;
-      }
-      break;
-    } /* switch */
-
-    if (local_clock_months > 12) {
-      local_clock_months = 1;
-      local_clock_years++;
-    }
-
-    local_time -= local_clock_hours * 3600L;
-    local_clock_minutes  = local_time / 60L;
-    local_time -= local_clock_minutes * 60L;
-    local_clock_seconds = local_time;
-
-
-  }  //(local_time < 0)
-
-} /* update_time */
-#endif // FEATURE_CLOCK
-
-#ifdef FEATURE_GPS
-void service_gps(){
-
-  long gps_lat, gps_lon;
-  unsigned long fix_age;
-  int gps_year;
-  byte gps_month, gps_day, gps_hours, gps_minutes, gps_seconds, gps_hundredths;
-  static byte gps_sync_pin_active = 0;
-  #ifdef DEBUG_GPS
-  char tempstring[10] = "";
-  #endif //#ifdef DEBUG_GPS
-
-  static unsigned long last_sync = 0;
-
-  if (gps_data_available) {
-    // retrieves +/- lat/long in 100000ths of a degree
-    gps.get_position(&gps_lat, &gps_lon, &fix_age);
-    gps.crack_datetime(&gps_year, &gps_month, &gps_day, &gps_hours, &gps_minutes, &gps_seconds, &gps_hundredths, &fix_age);
-    #ifdef DEBUG_GPS
-    #if defined(DEBUG_GPS_SERIAL)
-    debug.println("");
-    #endif //DEBUG_GPS_SERIAL
-    debug.print("service_gps: fix_age:");
-    debug.print(fix_age);
-    debug.print(" lat:");
-    debug.print(gps_lat,4);
-    debug.print(" long:");
-    debug.print(gps_lon,4);
-    debug.print(" ");
-    debug.print(gps_year);
-    debug.print("-");
-    debug.print(gps_month);
-    debug.print("-");
-    debug.print(gps_day);
-    debug.print(" ");
-    debug.print(gps_hours);
-    debug.print(":");
-    debug.print(gps_minutes);
-    debug.println("");
-    #endif // DEBUG_GPS
-
-    if (fix_age < GPS_VALID_FIX_AGE_MS) {
-
-      if (SYNC_TIME_WITH_GPS) {
-        clock_year_set = gps_year;
-        clock_month_set = gps_month;
-        clock_day_set = gps_day;
-        clock_hour_set = gps_hours;
-        clock_min_set = gps_minutes;
-        clock_sec_set = gps_seconds;
-        millis_at_last_calibration = millis() - GPS_UPDATE_LATENCY_COMPENSATION_MS;
-        update_time();
-        #ifdef DEBUG_GPS
-        #ifdef DEBUG_GPS_SERIAL
-        debug.println("");
-        #endif //DEBUG_GPS_SERIAL
-        debug.print("service_gps: clock sync:");
-        sprintf(tempstring,"%s",timezone_modified_clock_string());
-        debug.print(tempstring);
-        debug.println("");
-        #endif // DEBUG_GPS
-      }
-
-      #if defined(OPTION_SYNC_RTC_TO_GPS) && defined(FEATURE_RTC_DS1307)
-      static unsigned long last_rtc_gps_sync_time;
-      if ((millis() - last_rtc_gps_sync_time) >= ((unsigned long)SYNC_RTC_TO_GPS_SECONDS * 1000)) {
-        rtc.adjust(DateTime(gps_year, gps_month, gps_day, gps_hours, gps_minutes, gps_seconds));
-        #ifdef DEBUG_RTC
-        debug.println("service_gps: synced RTC");
-        #endif // DEBUG_RTC
-        last_rtc_gps_sync_time = millis();
-      }
-      #endif // defined(OPTION_SYNC_RTC_TO_GPS) && defined(FEATURE_RTC_DS1307)
-
-      #if defined(OPTION_SYNC_RTC_TO_GPS) && defined(FEATURE_RTC_PCF8583)
-      static unsigned long last_rtc_gps_sync_time;
-      if ((millis() - last_rtc_gps_sync_time) >= ((unsigned long)SYNC_RTC_TO_GPS_SECONDS * 1000)) {
-        rtc.year = gps_year;
-        rtc.month = gps_month;
-        rtc.day = gps_day;
-        rtc.hour  = gps_hours;
-        rtc.minute = gps_minutes;
-        rtc.second = gps_seconds;
-        rtc.set_time();
-        #ifdef DEBUG_RTC
-        debug.println("service_gps: synced RTC");
-        #endif // DEBUG_RTC
-        last_rtc_gps_sync_time = millis();
-      }
-      #endif // defined(OPTION_SYNC_RTC_TO_GPS) && defined(FEATURE_RTC_PCF8583)
-
-
-      if (SYNC_COORDINATES_WITH_GPS) {
-        latitude = float(gps_lat) / 1000000.0;
-        longitude = float(gps_lon) / 1000000.0;
-        #ifdef DEBUG_GPS
-        debug.print("service_gps: coord sync:");
-        debug.print(latitude,2);
-        debug.print(" ");
-        debug.print(longitude,2);
-        debug.println("");
-        #endif // DEBUG_GPS
-      }
-
-      last_sync = millis();
-    }
-
-    gps_data_available = 0;
-  }
-
-  if ((millis() > ((unsigned long)GPS_SYNC_PERIOD_SECONDS * 1000)) && ((millis() - last_sync) < ((unsigned long)GPS_SYNC_PERIOD_SECONDS * 1000)) && (SYNC_TIME_WITH_GPS)) {
-    clock_status = GPS_SYNC;
-  } else {
-    clock_status = FREE_RUNNING;
-  }
-
-  if (gps_sync){
-    if (clock_status == GPS_SYNC){
-      if (!gps_sync_pin_active){
-        digitalWriteEnhanced(gps_sync,HIGH);
-        gps_sync_pin_active = 1;
-      }
-    } else {
-      if (gps_sync_pin_active){
-        digitalWriteEnhanced(gps_sync,LOW);
-        gps_sync_pin_active = 0;
-      }
-    }
-  }
-
-
-} /* service_gps */
-#endif // FEATURE_GPS
-
-#ifdef FEATURE_RTC
-void service_rtc() {
-
-  static unsigned long last_rtc_sync_time = 0;
-
-  if (((millis() - last_rtc_sync_time) >= ((unsigned long)SYNC_WITH_RTC_SECONDS * 1000)) || ((clock_status == FREE_RUNNING) && (millis() - last_rtc_sync_time) > 1000)) {
-    last_rtc_sync_time = millis();
-    #ifdef FEATURE_GPS
-    if (clock_status == GPS_SYNC) { // if we're also equipped with GPS and we're synced to it, don't sync to realtime clock
-    #ifdef DEBUG_RTC
-    debug.println("service_rtc: synced to GPS already.  Exiting.");
-    #endif // DEBUG_RTC
-    return;
-  }
-  #endif // FEATURE_GPS
-
-
-  #ifdef FEATURE_RTC_DS1307
-  if (rtc.isrunning()) {
-    DateTime now = rtc.now();
-    #ifdef DEBUG_RTC
-    debug.print("service_rtc: syncing: ");
-    debug.print(now.year());
-    debug.print("/");
-    debug.print(now.month());
-    debug.print("/");
-    debug.print(now.day());
-    debug.print(" ");
-    debug.print(now.hour());
-    debug.print(":");
-    debug.print(now.minute());
-    debug.print(":");
-    debug.print(now.second());
-    debug.println("");
-    #endif // DEBUG_RTC
-    clock_year_set = now.year();
-    clock_month_set = now.month();
-    clock_day_set = now.day();
-    clock_hour_set = now.hour();
-    clock_min_set = now.minute();
-    clock_sec_set = now.second();
-    millis_at_last_calibration = millis();
-    update_time();
-    clock_status = RTC_SYNC;
-  } else {
-    clock_status = FREE_RUNNING;
-    #ifdef DEBUG_RTC
-    debug.println("service_rtc: error: RTC not running");
-    #endif // DEBUG_RTC
-  }
-  #endif //#FEATURE_RTC_DS1307
-
-
-
-  #ifdef FEATURE_RTC_PCF8583
-  rtc.get_time();
-  if ((rtc.year > 2000) && (rtc.month > 0) && (rtc.month < 13)){  // do we have a halfway reasonable date?
-    #ifdef DEBUG_RTC
-    control_port->print("service_rtc: syncing: ");
-    control_port->print(rtc.year, DEC);
-    control_port->print('/');
-    control_port->print(rtc.month, DEC);
-    control_port->print('/');
-    control_port->print(rtc.day, DEC);
-    control_port->print(' ');
-    control_port->print(rtc.hour, DEC);
-    control_port->print(':');
-    control_port->print(rtc.minute, DEC);
-    control_port->print(':');
-    control_port->println(rtc.second, DEC);
-    #endif // DEBUG_RTC
-    clock_year_set = rtc.year;
-    clock_month_set = rtc.month;
-    clock_day_set = rtc.day;
-    clock_hour_set = rtc.hour;
-    clock_min_set = rtc.minute;
-    clock_sec_set = rtc.second;
-    millis_at_last_calibration = millis();
-    update_time();
-    clock_status = RTC_SYNC;
-  } else {
-    clock_status = FREE_RUNNING;
-    #ifdef DEBUG_RTC
-    control_port->print("service_rtc: error: RTC not returning valid date or time: ");
-    control_port->print(rtc.year, DEC);
-    control_port->print('/');
-    control_port->print(rtc.month, DEC);
-    control_port->print('/');
-    control_port->print(rtc.day, DEC);
-    control_port->print(' ');
-    control_port->print(rtc.hour, DEC);
-    control_port->print(':');
-    control_port->print(rtc.minute, DEC);
-    control_port->print(':');
-    control_port->println(rtc.second, DEC);
-    #endif // DEBUG_RTC
-  }
-  #endif //#FEATURE_RTC_PCF8583
-
-
-
-}
-} /* service_rtc */
-#endif // FEATURE_RTC
-
 #ifdef FEATURE_YAESU_EMULATION
+
+void get_keystroke() {
+  while (control_port->available() == 0) {
+    // do nothing lol
+  }
+  while (control_port->available() > 0) {
+    incoming_serial_byte = control_port->read();
+  }
+}
+
+void print_wrote_to_memory() {
+  control_port->println(F("Wrote to memory"));
+}
+
+void clear_serial_buffer() {
+  delay(200);
+  while (control_port->available()) {
+    incoming_serial_byte = control_port->read();
+  }
+}
+
 void process_yaesu_command(byte * yaesu_command_buffer, int yaesu_command_buffer_index, byte source_port, char * return_string) {
 
   char tempstring[11] = "";
@@ -5426,252 +3458,6 @@ void process_yaesu_command(byte * yaesu_command_buffer, int yaesu_command_buffer
 } /* yaesu_serial_command */
 #endif // FEATURE_YAESU_EMULATION
 
-#ifdef FEATURE_MOON_TRACKING
-void service_moon_tracking() {
-
-  static unsigned long last_check = 0;
-  static byte moon_tracking_activated_by_activate_line = 0;
-
-  static byte moon_tracking_pin_state = 0;
-
-  if (moon_tracking_active_pin) {
-    if ((moon_tracking_active) && (!moon_tracking_pin_state)) {
-      digitalWriteEnhanced(moon_tracking_active_pin, HIGH);
-      moon_tracking_pin_state = 1;
-    }
-    if ((!moon_tracking_active) && (moon_tracking_pin_state)) {
-      digitalWriteEnhanced(moon_tracking_active_pin, LOW);
-      moon_tracking_pin_state = 0;
-    }
-  }
-
-  if (moon_tracking_activate_line) {
-    if ((!moon_tracking_active) && (!digitalReadEnhanced(moon_tracking_activate_line))) {
-      moon_tracking_active = 1;
-      moon_tracking_activated_by_activate_line = 1;
-    }
-    if ((moon_tracking_active) && (digitalReadEnhanced(moon_tracking_activate_line)) && (moon_tracking_activated_by_activate_line)) {
-      moon_tracking_active = 0;
-      moon_tracking_activated_by_activate_line = 0;
-    }
-  }
-
-  if ((moon_tracking_active) && ((millis() - last_check) > MOON_TRACKING_CHECK_INTERVAL)) {
-
-    update_time();
-    update_moon_position();
-
-    #ifdef DEBUG_MOON_TRACKING
-    debug.print(F("service_moon_tracking: AZ: "));
-    debug.print(moon_azimuth);
-    debug.print(" EL: ");
-    debug.print(moon_elevation);
-    debug.print(" lat: ");
-    debug.print(latitude);
-    debug.print(" long: ");
-    debug.println(longitude);
-    #endif // DEBUG_MOON_TRACKING
-
-    if ((moon_azimuth >= MOON_AOS_AZIMUTH_MIN) && (moon_azimuth <= MOON_AOS_AZIMUTH_MAX) && (moon_elevation >= MOON_AOS_ELEVATION_MIN) && (moon_elevation <= MOON_AOS_ELEVATION_MAX)) {
-      submit_request(AZ, REQUEST_AZIMUTH, moon_azimuth * HEADING_MULTIPLIER, 11);
-      submit_request(EL, REQUEST_ELEVATION, moon_elevation * HEADING_MULTIPLIER, 12);
-      if (!moon_visible) {
-        moon_visible = 1;
-        #ifdef DEBUG_MOON_TRACKING
-        debug.println("service_moon_tracking: moon AOS");
-        #endif // DEBUG_MOON_TRACKING
-      }
-    } else {
-      if (moon_visible) {
-        moon_visible = 0;
-        #ifdef DEBUG_MOON_TRACKING
-        debug.println("service_moon_tracking: moon loss of AOS");
-        #endif // DEBUG_MOON_TRACKING
-      } else {
-        #ifdef DEBUG_MOON_TRACKING
-        debug.println("service_moon_tracking: moon out of AOS limits");
-        #endif // DEBUG_MOON_TRACKING
-      }
-    }
-
-    last_check = millis();
-  }
-
-} /* service_moon_tracking */
-
-char * moon_status_string() {
-
-  char returnstring[128] = "";
-  char tempstring[16] = "";
-
-  strcpy(returnstring,"\tmoon: AZ:");
-  dtostrf(moon_azimuth,0,2,tempstring);
-  strcat(returnstring,tempstring);
-  strcat(returnstring," EL:");
-  dtostrf(moon_elevation,0,2,tempstring);
-  strcat(returnstring,tempstring);
-  strcat(returnstring,"  TRACKING_");
-  if (!moon_tracking_active) {
-    strcat(returnstring,"IN");
-  }
-  strcat(returnstring,"ACTIVE ");
-  if (moon_tracking_active) {
-    if (!moon_visible) {
-      strcat(returnstring,"NOT_");
-    }
-    strcat(returnstring,"VISIBLE");
-  }
-  return returnstring;
-}
-
-#endif // FEATURE_MOON_TRACKING
-
-#ifdef FEATURE_SUN_TRACKING
-void service_sun_tracking(){
-
-  static unsigned long last_check = 0;
-  static byte sun_tracking_pin_state = 0;
-  static byte sun_tracking_activated_by_activate_line = 0;
-
-  if (sun_tracking_active_pin) {
-    if ((sun_tracking_active) && (!sun_tracking_pin_state)) {
-      digitalWriteEnhanced(sun_tracking_active_pin, HIGH);
-      sun_tracking_pin_state = 1;
-    }
-    if ((!sun_tracking_active) && (sun_tracking_pin_state)) {
-      digitalWriteEnhanced(sun_tracking_active_pin, LOW);
-      sun_tracking_pin_state = 0;
-    }
-  }
-
-  if (sun_tracking_activate_line) {
-    if ((!sun_tracking_active) && (!digitalReadEnhanced(sun_tracking_activate_line))) {
-      sun_tracking_active = 1;
-      sun_tracking_activated_by_activate_line = 1;
-    }
-    if ((sun_tracking_active) && (digitalReadEnhanced(sun_tracking_activate_line)) && (sun_tracking_activated_by_activate_line)) {
-      sun_tracking_active = 0;
-      sun_tracking_activated_by_activate_line = 0;
-    }
-  }
-
-  if ((sun_tracking_active) && ((millis() - last_check) > SUN_TRACKING_CHECK_INTERVAL)) {
-
-    update_time();
-    update_sun_position();
-
-
-    #ifdef DEBUG_SUN_TRACKING
-    debug.print(F("service_sun_tracking: AZ: "));
-    debug.print(sun_azimuth);
-    debug.print(" EL: ");
-    debug.print(sun_elevation);
-    debug.print(" lat: ");
-    debug.print(latitude);
-    debug.print(" long: ");
-    debug.println(longitude);
-    #endif // DEBUG_SUN_TRACKING
-
-    if ((sun_azimuth >= SUN_AOS_AZIMUTH_MIN) && (sun_azimuth <= SUN_AOS_AZIMUTH_MAX) && (sun_elevation >= SUN_AOS_ELEVATION_MIN) && (sun_elevation <= SUN_AOS_ELEVATION_MAX)) {
-      submit_request(AZ, REQUEST_AZIMUTH, sun_azimuth * HEADING_MULTIPLIER, 13);
-      submit_request(EL, REQUEST_ELEVATION, sun_elevation * HEADING_MULTIPLIER, 14);
-      if (!sun_visible) {
-        sun_visible = 1;
-        #ifdef DEBUG_SUN_TRACKING
-        debug.println("service_sun_tracking: sun AOS");
-        #endif // DEBUG_SUN_TRACKING
-      }
-    } else {
-      if (sun_visible) {
-        sun_visible = 0;
-        #ifdef DEBUG_SUN_TRACKING
-        debug.println("service_sun_tracking: sun loss of AOS");
-        #endif // DEBUG_SUN_TRACKING
-      } else {
-        #ifdef DEBUG_SUN_TRACKING
-        debug.println("service_sun_tracking: sun out of AOS limits");
-        #endif // DEBUG_SUN_TRACKING
-      }
-    }
-
-    last_check = millis();
-  }
-
-} /* service_sun_tracking */
-
-char * sun_status_string() {
-
-  char returnstring[128] = "";
-  char tempstring[16] = "";
-
-  strcpy(returnstring,"\tsun: AZ:");
-  dtostrf(sun_azimuth,0,2,tempstring);
-  strcat(returnstring,tempstring);
-  strcat(returnstring," EL:");
-  dtostrf(sun_elevation,0,2,tempstring);
-  strcat(returnstring,tempstring);
-  strcat(returnstring,"  TRACKING_");
-  if (!sun_tracking_active) {
-    strcat(returnstring,"IN");
-  }
-  strcat(returnstring,"ACTIVE ");
-  if (sun_tracking_active) {
-    if (!sun_visible) {
-      strcat(returnstring,"NOT_");
-    }
-    strcat(returnstring,"VISIBLE");
-  }
-  return returnstring;
-}
-#endif // FEATURE_SUN_TRACKING
-
-#if defined(FEATURE_MOON_PUSHBUTTON_AZ_EL_CALIBRATION) && defined(FEATURE_MOON_TRACKING)
-void check_moon_pushbutton_calibration(){
-
-  static unsigned long last_update_time = 0;
-
-  if ((digitalReadEnhanced(pin_moon_pushbutton_calibration) == LOW) && ((millis() - last_update_time) > 500)){
-    update_moon_position();
-    if (calibrate_az_el(moon_azimuth, moon_elevation)) {
-    } else {
-    }
-    last_update_time = millis();
-  }
-
-}
-#endif //defined(FEATURE_MOON_PUSHBUTTON_AZ_EL_CALIBRATION) && defined(FEATURE_MOON_TRACKING)
-
-#if defined(FEATURE_SUN_PUSHBUTTON_AZ_EL_CALIBRATION) && defined(FEATURE_SUN_TRACKING)
-void check_sun_pushbutton_calibration(){
-
-  static unsigned long last_update_time = 0;
-
-  if ((digitalReadEnhanced(pin_sun_pushbutton_calibration) == LOW) && ((millis() - last_update_time) > 500)){
-    update_sun_position();
-    if (calibrate_az_el(sun_azimuth, sun_elevation)) {
-    } else {
-    }
-    last_update_time = millis();
-  }
-
-}
-#endif //defined(FEATURE_SUN_PUSHBUTTON_AZ_EL_CALIBRATION) && defined(FEATURE_SUN_TRACKING)
-
-#if defined(FEATURE_SUN_TRACKING) || defined(FEATURE_MOON_TRACKING)
-char * coordinate_string(){
-
-  char returnstring[32] = "";
-  char tempstring[12] = "";
-
-  dtostrf(latitude,0,4,returnstring);
-  strcat(returnstring," ");
-  dtostrf(longitude,0,4,tempstring);
-  strcat(returnstring,tempstring);
-  return returnstring;
-
-}
-#endif //defined(FEATURE_SUN_TRACKING) || defined(FEATURE_MOON_TRACKING)
-
 #ifdef FEATURE_TIMED_BUFFER
 void clear_timed_buffer() {
   timed_buffer_status = EMPTY;
@@ -5755,3 +3541,76 @@ void check_timed_interval(){
 } /* check_timed_interval */
 
 #endif // FEATURE_TIMED_BUFFER
+
+#ifdef FEATURE_AZIMUTH_CORRECTION
+float correct_azimuth(float azimuth_in){
+
+  if (sizeof(azimuth_calibration_from) != sizeof(azimuth_calibration_to)) {
+    return azimuth_in;
+  }
+  for (unsigned int x = 0; x < (sizeof(azimuth_calibration_from) - 2); x++) {
+    if ((azimuth_in >= azimuth_calibration_from[x]) && (azimuth_in <= azimuth_calibration_from[x + 1])) {
+      //return (map(azimuth_in * 10, azimuth_calibration_from[x] * 10, azimuth_calibration_from[x + 1] * 10, azimuth_calibration_to[x] * 10, azimuth_calibration_to[x + 1] * 10)) / 10.0;
+      return (azimuth_in - azimuth_calibration_from[x]) * (azimuth_calibration_to[x+1] - azimuth_calibration_to[x]) / (azimuth_calibration_from[x + 1] - azimuth_calibration_from[x]) + azimuth_calibration_to[x];
+    }
+  }
+  return(azimuth_in);
+
+}
+#endif // FEATURE_AZIMUTH_CORRECTION
+
+#ifdef FEATURE_ELEVATION_CORRECTION
+float correct_elevation(float elevation_in) {
+  if (sizeof(elevation_calibration_from) != sizeof(elevation_calibration_to)) {
+    return elevation_in;
+  }
+  for (int x = 0; x < (sizeof(elevation_calibration_from) - 2); x++) {
+    if ((elevation_in >= elevation_calibration_from[x]) && (elevation_in <= elevation_calibration_from[x + 1])) {
+      // changed this from map() 2015-03-28 due to it blowing up at compile time in Arduino 1.6.1
+      return (elevation_in - elevation_calibration_from[x]) * (elevation_calibration_to[x+1] - elevation_calibration_to[x]) / (elevation_calibration_from[x + 1] - elevation_calibration_from[x]) + elevation_calibration_to[x];
+    }
+  }
+
+  return(elevation_in);
+}
+#endif // FEATURE_ELEVATION_CORRECTION
+
+#ifdef FEATURE_ROTATION_INDICATOR_PIN
+void service_rotation_indicator_pin() {
+
+  static byte rotation_indication_pin_state = 0;
+  static unsigned long time_rotation_went_inactive = 0;
+
+  if ((!rotation_indication_pin_state) && ((az_state != IDLE) || (el_state != IDLE))) {
+    if (rotation_indication_pin) {
+      digitalWriteEnhanced(rotation_indication_pin, ROTATION_INDICATOR_PIN_ACTIVE_STATE);
+    }
+    rotation_indication_pin_state = 1;
+    #ifdef DEBUG_ROTATION_INDICATION_PIN
+    if (debug_mode) {
+      debug.print(F("service_rotation_indicator_pin: active\n"));
+    }
+    #endif
+  }
+
+  if ((rotation_indication_pin_state) && (az_state == IDLE) && (el_state == IDLE)) {
+    if (time_rotation_went_inactive == 0) {
+      time_rotation_went_inactive = millis();
+    } else {
+      if ((millis() - time_rotation_went_inactive) >= (((unsigned long)ROTATION_INDICATOR_PIN_TIME_DELAY_SECONDS * 1000) + ((unsigned long)ROTATION_INDICATOR_PIN_TIME_DELAY_MINUTES * 60 * 1000))) {
+        if (rotation_indication_pin) {
+          digitalWriteEnhanced(rotation_indication_pin, ROTATION_INDICATOR_PIN_INACTIVE_STATE);
+        }
+        rotation_indication_pin_state = 0;
+        time_rotation_went_inactive = 0;
+        #ifdef DEBUG_ROTATION_INDICATION_PIN
+        if (debug_mode) {
+          debug.print(F("service_rotation_indicator_pin: inactive\n"));
+        }
+        #endif
+      }
+    }
+  }
+
+} /* service_rotation_indicator_pin */
+#endif // FEATURE_ROTATION_INDICATOR_PIN

@@ -146,7 +146,7 @@ byte current_az_speed_voltage = 0;
   int analog_el = 0;
 
   unsigned long el_last_rotate_initiation = 0;
-  
+
   #ifdef FEATURE_TIMED_BUFFER
     int timed_buffer_elevations[TIMED_INTERVAL_ARRAY_SIZE];
   #endif // FEATURE_TIMED_BUFFER
@@ -283,9 +283,7 @@ void initialize_peripherals();
 void submit_request(byte axis, byte request, int parm, byte called_by);
 void service_rotation();
 void stop_all_tracking();
-void service_request_queue();
 void check_for_dirty_configuration();
-void check_joystick();
 void service_rotation_indicator_pin();
 void check_limit_sense();
 void az_position_incremental_encoder_interrupt_handler();
@@ -319,3 +317,6 @@ int digitalReadEnhanced(uint8_t pin);
 int analogReadEnhanced(uint8_t pin);
 float correct_azimuth(float azimuth_in);
 float correct_elevation(float elevation_in);
+char * azimuth_direction(int azimuth_in);
+char * idle_status();
+char *coordinates_to_maidenhead(float latitude_degrees,float longitude_degrees);
