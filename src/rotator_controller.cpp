@@ -4271,8 +4271,6 @@ void submit_autocorrect(byte axis,float heading){
 
   }
 
-
-  #ifdef FEATURE_ELEVATION_CONTROL
   if (axis == EL){
     autocorrect_state_el = AUTOCORRECT_WATCHING_EL;
     autocorrect_el = heading;
@@ -4283,7 +4281,6 @@ void submit_autocorrect(byte axis,float heading){
     #endif //DEBUG_AUTOCORRECT
 
   }
-  #endif //FEATURE_ELEVATION_CONTROL
 
   #ifdef DEBUG_AUTOCORRECT
   debug.print(heading,2);
@@ -4376,7 +4373,7 @@ byte calibrate_az_el(float new_az, float new_el) {
 
 } /* calibrate_az_el */
 
-char * az_el_calibrated_string(){
+char * az_el_calibrated_string() {
 
   char return_string[48] = "";
   char tempstring[16] = "";
@@ -4394,10 +4391,12 @@ char * az_el_calibrated_string(){
   return return_string;
 
 }
+
 #endif // defined(FEATURE_MOON_TRACKING) || defined(FEATURE_SUN_TRACKING)
 
 #ifdef FEATURE_CLOCK
-char * clock_status_string(){
+
+char * clock_status_string() {
 
   switch (clock_status) {
     case FREE_RUNNING: return("FREE_RUNNING"); break;
@@ -4407,6 +4406,7 @@ char * clock_status_string(){
     case SLAVE_SYNC_GPS: return("SLAVE_SYNC_GPS"); break;
   }
 }
+
 char * timezone_modified_clock_string() {
 
   static char return_string[32] = "";
@@ -4553,9 +4553,7 @@ void update_time() {
   time -= clock_minutes * 60L;
   clock_seconds = time;
 
-
   // calculate local time
-
   long local_time = (configuration.clock_timezone_offset * 60L * 60L) + (3600L * clock_hour_set) + (60L * clock_min_set) + clock_sec_set + ((runtime + (runtime * INTERNAL_CLOCK_CORRECTION)) / 1000.0);
 
   local_clock_years = clock_year_set;
