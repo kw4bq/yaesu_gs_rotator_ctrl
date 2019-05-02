@@ -20,26 +20,6 @@
 #include "rotator_k3ngdisplay.h"
 #include <Wire.h>
 
-#if defined(FEATURE_MOON_TRACKING) || defined(FEATURE_SUN_TRACKING)
-  #include <moon2.h>
-#endif // defined(FEATURE_MOON_TRACKING) || defined(FEATURE_SUN_TRACKING)
-
-#ifdef FEATURE_SUN_TRACKING
-  #include <sunpos.h>
-#endif // FEATURE_SUN_TRACKING
-
-#ifdef FEATURE_GPS
-  #include <TinyGPS.h>
-#endif // FEATURE_GPS
-
-#ifdef FEATURE_RTC_DS1307
-  #include <RTClib.h>
-#endif // FEATURE_RTC_DS1307
-
-#ifdef FEATURE_RTC_PCF8583
-  #include <PCF8583.h>
-#endif //FEATURE_RTC_PCF8583
-
 #include "rotator.h"
 #include "rotator_pins.h"
 #include "rotator_settings.h"
@@ -151,68 +131,13 @@ byte current_az_speed_voltage = 0;
     int timed_buffer_elevations[TIMED_INTERVAL_ARRAY_SIZE];
   #endif // FEATURE_TIMED_BUFFER
   byte elevation_button_was_pushed = 0;
+
 #endif // FEATURE_ELEVATION_CONTROL
 
 byte push_lcd_update = 0;
 
-#ifdef FEATURE_GPS
-  TinyGPS gps;
-  SERIAL_PORT_CLASS * gps_port;
-  byte gps_data_available = 0;
-  #ifdef GPS_MIRROR_PORT
-    SERIAL_PORT_CLASS * (gps_mirror_port);
-  #endif //GPS_MIRROR_PORT
-#endif //defined(FEATURE_GPS)
-
 double latitude = DEFAULT_LATITUDE;
 double longitude = DEFAULT_LONGITUDE;
-
-#ifdef FEATURE_MOON_TRACKING
-  byte moon_tracking_active = 0;
-  byte moon_visible = 0;
-  double moon_azimuth = 0;
-  double moon_elevation = 0;
-#endif // FEATURE_MOON_TRACKING
-
-#ifdef FEATURE_SUN_TRACKING
-  float sun_azimuth = 0;
-  float sun_elevation = 0;
-  cTime c_time;
-  cLocation c_loc;
-  cSunCoordinates c_sposn;
-  byte sun_visible = 0;
-  byte sun_tracking_active = 0;
-#endif // FEATURE_SUN_TRACKING
-
-#ifdef FEATURE_CLOCK
-  unsigned long clock_years = 0;
-  unsigned long clock_months = 0;
-  unsigned long clock_days = 0;
-  unsigned long clock_hours = 0;
-  unsigned long clock_minutes = 0;
-  unsigned long clock_seconds = 0;
-  long local_clock_years = 0;
-  long local_clock_months = 0;
-  long local_clock_days = 0;
-  long local_clock_hours = 0;
-  long local_clock_minutes = 0;
-  long local_clock_seconds = 0;
-  int clock_year_set = 2017;
-  byte clock_month_set = 1;
-  byte clock_day_set = 1;
-  byte clock_sec_set = 0;
-  unsigned long clock_hour_set = 0;
-  unsigned long clock_min_set = 0;
-  unsigned long millis_at_last_calibration = 0;
-#endif // FEATURE_CLOCK
-
-#if defined(FEATURE_GPS) || defined(FEATURE_RTC) || defined(FEATURE_CLOCK)
-  byte clock_status = FREE_RUNNING;
-#endif // defined(FEATURE_GPS) || defined(FEATURE_RTC)
-
-#ifdef FEATURE_POWER_SWITCH
-  unsigned long last_activity_time = 0;
-#endif //FEATURE_POWER_SWITCH
 
 #ifdef FEATURE_AZIMUTH_CORRECTION
   const float azimuth_calibration_from[]  = AZIMUTH_CALIBRATION_FROM_ARRAY;
@@ -238,14 +163,6 @@ double longitude = DEFAULT_LONGITUDE;
 DebugClass debug;
 
 K3NGdisplay k3ngdisplay(LCD_COLUMNS,LCD_ROWS,LCD_UPDATE_TIME);
-
-#ifdef FEATURE_RTC_DS1307
-  RTC_DS1307 rtc;
-#endif //FEATURE_RTC_DS1307
-
-#ifdef FEATURE_RTC_PCF8583
-  PCF8583 rtc(0xA0);
-#endif //FEATURE_RTC_PCF8583
 
 void read_headings();
 void service_blink_led();
@@ -286,8 +203,6 @@ void stop_all_tracking();
 void check_for_dirty_configuration();
 void service_rotation_indicator_pin();
 void check_limit_sense();
-void az_position_incremental_encoder_interrupt_handler();
-void el_position_incremental_encoder_interrupt_handler();
 void pinModeEnhanced(uint8_t pin, uint8_t mode);
 void digitalWriteEnhanced(uint8_t pin, uint8_t writevalue);
 void analogWriteEnhanced(uint8_t pin, int writevalue);
@@ -295,16 +210,8 @@ void port_flush();
 void service_power_switch();
 void service_analog_output_pins();
 void submit_autocorrect(byte axis,float heading);
-void update_sun_position();
-void update_moon_position();
-void update_time();
-void service_gps();
-void service_rtc();
 void process_yaesu_command(byte * yaesu_command_buffer, int yaesu_command_buffer_index, byte source_port, char * return_string);
-void service_moon_tracking();
-void service_sun_tracking();
-void check_moon_pushbutton_calibration();
-void check_sun_pushbutton_calibration();
+byte process_backslash_command(byte input_buffer[], int input_buffer_index, byte source_port, char * return_string);
 void clear_timed_buffer();
 void initiate_timed_buffer(byte source_port);
 void print_timed_buffer_empty_message();

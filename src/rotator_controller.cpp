@@ -389,11 +389,15 @@ void check_serial() {
       control_port_buffer[control_port_buffer_index] = incoming_serial_byte;
       control_port_buffer_index++;
     }
-    
+
     if (incoming_serial_byte == 13) {  // do we have a carriage return?
-      process_yaesu_command(control_port_buffer,control_port_buffer_index,CONTROL_PORT0,return_string);
-      control_port->println(return_string);
-      clear_command_buffer();
+      if ((control_port_buffer[0] == '\\') || (control_port_buffer[0] == '/')) {
+        process_backslash_command(control_port_buffer, control_port_buffer_index, CONTROL_PORT0, return_string);
+      } else {
+        process_yaesu_command(control_port_buffer,control_port_buffer_index,CONTROL_PORT0,return_string);
+        control_port->println(return_string);
+        clear_command_buffer();
+      }
     }
     #endif
 
@@ -1964,7 +1968,6 @@ void update_az_variable_outputs(byte speed_voltage){
 } // update_az_variable_outputs
 
 void rotator(byte rotation_action, byte rotation_type) {
-
   #ifdef DEBUG_ROTATOR
   if (debug_mode) {
     control_port->flush();
@@ -1978,292 +1981,264 @@ void rotator(byte rotation_action, byte rotation_type) {
     // delay(1000);
   }
   #endif // DEBUG_ROTATOR
+
   switch (rotation_type) {
-    case CW:
-    #ifdef DEBUG_ROTATOR
-    if (debug_mode) {
-      debug.print(F("CW ")); control_port->flush();
-    }
-    #endif // DEBUG_ROTATOR
-    if (rotation_action == ACTIVATE) {
+    case CW: {
       #ifdef DEBUG_ROTATOR
       if (debug_mode) {
-        debug.print(F("ACTIVATE\n"));
+        debug.print(F("CW ")); control_port->flush();
       }
       #endif // DEBUG_ROTATOR
-      brake_release(AZ, BRAKE_RELEASE_ON);
-      if (az_slowstart_active) {
-        if (rotate_cw_pwm) {
-          analogWriteEnhanced(rotate_cw_pwm, 0);
+      if (rotation_action == ACTIVATE) {
+        #ifdef DEBUG_ROTATOR
+        if (debug_mode) {
+          debug.print(F("ACTIVATE\n"));
         }
-        if (rotate_ccw_pwm) {
-          analogWriteEnhanced(rotate_ccw_pwm, 0); digitalWriteEnhanced(rotate_ccw_pwm, LOW);
+        #endif // DEBUG_ROTATOR
+        brake_release(AZ, BRAKE_RELEASE_ON);
+        if (az_slowstart_active) {
+          if (rotate_cw_pwm) {
+            analogWriteEnhanced(rotate_cw_pwm, 0);
+          }
+          if (rotate_ccw_pwm) {
+            analogWriteEnhanced(rotate_ccw_pwm, 0); digitalWriteEnhanced(rotate_ccw_pwm, LOW);
+          }
+          if (rotate_cw_ccw_pwm) {
+            analogWriteEnhanced(rotate_cw_ccw_pwm, 0);
+          }
+          if (rotate_cw_freq) {
+            noTone(rotate_cw_freq);
+          }
+          if (rotate_ccw_freq) {
+            noTone(rotate_ccw_freq);
+          }
+        } else {
+          if (rotate_cw_pwm) {
+            analogWriteEnhanced(rotate_cw_pwm, normal_az_speed_voltage);
+          }
+          if (rotate_ccw_pwm) {
+            analogWriteEnhanced(rotate_ccw_pwm, 0); digitalWriteEnhanced(rotate_ccw_pwm, LOW);
+          }
+          if (rotate_cw_ccw_pwm) {
+            analogWriteEnhanced(rotate_cw_ccw_pwm, normal_az_speed_voltage);
+          }
+          if (rotate_cw_freq) {
+            tone(rotate_cw_freq, map(normal_az_speed_voltage, 0, 255, AZ_VARIABLE_FREQ_OUTPUT_LOW, AZ_VARIABLE_FREQ_OUTPUT_HIGH));
+          }
+          if (rotate_ccw_freq) {
+            noTone(rotate_ccw_freq);
+          }
+        }
+        if (rotate_cw) {
+          digitalWriteEnhanced(rotate_cw, ROTATE_PIN_ACTIVE_VALUE);
+          #if defined(pin_led_cw)
+          digitalWriteEnhanced(pin_led_cw, PIN_LED_ACTIVE_STATE);
+          #endif
+        }
+        if (rotate_ccw) {
+          digitalWriteEnhanced(rotate_ccw, ROTATE_PIN_INACTIVE_VALUE);
+          #if defined(pin_led_ccw)
+          digitalWriteEnhanced(pin_led_ccw, PIN_LED_INACTIVE_STATE);
+          #endif
+        }
+        if (rotate_cw_ccw){
+          digitalWriteEnhanced(rotate_cw_ccw, ROTATE_PIN_ACTIVE_VALUE);
+        }
+        #ifdef DEBUG_ROTATOR
+        if (debug_mode) {
+          debug.print(F("rotator: normal_az_speed_voltage:"));
+          control_port->println(normal_az_speed_voltage);
+          //control_port->flush();
+        }
+        #endif // DEBUG_ROTATOR
+      } else {
+        #ifdef DEBUG_ROTATOR
+        if (debug_mode) {
+          debug.print(F("DEACTIVATE\n"));
+        }
+        #endif // DEBUG_ROTATOR
+        if (rotate_cw_pwm) {
+          analogWriteEnhanced(rotate_cw_pwm, 0); digitalWriteEnhanced(rotate_cw_pwm, LOW);
         }
         if (rotate_cw_ccw_pwm) {
           analogWriteEnhanced(rotate_cw_ccw_pwm, 0);
         }
+        if (rotate_cw) {
+          digitalWriteEnhanced(rotate_cw, ROTATE_PIN_INACTIVE_VALUE);
+          #if defined(pin_led_cw)
+          digitalWriteEnhanced(pin_led_cw, PIN_LED_INACTIVE_STATE);
+          #endif
+        }
+        if (rotate_cw_ccw){
+          digitalWriteEnhanced(rotate_cw_ccw, ROTATE_PIN_INACTIVE_VALUE);
+        }
         if (rotate_cw_freq) {
           noTone(rotate_cw_freq);
         }
-        if (rotate_ccw_freq) {
-          noTone(rotate_ccw_freq);
+      }
+      break;
+    }
+    case CCW: {
+      #ifdef DEBUG_ROTATOR
+      if (debug_mode) {
+        debug.print(F("CCW ")); control_port->flush();
+      }
+      #endif // DEBUG_ROTATOR
+      if (rotation_action == ACTIVATE) {
+        #ifdef DEBUG_ROTATOR
+        if (debug_mode) {
+          debug.print(F("ACTIVATE\n"));
         }
+        #endif // DEBUG_ROTATOR
+        brake_release(AZ, BRAKE_RELEASE_ON);
+        if (az_slowstart_active) {
+          if (rotate_cw_pwm) {
+            analogWriteEnhanced(rotate_cw_pwm, 0); digitalWriteEnhanced(rotate_cw_pwm, LOW);
+          }
+          if (rotate_ccw_pwm) {
+            analogWriteEnhanced(rotate_ccw_pwm, 0);
+          }
+          if (rotate_cw_ccw_pwm) {
+            analogWriteEnhanced(rotate_cw_ccw_pwm, 0);
+          }
+          if (rotate_cw_freq) {
+            noTone(rotate_cw_freq);
+          }
+          if (rotate_ccw_freq) {
+            noTone(rotate_ccw_freq);
+          }
+        } else {
+          if (rotate_cw_pwm) {
+            analogWriteEnhanced(rotate_cw_pwm, 0); digitalWriteEnhanced(rotate_cw_pwm, LOW);
+          }
+          if (rotate_ccw_pwm) {
+            analogWriteEnhanced(rotate_ccw_pwm, normal_az_speed_voltage);
+          }
+          if (rotate_cw_ccw_pwm) {
+            analogWriteEnhanced(rotate_cw_ccw_pwm, normal_az_speed_voltage);
+          }
+          if (rotate_cw_freq) {
+            noTone(rotate_cw_freq);
+          }
+          if (rotate_ccw_freq) {
+            tone(rotate_ccw_freq, map(normal_az_speed_voltage, 0, 255, AZ_VARIABLE_FREQ_OUTPUT_LOW, AZ_VARIABLE_FREQ_OUTPUT_HIGH));
+          }
+        }
+        if (rotate_cw) {
+          digitalWriteEnhanced(rotate_cw, ROTATE_PIN_INACTIVE_VALUE);
+          #if defined(pin_led_cw)
+          digitalWriteEnhanced(pin_led_cw, PIN_LED_INACTIVE_STATE);
+          #endif
+        }
+        if (rotate_ccw) {
+          digitalWriteEnhanced(rotate_ccw, ROTATE_PIN_ACTIVE_VALUE);
+          #if defined(pin_led_ccw)
+          digitalWriteEnhanced(pin_led_ccw, PIN_LED_ACTIVE_STATE);
+          #endif
+        }
+        if (rotate_cw_ccw){
+          digitalWriteEnhanced(rotate_cw_ccw, ROTATE_PIN_ACTIVE_VALUE);
+        }
+        #ifdef DEBUG_ROTATOR
+        if (debug_mode) {
+          debug.print(F("rotator: normal_az_speed_voltage:"));
+          control_port->println(normal_az_speed_voltage);
+          control_port->flush();
+        }
+        #endif // DEBUG_ROTATOR
       } else {
-        if (rotate_cw_pwm) {
-          analogWriteEnhanced(rotate_cw_pwm, normal_az_speed_voltage);
+        #ifdef DEBUG_ROTATOR
+        if (debug_mode) {
+          debug.print(F("DEACTIVATE\n"));
         }
+        #endif // DEBUG_ROTATOR
         if (rotate_ccw_pwm) {
           analogWriteEnhanced(rotate_ccw_pwm, 0); digitalWriteEnhanced(rotate_ccw_pwm, LOW);
         }
-        if (rotate_cw_ccw_pwm) {
-          analogWriteEnhanced(rotate_cw_ccw_pwm, normal_az_speed_voltage);
-        }
-        if (rotate_cw_freq) {
-          tone(rotate_cw_freq, map(normal_az_speed_voltage, 0, 255, AZ_VARIABLE_FREQ_OUTPUT_LOW, AZ_VARIABLE_FREQ_OUTPUT_HIGH));
-        }
-        if (rotate_ccw_freq) {
-          noTone(rotate_ccw_freq);
-        }
-      }
-      if (rotate_cw) {
-        digitalWriteEnhanced(rotate_cw, ROTATE_PIN_ACTIVE_VALUE);
-        #if defined(pin_led_cw)
-        digitalWriteEnhanced(pin_led_cw, PIN_LED_ACTIVE_STATE);
-        #endif
-      }
-      if (rotate_ccw) {
-        digitalWriteEnhanced(rotate_ccw, ROTATE_PIN_INACTIVE_VALUE);
-        #if defined(pin_led_ccw)
-        digitalWriteEnhanced(pin_led_ccw, PIN_LED_INACTIVE_STATE);
-        #endif
-      }
-      if (rotate_cw_ccw){
-        digitalWriteEnhanced(rotate_cw_ccw, ROTATE_PIN_ACTIVE_VALUE);
-      }
-      #ifdef DEBUG_ROTATOR
-      if (debug_mode) {
-        debug.print(F("rotator: normal_az_speed_voltage:"));
-        control_port->println(normal_az_speed_voltage);
-        //control_port->flush();
-      }
-      #endif // DEBUG_ROTATOR
-    } else {
-      #ifdef DEBUG_ROTATOR
-      if (debug_mode) {
-        debug.print(F("DEACTIVATE\n"));
-      }
-      #endif // DEBUG_ROTATOR
-      if (rotate_cw_pwm) {
-        analogWriteEnhanced(rotate_cw_pwm, 0); digitalWriteEnhanced(rotate_cw_pwm, LOW);
-      }
-      if (rotate_cw_ccw_pwm) {
-        analogWriteEnhanced(rotate_cw_ccw_pwm, 0);
-      }
-      if (rotate_cw) {
-        digitalWriteEnhanced(rotate_cw, ROTATE_PIN_INACTIVE_VALUE);
-        #if defined(pin_led_cw)
-        digitalWriteEnhanced(pin_led_cw, PIN_LED_INACTIVE_STATE);
-        #endif
-      }
-      if (rotate_cw_ccw){
-        digitalWriteEnhanced(rotate_cw_ccw, ROTATE_PIN_INACTIVE_VALUE);
-      }
-      if (rotate_cw_freq) {
-        noTone(rotate_cw_freq);
-      }
-    }
-    break;
-    case CCW:
-    #ifdef DEBUG_ROTATOR
-    if (debug_mode) {
-      debug.print(F("CCW ")); control_port->flush();
-    }
-    #endif // DEBUG_ROTATOR
-    if (rotation_action == ACTIVATE) {
-      #ifdef DEBUG_ROTATOR
-      if (debug_mode) {
-        debug.print(F("ACTIVATE\n"));
-      }
-      #endif // DEBUG_ROTATOR
-      brake_release(AZ, BRAKE_RELEASE_ON);
-      if (az_slowstart_active) {
-        if (rotate_cw_pwm) {
-          analogWriteEnhanced(rotate_cw_pwm, 0); digitalWriteEnhanced(rotate_cw_pwm, LOW);
-        }
-        if (rotate_ccw_pwm) {
-          analogWriteEnhanced(rotate_ccw_pwm, 0);
-        }
-        if (rotate_cw_ccw_pwm) {
-          analogWriteEnhanced(rotate_cw_ccw_pwm, 0);
-        }
-        if (rotate_cw_freq) {
-          noTone(rotate_cw_freq);
+        if (rotate_ccw) {
+          digitalWriteEnhanced(rotate_ccw, ROTATE_PIN_INACTIVE_VALUE);
+          #if defined(pin_led_ccw)
+          digitalWriteEnhanced(pin_led_ccw, PIN_LED_INACTIVE_STATE);
+          #endif
         }
         if (rotate_ccw_freq) {
           noTone(rotate_ccw_freq);
         }
-      } else {
-        if (rotate_cw_pwm) {
-          analogWriteEnhanced(rotate_cw_pwm, 0); digitalWriteEnhanced(rotate_cw_pwm, LOW);
-        }
-        if (rotate_ccw_pwm) {
-          analogWriteEnhanced(rotate_ccw_pwm, normal_az_speed_voltage);
-        }
-        if (rotate_cw_ccw_pwm) {
-          analogWriteEnhanced(rotate_cw_ccw_pwm, normal_az_speed_voltage);
-        }
-        if (rotate_cw_freq) {
-          noTone(rotate_cw_freq);
-        }
-        if (rotate_ccw_freq) {
-          tone(rotate_ccw_freq, map(normal_az_speed_voltage, 0, 255, AZ_VARIABLE_FREQ_OUTPUT_LOW, AZ_VARIABLE_FREQ_OUTPUT_HIGH));
-        }
       }
-      if (rotate_cw) {
-        digitalWriteEnhanced(rotate_cw, ROTATE_PIN_INACTIVE_VALUE);
-        #if defined(pin_led_cw)
-        digitalWriteEnhanced(pin_led_cw, PIN_LED_INACTIVE_STATE);
-        #endif
-      }
-      if (rotate_ccw) {
-        digitalWriteEnhanced(rotate_ccw, ROTATE_PIN_ACTIVE_VALUE);
-        #if defined(pin_led_ccw)
-        digitalWriteEnhanced(pin_led_ccw, PIN_LED_ACTIVE_STATE);
-        #endif
-      }
-      if (rotate_cw_ccw){
-        digitalWriteEnhanced(rotate_cw_ccw, ROTATE_PIN_ACTIVE_VALUE);
-      }
-      #ifdef DEBUG_ROTATOR
-      if (debug_mode) {
-        debug.print(F("rotator: normal_az_speed_voltage:"));
-        control_port->println(normal_az_speed_voltage);
-        control_port->flush();
-      }
-      #endif // DEBUG_ROTATOR
-    } else {
-      #ifdef DEBUG_ROTATOR
-      if (debug_mode) {
-        debug.print(F("DEACTIVATE\n"));
-      }
-      #endif // DEBUG_ROTATOR
-      if (rotate_ccw_pwm) {
-        analogWriteEnhanced(rotate_ccw_pwm, 0); digitalWriteEnhanced(rotate_ccw_pwm, LOW);
-      }
-      if (rotate_ccw) {
-        digitalWriteEnhanced(rotate_ccw, ROTATE_PIN_INACTIVE_VALUE);
-        #if defined(pin_led_ccw)
-        digitalWriteEnhanced(pin_led_ccw, PIN_LED_INACTIVE_STATE);
-        #endif
-      }
-      if (rotate_ccw_freq) {
-        noTone(rotate_ccw_freq);
-      }
+      break;
     }
-    break;
-    case UP:
-    #ifdef DEBUG_ROTATOR
-    if (debug_mode) {
-      debug.print(F("ROTATION_UP "));
-    }
-    #endif // DEBUG_ROTATOR
-    if (rotation_action == ACTIVATE) {
+    case UP: {
       #ifdef DEBUG_ROTATOR
       if (debug_mode) {
-        debug.print(F("ACTIVATE\n"));
+        debug.print(F("ROTATION_UP "));
       }
       #endif // DEBUG_ROTATOR
-      brake_release(EL, BRAKE_RELEASE_ON);
-      if (el_slowstart_active) {
-        if (rotate_up_pwm) {
-          analogWriteEnhanced(rotate_up_pwm, 0);
+      if (rotation_action == ACTIVATE) {
+        #ifdef DEBUG_ROTATOR
+        if (debug_mode) {
+          debug.print(F("ACTIVATE\n"));
         }
-        if (rotate_down_pwm) {
-          analogWriteEnhanced(rotate_down_pwm, 0); digitalWriteEnhanced(rotate_down_pwm, LOW);
+        #endif // DEBUG_ROTATOR
+        brake_release(EL, BRAKE_RELEASE_ON);
+        if (el_slowstart_active) {
+          if (rotate_up_pwm) {
+            analogWriteEnhanced(rotate_up_pwm, 0);
+          }
+          if (rotate_down_pwm) {
+            analogWriteEnhanced(rotate_down_pwm, 0); digitalWriteEnhanced(rotate_down_pwm, LOW);
+          }
+          if (rotate_up_down_pwm) {
+            analogWriteEnhanced(rotate_up_down_pwm, 0);
+          }
+          if (rotate_up_freq) {
+            noTone(rotate_up_freq);
+          }
+          if (rotate_down_freq) {
+            noTone(rotate_down_freq);
+          }
+        } else {
+          if (rotate_up_pwm) {
+            analogWriteEnhanced(rotate_up_pwm, normal_el_speed_voltage);
+          }
+          if (rotate_down_pwm) {
+            analogWriteEnhanced(rotate_down_pwm, 0); digitalWriteEnhanced(rotate_down_pwm, LOW);
+          }
+          if (rotate_up_down_pwm) {
+            analogWriteEnhanced(rotate_up_down_pwm, normal_el_speed_voltage);
+          }
+          if (rotate_up_freq) {
+            tone(rotate_up_freq, map(normal_el_speed_voltage, 0, 255, EL_VARIABLE_FREQ_OUTPUT_LOW, EL_VARIABLE_FREQ_OUTPUT_HIGH));
+          }
+          if (rotate_down_freq) {
+            noTone(rotate_down_freq);
+          }
         }
-        if (rotate_up_down_pwm) {
-          analogWriteEnhanced(rotate_up_down_pwm, 0);
+        if (rotate_up) {
+          digitalWriteEnhanced(rotate_up, ROTATE_PIN_ACTIVE_VALUE);
+          #if defined(pin_led_up)
+          digitalWriteEnhanced(pin_led_up, PIN_LED_ACTIVE_STATE);
+          #endif
         }
-        if (rotate_up_freq) {
-          noTone(rotate_up_freq);
+        if (rotate_down) {
+          digitalWriteEnhanced(rotate_down, ROTATE_PIN_INACTIVE_VALUE);
+          #if defined(pin_led_down)
+          digitalWriteEnhanced(pin_led_down, PIN_LED_INACTIVE_STATE);
+          #endif
         }
-        if (rotate_down_freq) {
-          noTone(rotate_down_freq);
+        if (rotate_up_or_down) {
+          digitalWriteEnhanced(rotate_up_or_down, ROTATE_PIN_ACTIVE_VALUE);
         }
       } else {
-        if (rotate_up_pwm) {
-          analogWriteEnhanced(rotate_up_pwm, normal_el_speed_voltage);
+        #ifdef DEBUG_ROTATOR
+        if (debug_mode) {
+          debug.print(F("DEACTIVATE\n"));
         }
-        if (rotate_down_pwm) {
-          analogWriteEnhanced(rotate_down_pwm, 0); digitalWriteEnhanced(rotate_down_pwm, LOW);
-        }
-        if (rotate_up_down_pwm) {
-          analogWriteEnhanced(rotate_up_down_pwm, normal_el_speed_voltage);
-        }
-        if (rotate_up_freq) {
-          tone(rotate_up_freq, map(normal_el_speed_voltage, 0, 255, EL_VARIABLE_FREQ_OUTPUT_LOW, EL_VARIABLE_FREQ_OUTPUT_HIGH));
-        }
-        if (rotate_down_freq) {
-          noTone(rotate_down_freq);
-        }
-      }
-      if (rotate_up) {
-        digitalWriteEnhanced(rotate_up, ROTATE_PIN_ACTIVE_VALUE);
-        #if defined(pin_led_up)
-        digitalWriteEnhanced(pin_led_up, PIN_LED_ACTIVE_STATE);
-        #endif
-      }
-      if (rotate_down) {
-        digitalWriteEnhanced(rotate_down, ROTATE_PIN_INACTIVE_VALUE);
-        #if defined(pin_led_down)
-        digitalWriteEnhanced(pin_led_down, PIN_LED_INACTIVE_STATE);
-        #endif
-      }
-      if (rotate_up_or_down) {
-        digitalWriteEnhanced(rotate_up_or_down, ROTATE_PIN_ACTIVE_VALUE);
-      }
-    } else {
-      #ifdef DEBUG_ROTATOR
-      if (debug_mode) {
-        debug.print(F("DEACTIVATE\n"));
-      }
-      #endif // DEBUG_ROTATOR
-      if (rotate_up) {
-        digitalWriteEnhanced(rotate_up, ROTATE_PIN_INACTIVE_VALUE);
-        #if defined(pin_led_up)
-        digitalWriteEnhanced(pin_led_up, PIN_LED_INACTIVE_STATE);
-        #endif
-      }
-      if (rotate_up_pwm) {
-        analogWriteEnhanced(rotate_up_pwm, 0); digitalWriteEnhanced(rotate_up_pwm, LOW);
-      }
-      if (rotate_up_down_pwm) {
-        analogWriteEnhanced(rotate_up_down_pwm, 0);
-      }
-      if (rotate_up_freq) {
-        noTone(rotate_up_freq);
-      }
-      if (rotate_up_or_down) {
-        digitalWriteEnhanced(rotate_up_or_down, ROTATE_PIN_INACTIVE_VALUE);
-      }
-    }
-    break;
-    case DOWN:
-    #ifdef DEBUG_ROTATOR
-    if (debug_mode) {
-      debug.print(F("ROTATION_DOWN "));
-    }
-    #endif // DEBUG_ROTATOR
-    if (rotation_action == ACTIVATE) {
-      #ifdef DEBUG_ROTATOR
-      if (debug_mode) {
-        debug.print(F("ACTIVATE\n"));
-      }
-      #endif // DEBUG_ROTATOR
-      brake_release(EL, BRAKE_RELEASE_ON);
-      if (el_slowstart_active) {
-        if (rotate_down_pwm) {
-          analogWriteEnhanced(rotate_down_pwm, 0);
+        #endif // DEBUG_ROTATOR
+        if (rotate_up) {
+          digitalWriteEnhanced(rotate_up, ROTATE_PIN_INACTIVE_VALUE);
+          #if defined(pin_led_up)
+          digitalWriteEnhanced(pin_led_up, PIN_LED_INACTIVE_STATE);
+          #endif
         }
         if (rotate_up_pwm) {
           analogWriteEnhanced(rotate_up_pwm, 0); digitalWriteEnhanced(rotate_up_pwm, LOW);
@@ -2274,67 +2249,103 @@ void rotator(byte rotation_action, byte rotation_type) {
         if (rotate_up_freq) {
           noTone(rotate_up_freq);
         }
+        if (rotate_up_or_down) {
+          digitalWriteEnhanced(rotate_up_or_down, ROTATE_PIN_INACTIVE_VALUE);
+        }
+      }
+      break;
+    }
+    case DOWN: {
+      #ifdef DEBUG_ROTATOR
+      if (debug_mode) {
+        debug.print(F("ROTATION_DOWN "));
+      }
+      #endif // DEBUG_ROTATOR
+      if (rotation_action == ACTIVATE) {
+        #ifdef DEBUG_ROTATOR
+        if (debug_mode) {
+          debug.print(F("ACTIVATE\n"));
+        }
+        #endif // DEBUG_ROTATOR
+        brake_release(EL, BRAKE_RELEASE_ON);
+        if (el_slowstart_active) {
+          if (rotate_down_pwm) {
+            analogWriteEnhanced(rotate_down_pwm, 0);
+          }
+          if (rotate_up_pwm) {
+            analogWriteEnhanced(rotate_up_pwm, 0); digitalWriteEnhanced(rotate_up_pwm, LOW);
+          }
+          if (rotate_up_down_pwm) {
+            analogWriteEnhanced(rotate_up_down_pwm, 0);
+          }
+          if (rotate_up_freq) {
+            noTone(rotate_up_freq);
+          }
+          if (rotate_down_freq) {
+            noTone(rotate_down_freq);
+          }
+        } else {
+          if (rotate_down_pwm) {
+            analogWriteEnhanced(rotate_down_pwm, normal_el_speed_voltage);
+          }
+          if (rotate_up_pwm) {
+            analogWriteEnhanced(rotate_up_pwm, 0); digitalWriteEnhanced(rotate_up_pwm, LOW);
+          }
+          if (rotate_up_down_pwm) {
+            analogWriteEnhanced(rotate_up_down_pwm, normal_el_speed_voltage);
+          }
+          if (rotate_down_freq) {
+            tone(rotate_down_freq, map(normal_el_speed_voltage, 0, 255, EL_VARIABLE_FREQ_OUTPUT_LOW, EL_VARIABLE_FREQ_OUTPUT_HIGH));
+          }
+          if (rotate_up_freq) {
+            noTone(rotate_up_freq);
+          }
+        }
+        if (rotate_up) {
+          digitalWriteEnhanced(rotate_up, ROTATE_PIN_INACTIVE_VALUE);
+          #if defined(pin_led_up)
+          digitalWriteEnhanced(pin_led_up, PIN_LED_INACTIVE_STATE);
+          #endif
+        }
+        if (rotate_down) {
+          digitalWriteEnhanced(rotate_down, ROTATE_PIN_ACTIVE_VALUE);
+          #if defined(pin_led_down)
+          digitalWriteEnhanced(pin_led_down, PIN_LED_ACTIVE_STATE);
+          #endif
+        }
+        if (rotate_up_or_down) {
+          digitalWriteEnhanced(rotate_up_or_down, ROTATE_PIN_ACTIVE_VALUE);
+        }
+      } else {
+        #ifdef DEBUG_ROTATOR
+        if (debug_mode) {
+          debug.print(F("DEACTIVATE\n"));
+        }
+        #endif // DEBUG_ROTATOR
+        if (rotate_down) {
+          digitalWriteEnhanced(rotate_down, ROTATE_PIN_INACTIVE_VALUE);
+          #if defined(pin_led_down)
+          digitalWriteEnhanced(pin_led_down, PIN_LED_INACTIVE_STATE);
+          #endif
+        }
+        if (rotate_down_pwm) {
+          analogWriteEnhanced(rotate_down_pwm, 0); digitalWriteEnhanced(rotate_down_pwm, LOW);
+        }
+        if (rotate_up_down_pwm) {
+          analogWriteEnhanced(rotate_up_down_pwm, 0);
+        }
         if (rotate_down_freq) {
           noTone(rotate_down_freq);
         }
-      } else {
-        if (rotate_down_pwm) {
-          analogWriteEnhanced(rotate_down_pwm, normal_el_speed_voltage);
-        }
-        if (rotate_up_pwm) {
-          analogWriteEnhanced(rotate_up_pwm, 0); digitalWriteEnhanced(rotate_up_pwm, LOW);
-        }
-        if (rotate_up_down_pwm) {
-          analogWriteEnhanced(rotate_up_down_pwm, normal_el_speed_voltage);
-        }
-        if (rotate_down_freq) {
-          tone(rotate_down_freq, map(normal_el_speed_voltage, 0, 255, EL_VARIABLE_FREQ_OUTPUT_LOW, EL_VARIABLE_FREQ_OUTPUT_HIGH));
-        }
-        if (rotate_up_freq) {
-          noTone(rotate_up_freq);
+        if (rotate_up_or_down) {
+          digitalWriteEnhanced(rotate_up_or_down, ROTATE_PIN_INACTIVE_VALUE);
         }
       }
-      if (rotate_up) {
-        digitalWriteEnhanced(rotate_up, ROTATE_PIN_INACTIVE_VALUE);
-        #if defined(pin_led_up)
-        digitalWriteEnhanced(pin_led_up, PIN_LED_INACTIVE_STATE);
-        #endif
-      }
-      if (rotate_down) {
-        digitalWriteEnhanced(rotate_down, ROTATE_PIN_ACTIVE_VALUE);
-        #if defined(pin_led_down)
-        digitalWriteEnhanced(pin_led_down, PIN_LED_ACTIVE_STATE);
-        #endif
-      }
-      if (rotate_up_or_down) {
-        digitalWriteEnhanced(rotate_up_or_down, ROTATE_PIN_ACTIVE_VALUE);
-      }
-    } else {
-      #ifdef DEBUG_ROTATOR
-      if (debug_mode) {
-        debug.print(F("DEACTIVATE\n"));
-      }
-      #endif // DEBUG_ROTATOR
-      if (rotate_down) {
-        digitalWriteEnhanced(rotate_down, ROTATE_PIN_INACTIVE_VALUE);
-        #if defined(pin_led_down)
-        digitalWriteEnhanced(pin_led_down, PIN_LED_INACTIVE_STATE);
-        #endif
-      }
-      if (rotate_down_pwm) {
-        analogWriteEnhanced(rotate_down_pwm, 0); digitalWriteEnhanced(rotate_down_pwm, LOW);
-      }
-      if (rotate_up_down_pwm) {
-        analogWriteEnhanced(rotate_up_down_pwm, 0);
-      }
-      if (rotate_down_freq) {
-        noTone(rotate_down_freq);
-      }
-      if (rotate_up_or_down) {
-        digitalWriteEnhanced(rotate_up_or_down, ROTATE_PIN_INACTIVE_VALUE);
-      }
+      break;
     }
-    break;
+    default: {
+      break;
+    }
   }
 
   #ifdef DEBUG_ROTATOR
@@ -2399,12 +2410,10 @@ void initialize_pins() {
     digitalWriteEnhanced(button_stop, HIGH);
   }
 
-  #ifdef FEATURE_ELEVATION_CONTROL
   if (brake_el) {
     pinModeEnhanced(brake_el, OUTPUT);
     digitalWriteEnhanced(brake_el, BRAKE_INACTIVE_STATE);
   }
-  #endif // FEATURE_ELEVATION_CONTROL
 
   if (rotate_cw) {
     pinModeEnhanced(rotate_cw, OUTPUT);
@@ -2471,17 +2480,14 @@ void initialize_pins() {
   normal_az_speed_voltage = PWM_SPEED_VOLTAGE_X4;
   current_az_speed_voltage = PWM_SPEED_VOLTAGE_X4;
 
-  #ifdef FEATURE_ELEVATION_CONTROL
   normal_el_speed_voltage = PWM_SPEED_VOLTAGE_X4;
   current_el_speed_voltage = PWM_SPEED_VOLTAGE_X4;
-  #endif // FEATURE_ELEVATION_CONTROL
 
   if (azimuth_speed_voltage) {
     // if azimuth_speed_voltage pin is configured, set it up for PWM output
     analogWriteEnhanced(azimuth_speed_voltage, PWM_SPEED_VOLTAGE_X4);
   }
 
-  #ifdef FEATURE_ELEVATION_CONTROL
   pinModeEnhanced(rotate_up, OUTPUT);
   pinModeEnhanced(rotate_down, OUTPUT);
   if (rotate_up_or_down) {
@@ -2505,9 +2511,7 @@ void initialize_pins() {
   rotator(DEACTIVATE, UP);
   rotator(DEACTIVATE, DOWN);
 
-  #ifdef FEATURE_EL_POSITION_POTENTIOMETER
   pinModeEnhanced(rotator_analog_el, INPUT);
-  #endif // FEATURE_EL_POSITION_POTENTIOMETER
 
   if (button_up) {
     pinModeEnhanced(button_up, INPUT);
@@ -2525,7 +2529,6 @@ void initialize_pins() {
     current_el_speed_voltage = PWM_SPEED_VOLTAGE_X4;
   }
   read_elevation(0);
-  #endif // FEATURE_ELEVATION_CONTROL
 
   #ifdef FEATURE_ROTATION_INDICATOR_PIN
   if (rotation_indication_pin) {
@@ -2547,105 +2550,28 @@ void initialize_pins() {
     pinModeEnhanced(az_limit_sense_pin, INPUT);
     digitalWriteEnhanced(az_limit_sense_pin, HIGH);
   }
-  #ifdef FEATURE_ELEVATION_CONTROL
   if (el_limit_sense_pin) {
     pinModeEnhanced(el_limit_sense_pin, INPUT);
     digitalWriteEnhanced(el_limit_sense_pin, HIGH);
   }
-  #endif // FEATURE_ELEVATION_CONTROL
   #endif // FEATURE_LIMIT_SENSE
 
-  #ifdef FEATURE_MOON_TRACKING
-  if (moon_tracking_active_pin) {
-    pinModeEnhanced(moon_tracking_active_pin, OUTPUT);
-    digitalWriteEnhanced(moon_tracking_active_pin, LOW);
-  }
-  if (moon_tracking_activate_line) {
-    pinModeEnhanced(moon_tracking_activate_line, INPUT);
-    digitalWriteEnhanced(moon_tracking_activate_line, HIGH);
-  }
-  if (moon_tracking_button) {
-    pinModeEnhanced(moon_tracking_button, INPUT);
-    digitalWriteEnhanced(moon_tracking_button, HIGH);
-  }
-  #endif // FEATURE_MOON_TRACKING
-
-  #ifdef FEATURE_SUN_TRACKING
-  if (sun_tracking_active_pin) {
-    pinModeEnhanced(sun_tracking_active_pin, OUTPUT);
-    digitalWriteEnhanced(sun_tracking_active_pin, LOW);
-  }
-  if (sun_tracking_activate_line) {
-    pinModeEnhanced(sun_tracking_activate_line, INPUT);
-    digitalWriteEnhanced(sun_tracking_activate_line, HIGH);
-  }
-  if (sun_tracking_button) {
-    pinModeEnhanced(sun_tracking_button, INPUT);
-    digitalWriteEnhanced(sun_tracking_button, HIGH);
-  }
-  #endif // FEATURE_SUN_TRACKING
-
-  #ifdef FEATURE_GPS
-  if (gps_sync) {
-    pinModeEnhanced(gps_sync, OUTPUT);
-    digitalWriteEnhanced(gps_sync, LOW);
-  }
-  #endif //FEATURE_GPS
-
-  #ifdef FEATURE_POWER_SWITCH
-  pinModeEnhanced(power_switch, OUTPUT);
-  digitalWriteEnhanced(power_switch, HIGH);
-  #endif //FEATURE_POWER_SWITCH
 
   #ifdef FEATURE_ANALOG_OUTPUT_PINS
   pinModeEnhanced(pin_analog_az_out, OUTPUT);
   digitalWriteEnhanced(pin_analog_az_out, LOW);
-  #ifdef FEATURE_ELEVATION_CONTROL
   pinModeEnhanced(pin_analog_el_out, OUTPUT);
   digitalWriteEnhanced(pin_analog_el_out, LOW);
-  #endif //FEATURE_ELEVATION_CONTROL
   #endif //FEATURE_ANALOG_OUTPUT_PINS
-
-  #ifdef FEATURE_SUN_PUSHBUTTON_AZ_EL_CALIBRATION
-  pinModeEnhanced(pin_sun_pushbutton_calibration, INPUT);
-  digitalWriteEnhanced(pin_sun_pushbutton_calibration, HIGH);
-  #endif //FEATURE_SUN_PUSHBUTTON_AZ_EL_CALIBRATION
-
-  #ifdef FEATURE_MOON_PUSHBUTTON_AZ_EL_CALIBRATION
-  pinModeEnhanced(pin_moon_pushbutton_calibration, INPUT);
-  digitalWriteEnhanced(pin_moon_pushbutton_calibration, HIGH);
-  #endif //FEATURE_MOON_PUSHBUTTON_AZ_EL_CALIBRATION
-
 } /* initialize_pins */
 
 void initialize_serial() {
 
-  #if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_EASYCOM_EMULATION) || defined(FEATURE_CLOCK) || defined(UNDER_DEVELOPMENT_REMOTE_UNIT_COMMANDS)
   control_port = CONTROL_PORT_MAPPED_TO;
   control_port->begin(CONTROL_PORT_BAUD_RATE);
   #if defined(OPTION_SEND_STRING_OUT_CONTROL_PORT_WHEN_INITIALIZING)
   control_port->print OPTION_SEND_STRING_OUT_CONTROL_PORT_WHEN_INITIALIZING_STRING;
   #endif
-  #endif
-
-  #ifdef FEATURE_REMOTE_UNIT_SLAVE
-  control_port->print(F("CS"));
-  control_port->println(CODE_VERSION);
-  #endif // FEATURE_REMOTE_UNIT_SLAVE
-
-  #if defined(FEATURE_MASTER_WITH_SERIAL_SLAVE)
-  remote_unit_port = REMOTE_PORT_MAPPED_TO;
-  remote_unit_port->begin(REMOTE_UNIT_PORT_BAUD_RATE);
-  #endif
-
-  #ifdef FEATURE_GPS
-  gps_port = GPS_PORT_MAPPED_TO;
-  gps_port->begin(GPS_PORT_BAUD_RATE);
-  #ifdef GPS_MIRROR_PORT
-  gps_mirror_port = GPS_MIRROR_PORT;
-  gps_mirror_port->begin(GPS_MIRROR_PORT_BAUD_RATE);
-  #endif //GPS_MIRROR_PORT
-  #endif //FEATURE_GPS
 
 } /* initialize_serial */
 
@@ -2657,9 +2583,7 @@ void initialize_display() {
   #endif // DEBUG_LOOP
 
   k3ngdisplay.initialize();
-
   k3ngdisplay.print_center_timed_message("\x4B\x57\x34\x42\x51","\x52\x6F\x74\x6F\x72\x20\x43\x6F\x6E\x74\x72\x6F\x6C\x6C\x65\x72",CODE_VERSION,SPLASH_SCREEN_TIME);
-
   k3ngdisplay.service(0);
 
   #ifdef DEBUG_LOOP
@@ -2678,15 +2602,6 @@ void initialize_peripherals() {
   #ifdef FEATURE_WIRE_SUPPORT
   Wire.begin();
   #endif
-
-  #ifdef FEATURE_JOYSTICK_CONTROL
-  pinModeEnhanced(pin_joystick_x, INPUT);
-  pinModeEnhanced(pin_joystick_y, INPUT);
-  #endif // FEATURE_JOYSTICK_CONTROL
-
-  #ifdef FEATURE_RTC_DS1307
-  rtc.begin();
-  #endif // FEATURE_RTC_DS1307
 
   #ifdef SET_I2C_BUS_SPEED
   TWBR = ((F_CPU / SET_I2C_BUS_SPEED) - 16) / 2;
@@ -2711,7 +2626,6 @@ void submit_request(byte axis, byte request, int parm, byte called_by) {
     az_request_queue_state = IN_QUEUE;
   }
 
-  #ifdef FEATURE_ELEVATION_CONTROL
   if (axis == EL) {
     #ifdef DEBUG_SUBMIT_REQUEST
     debug.print("EL ");
@@ -2720,7 +2634,6 @@ void submit_request(byte axis, byte request, int parm, byte called_by) {
     el_request_parm = parm;
     el_request_queue_state = IN_QUEUE;
   }
-  #endif // FEATURE_ELEVATION_CONTROL
 
   #ifdef DEBUG_SUBMIT_REQUEST
   switch(request){
@@ -2741,26 +2654,484 @@ void submit_request(byte axis, byte request, int parm, byte called_by) {
 
 } // submit_request
 
-void stop_all_tracking() {
+void service_rotation() {
 
-  #ifdef FEATURE_MOON_TRACKING
-  moon_tracking_active = 0;
-  #endif // FEATURE_MOON_TRACKING
+  static byte az_direction_change_flag = 0;
+  static byte az_initial_slow_down_voltage = 0;
 
-  #ifdef FEATURE_SUN_TRACKING
-  sun_tracking_active = 0;
-  #endif // FEATURE_SUN_TRACKING
-} // stop_all_tracking
+  static byte el_direction_change_flag = 0;
+  static byte el_initial_slow_down_voltage = 0;
+
+  if (az_state == INITIALIZE_NORMAL_CW) {
+    update_az_variable_outputs(normal_az_speed_voltage);
+    rotator(ACTIVATE, CW);
+    az_state = NORMAL_CW;
+  }
+
+  if (az_state == INITIALIZE_NORMAL_CCW) {
+    update_az_variable_outputs(normal_az_speed_voltage);
+    rotator(ACTIVATE, CCW);
+    az_state = NORMAL_CCW;
+  }
+
+  if (az_state == INITIALIZE_SLOW_START_CW) {
+    update_az_variable_outputs(AZ_SLOW_START_STARTING_PWM);
+    rotator(ACTIVATE, CW);
+    az_slowstart_start_time = millis();
+    az_last_step_time = 0;
+    az_slow_start_step = 0;
+    az_state = SLOW_START_CW;
+    #ifdef DEBUG_SERVICE_ROTATION
+    debug.print("service_rotation: INITIALIZE_SLOW_START_CW -> SLOW_START_CW");
+    #endif // DEBUG_SERVICE_ROTATION
+  }
+
+  if (az_state == INITIALIZE_SLOW_START_CCW) {
+    update_az_variable_outputs(AZ_SLOW_START_STARTING_PWM);
+    rotator(ACTIVATE, CCW);
+    az_slowstart_start_time = millis();
+    az_last_step_time = 0;
+    az_slow_start_step = 0;
+    az_state = SLOW_START_CCW;
+    #ifdef DEBUG_SERVICE_ROTATION
+    debug.print("service_rotation: INITIALIZE_SLOW_START_CCW -> SLOW_START_CCW");
+    #endif // DEBUG_SERVICE_ROTATION
+  }
+
+  if (az_state == INITIALIZE_TIMED_SLOW_DOWN_CW) {
+    az_direction_change_flag = 0;
+    az_timed_slow_down_start_time = millis();
+    az_last_step_time = millis();
+    az_slow_down_step = AZ_SLOW_DOWN_STEPS - 1;
+    az_state = TIMED_SLOW_DOWN_CW;
+  }
+
+  if (az_state == INITIALIZE_TIMED_SLOW_DOWN_CCW) {
+    az_direction_change_flag = 0;
+    az_timed_slow_down_start_time = millis();
+    az_last_step_time = millis();
+    az_slow_down_step = AZ_SLOW_DOWN_STEPS - 1;
+    az_state = TIMED_SLOW_DOWN_CCW;
+  }
+
+  if (az_state == INITIALIZE_DIR_CHANGE_TO_CW) {
+    az_direction_change_flag = 1;
+    az_timed_slow_down_start_time = millis();
+    az_last_step_time = millis();
+    az_slow_down_step = AZ_SLOW_DOWN_STEPS - 1;
+    az_state = TIMED_SLOW_DOWN_CCW;
+  }
+
+  if (az_state == INITIALIZE_DIR_CHANGE_TO_CCW) {
+    az_direction_change_flag = 1;
+    az_timed_slow_down_start_time = millis();
+    az_last_step_time = millis();
+    az_slow_down_step = AZ_SLOW_DOWN_STEPS - 1;
+    az_state = TIMED_SLOW_DOWN_CW;
+  }
+
+  if ((az_state == SLOW_START_CW) || (az_state == SLOW_START_CCW)) {
+    if ((millis() - az_slowstart_start_time) >= AZ_SLOW_START_UP_TIME) {  // is it time to end slow start?
+      #ifdef DEBUG_SERVICE_ROTATION
+      debug.print("service_rotation: NORMAL_C");
+      #endif // DEBUG_SERVICE_ROTATION
+      if (az_state == SLOW_START_CW) {
+        az_state = NORMAL_CW;
+        #ifdef DEBUG_SERVICE_ROTATION
+        debug.print("W");
+        #endif // DEBUG_SERVICE_ROTATION
+      } else {
+        az_state = NORMAL_CCW;
+        #ifdef DEBUG_SERVICE_ROTATION
+        debug.print("CW");
+        #endif // DEBUG_SERVICE_ROTATION
+      }
+      update_az_variable_outputs(normal_az_speed_voltage);
+    } else {  // it's not time to end slow start yet, but let's check if it's time to step up the speed voltage
+    if (((millis() - az_last_step_time) > (AZ_SLOW_START_UP_TIME / AZ_SLOW_START_STEPS)) && (normal_az_speed_voltage > AZ_SLOW_START_STARTING_PWM)) {
+      #ifdef DEBUG_SERVICE_ROTATION
+      debug.print("service_rotation: step up: ");
+      debug.print(az_slow_start_step);
+      debug.print(" pwm: ");
+      debug.print((int)(AZ_SLOW_START_STARTING_PWM + ((normal_az_speed_voltage - AZ_SLOW_START_STARTING_PWM) * ((float)az_slow_start_step / (float)(AZ_SLOW_START_STEPS - 1)))));
+      debug.println("");
+      #endif // DEBUG_SERVICE_ROTATION
+      update_az_variable_outputs((AZ_SLOW_START_STARTING_PWM + ((normal_az_speed_voltage - AZ_SLOW_START_STARTING_PWM) * ((float)az_slow_start_step / (float)(AZ_SLOW_START_STEPS - 1)))));
+      az_last_step_time = millis();
+      az_slow_start_step++;
+    }
+  }
+} // ((az_state == SLOW_START_CW) || (az_state == SLOW_START_CCW))
+
+if (((az_state == TIMED_SLOW_DOWN_CW) || (az_state == TIMED_SLOW_DOWN_CCW)) && ((millis() - az_last_step_time) >= (TIMED_SLOW_DOWN_TIME / AZ_SLOW_DOWN_STEPS))) {
+  #ifdef DEBUG_SERVICE_ROTATION
+  debug.print("service_rotation: TIMED_SLOW_DOWN step down: ");
+  debug.print(az_slow_down_step);
+  debug.print(" pwm: ");
+  debug.print((int)(normal_az_speed_voltage * ((float)az_slow_down_step / (float)AZ_SLOW_DOWN_STEPS)));
+  debug.println("");
+  #endif // DEBUG_SERVICE_ROTATION
+
+  update_az_variable_outputs((int)(current_az_speed_voltage * ((float)az_slow_down_step / (float)AZ_SLOW_DOWN_STEPS)));
+  az_last_step_time = millis();
+  if (az_slow_down_step > 0) {az_slow_down_step--;}
+
+  if (az_slow_down_step == 0) { // is it time to exit timed slow down?
+    #ifdef DEBUG_SERVICE_ROTATION
+    debug.print("service_rotation: TIMED_SLOW_DOWN->IDLE");
+    #endif // DEBUG_SERVICE_ROTATION
+    rotator(DEACTIVATE, CW);
+    rotator(DEACTIVATE, CCW);
+    if (az_direction_change_flag) {
+      if (az_state == TIMED_SLOW_DOWN_CW) {
+        //rotator(ACTIVATE, CCW);
+        if (az_slowstart_active) {
+          az_state = INITIALIZE_SLOW_START_CCW;
+        } else { az_state = NORMAL_CCW; };
+        az_direction_change_flag = 0;
+      }
+      if (az_state == TIMED_SLOW_DOWN_CCW) {
+        //rotator(ACTIVATE, CW);
+        if (az_slowstart_active) {
+          az_state = INITIALIZE_SLOW_START_CW;
+        } else { az_state = NORMAL_CW; };
+        az_direction_change_flag = 0;
+      }
+    } else {
+      az_state = IDLE;
+      az_request_queue_state = NONE;
+    }
+  }
+}  // ((az_state == TIMED_SLOW_DOWN_CW) || (az_state == TIMED_SLOW_DOWN_CCW))
+
+if ((az_state == SLOW_DOWN_CW) || (az_state == SLOW_DOWN_CCW)) {
+  // is it time to do another step down?
+  if (abs((target_raw_azimuth - raw_azimuth) / HEADING_MULTIPLIER) <= (((float)SLOW_DOWN_BEFORE_TARGET_AZ * ((float)az_slow_down_step / (float)AZ_SLOW_DOWN_STEPS)))) {
+    #ifdef DEBUG_SERVICE_ROTATION
+    debug.print("service_rotation: step down: ");
+    debug.print(az_slow_down_step);
+    debug.print(" pwm: ");
+    debug.print((int)(AZ_SLOW_DOWN_PWM_STOP + ((az_initial_slow_down_voltage - AZ_SLOW_DOWN_PWM_STOP) * ((float)az_slow_down_step / (float)AZ_SLOW_DOWN_STEPS))));
+    debug.println("");
+    #endif // DEBUG_SERVICE_ROTATION
+    update_az_variable_outputs((AZ_SLOW_DOWN_PWM_STOP + ((az_initial_slow_down_voltage - AZ_SLOW_DOWN_PWM_STOP) * ((float)az_slow_down_step / (float)AZ_SLOW_DOWN_STEPS))));
+    if (az_slow_down_step > 0) {
+      az_slow_down_step--;
+    }
+  }
+}  // ((az_state == SLOW_DOWN_CW) || (az_state == SLOW_DOWN_CCW))
+
+if (((az_state == NORMAL_CW) || (az_state == SLOW_START_CW) || (az_state == NORMAL_CCW) || (az_state == SLOW_START_CCW)) &&
+(az_request_queue_state == IN_PROGRESS_TO_TARGET) && az_slowdown_active && (abs((target_raw_azimuth - raw_azimuth) / HEADING_MULTIPLIER) <= SLOW_DOWN_BEFORE_TARGET_AZ)) {
+
+  byte az_state_was = az_state;
+
+  #ifdef DEBUG_SERVICE_ROTATION
+  debug.print("service_rotation: SLOW_DOWN_C");
+  #endif // DEBUG_SERVICE_ROTATION
+  az_slow_down_step = AZ_SLOW_DOWN_STEPS - 1;
+  if ((az_state == NORMAL_CW) || (az_state == SLOW_START_CW)) {
+    az_state = SLOW_DOWN_CW;
+    #ifdef DEBUG_SERVICE_ROTATION
+    debug.print("W");
+    #endif // DEBUG_SERVICE_ROTATION
+  } else {
+    az_state = SLOW_DOWN_CCW;
+    #ifdef DEBUG_SERVICE_ROTATION
+    debug.print("CW");
+    #endif // DEBUG_SERVICE_ROTATION
+  }
+
+  if ((az_state_was == SLOW_START_CW) || (az_state_was == SLOW_START_CCW)){
+    az_initial_slow_down_voltage = (AZ_INITIALLY_IN_SLOW_DOWN_PWM);
+    update_az_variable_outputs(az_initial_slow_down_voltage);
+    #ifdef DEBUG_SERVICE_ROTATION
+    debug.print(" SLOW_START -> SLOW_DOWN az_initial_slow_down_voltage:");
+    debug.print(az_initial_slow_down_voltage);
+    debug.print(" ");
+    #endif // DEBUG_SERVICE_ROTATION
+  } else {
+    if (AZ_SLOW_DOWN_PWM_START < current_az_speed_voltage) {
+      update_az_variable_outputs(AZ_SLOW_DOWN_PWM_START);
+      az_initial_slow_down_voltage = AZ_SLOW_DOWN_PWM_START;
+    } else {
+      az_initial_slow_down_voltage = current_az_speed_voltage;
+    }
+  }
+}
+
+if ((az_state != IDLE) && (az_request_queue_state == IN_PROGRESS_TO_TARGET) ) {
+  if ((az_state == NORMAL_CW) || (az_state == SLOW_START_CW) || (az_state == SLOW_DOWN_CW)) {
+    if ((abs(raw_azimuth - target_raw_azimuth) < (AZIMUTH_TOLERANCE * HEADING_MULTIPLIER)) || ((raw_azimuth > target_raw_azimuth) && ((raw_azimuth - target_raw_azimuth) < ((AZIMUTH_TOLERANCE + 5) * HEADING_MULTIPLIER)))) {
+      delay(50);
+      read_azimuth(0);
+      if ((abs(raw_azimuth - target_raw_azimuth) < (AZIMUTH_TOLERANCE * HEADING_MULTIPLIER)) || ((raw_azimuth > target_raw_azimuth) && ((raw_azimuth - target_raw_azimuth) < ((AZIMUTH_TOLERANCE + 5) * HEADING_MULTIPLIER)))) {
+        rotator(DEACTIVATE, CW);
+        rotator(DEACTIVATE, CCW);
+        az_state = IDLE;
+        az_request_queue_state = NONE;
+        #ifdef DEBUG_SERVICE_ROTATION
+        debug.print("service_rotation: IDLE");
+        #endif // DEBUG_SERVICE_ROTATION
+      }
+    }
+  } else {
+    if ((abs(raw_azimuth - target_raw_azimuth) < (AZIMUTH_TOLERANCE * HEADING_MULTIPLIER)) || ((raw_azimuth < target_raw_azimuth) && ((target_raw_azimuth - raw_azimuth) < ((AZIMUTH_TOLERANCE + 5) * HEADING_MULTIPLIER)))) {
+      delay(50);
+      read_azimuth(0);
+      if ((abs(raw_azimuth - target_raw_azimuth) < (AZIMUTH_TOLERANCE * HEADING_MULTIPLIER)) || ((raw_azimuth < target_raw_azimuth) && ((target_raw_azimuth - raw_azimuth) < ((AZIMUTH_TOLERANCE + 5) * HEADING_MULTIPLIER)))) {
+        rotator(DEACTIVATE, CW);
+        rotator(DEACTIVATE, CCW);
+        az_state = IDLE;
+        az_request_queue_state = NONE;
+        #ifdef DEBUG_SERVICE_ROTATION
+        debug.print("service_rotation: IDLE");
+        #endif // DEBUG_SERVICE_ROTATION
+      }
+    }
+  }
+}
+
+if (el_state == INITIALIZE_NORMAL_UP) {
+  update_el_variable_outputs(normal_el_speed_voltage);
+  rotator(ACTIVATE, UP);
+  el_state = NORMAL_UP;
+}
+
+if (el_state == INITIALIZE_NORMAL_DOWN) {
+  update_el_variable_outputs(normal_el_speed_voltage);
+  rotator(ACTIVATE, DOWN);
+  el_state = NORMAL_DOWN;
+}
+
+if (el_state == INITIALIZE_SLOW_START_UP) {
+  update_el_variable_outputs(EL_SLOW_START_STARTING_PWM);
+  rotator(ACTIVATE, UP);
+  el_slowstart_start_time = millis();
+  el_last_step_time = 0;
+  el_slow_start_step = 0;
+  el_state = SLOW_START_UP;
+  #ifdef DEBUG_SERVICE_ROTATION
+  debug.print("service_rotation: INITIALIZE_SLOW_START_UP -> SLOW_START_UP");
+  #endif // DEBUG_SERVICE_ROTATION
+}
+
+if (el_state == INITIALIZE_SLOW_START_DOWN) {
+  update_el_variable_outputs(EL_SLOW_START_STARTING_PWM);
+  rotator(ACTIVATE, DOWN);
+  el_slowstart_start_time = millis();
+  el_last_step_time = 0;
+  el_slow_start_step = 0;
+  el_state = SLOW_START_DOWN;
+  #ifdef DEBUG_SERVICE_ROTATION
+  debug.print("service_rotation: INITIALIZE_SLOW_START_DOWN -> SLOW_START_DOWN");
+  #endif // DEBUG_SERVICE_ROTATION
+}
+
+if (el_state == INITIALIZE_TIMED_SLOW_DOWN_UP) {
+  el_direction_change_flag = 0;
+  el_timed_slow_down_start_time = millis();
+  el_last_step_time = millis();
+  el_slow_down_step = EL_SLOW_DOWN_STEPS - 1;
+  el_state = TIMED_SLOW_DOWN_UP;
+}
+
+if (el_state == INITIALIZE_TIMED_SLOW_DOWN_DOWN) {
+  el_direction_change_flag = 0;
+  el_timed_slow_down_start_time = millis();
+  el_last_step_time = millis();
+  el_slow_down_step = EL_SLOW_DOWN_STEPS - 1;
+  el_state = TIMED_SLOW_DOWN_DOWN;
+}
+
+if (el_state == INITIALIZE_DIR_CHANGE_TO_UP) {
+  el_direction_change_flag = 1;
+  el_timed_slow_down_start_time = millis();
+  el_last_step_time = millis();
+  el_slow_down_step = EL_SLOW_DOWN_STEPS - 1;
+  el_state = TIMED_SLOW_DOWN_DOWN;
+}
+
+if (el_state == INITIALIZE_DIR_CHANGE_TO_DOWN) {
+  el_direction_change_flag = 1;
+  el_timed_slow_down_start_time = millis();
+  el_last_step_time = millis();
+  el_slow_down_step = EL_SLOW_DOWN_STEPS - 1;
+  el_state = TIMED_SLOW_DOWN_UP;
+}
+
+if ((el_state == SLOW_START_UP) || (el_state == SLOW_START_DOWN)) {
+  if ((millis() - el_slowstart_start_time) >= EL_SLOW_START_UP_TIME) {  // is it time to end slow start?
+    #ifdef DEBUG_SERVICE_ROTATION
+    debug.print("service_rotation: NORMAL_");
+    #endif // DEBUG_SERVICE_ROTATION
+    if (el_state == SLOW_START_UP) {
+      el_state = NORMAL_UP;
+      #ifdef DEBUG_SERVICE_ROTATION
+      debug.print("UP");
+      #endif // DEBUG_SERVICE_ROTATION
+    } else {
+      el_state = NORMAL_DOWN;
+      #ifdef DEBUG_SERVICE_ROTATION
+      debug.print("DOWN");
+      #endif // DEBUG_SERVICE_ROTATION
+    }
+    update_el_variable_outputs(normal_el_speed_voltage);
+  } else {  // it's not time to end slow start yet, but let's check if it's time to step up the speed voltage
+  if (((millis() - el_last_step_time) > (EL_SLOW_START_UP_TIME / EL_SLOW_START_STEPS)) && (normal_el_speed_voltage > EL_SLOW_START_STARTING_PWM)) {
+    #ifdef DEBUG_SERVICE_ROTATION
+    debug.print("service_rotation: step up: ");
+    debug.print(el_slow_start_step);
+    debug.print(" pwm: ");
+    debug.print((int)(EL_SLOW_START_STARTING_PWM + ((normal_el_speed_voltage - EL_SLOW_START_STARTING_PWM) * ((float)el_slow_start_step / (float)(EL_SLOW_START_STEPS - 1)))));
+    debug.println("");
+    #endif // DEBUG_SERVICE_ROTATION
+    update_el_variable_outputs((EL_SLOW_START_STARTING_PWM + ((normal_el_speed_voltage - EL_SLOW_START_STARTING_PWM) * ((float)el_slow_start_step / (float)(EL_SLOW_START_STEPS - 1)))));
+    el_last_step_time = millis();
+    el_slow_start_step++;
+  }
+}
+} // ((el_state == SLOW_START_UP) || (el_state == SLOW_START_DOWN))
+
+if (((el_state == TIMED_SLOW_DOWN_UP) || (el_state == TIMED_SLOW_DOWN_DOWN)) && ((millis() - el_last_step_time) >= (TIMED_SLOW_DOWN_TIME / EL_SLOW_DOWN_STEPS))) {
+  #ifdef DEBUG_SERVICE_ROTATION
+  debug.print("service_rotation: TIMED_SLOW_DOWN step down: ");
+  debug.print(el_slow_down_step);
+  debug.print(" pwm: ");
+  debug.print((int)(normal_el_speed_voltage * ((float)el_slow_down_step / (float)EL_SLOW_DOWN_STEPS)));
+  debug.println("");
+  #endif // DEBUG_SERVICE_ROTATION
+  update_el_variable_outputs((int)(normal_el_speed_voltage * ((float)el_slow_down_step / (float)EL_SLOW_DOWN_STEPS)));
+  el_last_step_time = millis();
+  if (el_slow_down_step > 0) {el_slow_down_step--;}
+
+  if (el_slow_down_step == 0) { // is it time to exit timed slow down?
+    #ifdef DEBUG_SERVICE_ROTATION
+    debug.print("service_rotation: TIMED_SLOW_DOWN->IDLE");
+    #endif // DEBUG_SERVICE_ROTATION
+    rotator(DEACTIVATE, UP);
+    rotator(DEACTIVATE, DOWN);
+    if (el_direction_change_flag) {
+      if (el_state == TIMED_SLOW_DOWN_UP) {
+        if (el_slowstart_active) {
+          el_state = INITIALIZE_SLOW_START_DOWN;
+        } else { el_state = NORMAL_DOWN; };
+        el_direction_change_flag = 0;
+      }
+      if (el_state == TIMED_SLOW_DOWN_DOWN) {
+        if (el_slowstart_active) {
+          el_state = INITIALIZE_SLOW_START_UP;
+        } else { el_state = NORMAL_UP; };
+        el_direction_change_flag = 0;
+      }
+    } else {
+      el_state = IDLE;
+      el_request_queue_state = NONE;
+    }
+  }
+
+}  // ((el_state == TIMED_SLOW_DOWN_UP) || (el_state == TIMED_SLOW_DOWN_DOWN))
+
+if ((el_state == SLOW_DOWN_UP) || (el_state == SLOW_DOWN_DOWN)) {
+  // is it time to do another step down?
+  if (abs((target_elevation - elevation) / HEADING_MULTIPLIER) <= (((float)SLOW_DOWN_BEFORE_TARGET_EL * ((float)el_slow_down_step / (float)EL_SLOW_DOWN_STEPS)))) {
+    #ifdef DEBUG_SERVICE_ROTATION
+    debug.print("service_rotation: step down: ");
+    debug.print(el_slow_down_step);
+    debug.print(" pwm: ");
+    debug.print((int)(EL_SLOW_DOWN_PWM_STOP + ((el_initial_slow_down_voltage - EL_SLOW_DOWN_PWM_STOP) * ((float)el_slow_down_step / (float)EL_SLOW_DOWN_STEPS))));
+    debug.println("");
+    #endif // DEBUG_SERVICE_ROTATION
+    update_el_variable_outputs((EL_SLOW_DOWN_PWM_STOP + ((el_initial_slow_down_voltage - EL_SLOW_DOWN_PWM_STOP) * ((float)el_slow_down_step / (float)EL_SLOW_DOWN_STEPS))));
+    if (el_slow_down_step > 0) {el_slow_down_step--;}
+  }
+}  // ((el_state == SLOW_DOWN_UP) || (el_state == SLOW_DOWN_DOWN))
+
+if (((el_state == NORMAL_UP) || (el_state == SLOW_START_UP) || (el_state == NORMAL_DOWN) || (el_state == SLOW_START_DOWN)) &&
+(el_request_queue_state == IN_PROGRESS_TO_TARGET) && el_slowdown_active && (abs((target_elevation - elevation) / HEADING_MULTIPLIER) <= SLOW_DOWN_BEFORE_TARGET_EL)) {
+
+  byte el_state_was = el_state;
+
+  #ifdef DEBUG_SERVICE_ROTATION
+  debug.print("service_rotation: SLOW_DOWN_");
+  #endif // DEBUG_SERVICE_ROTATION
+  el_slow_down_step = EL_SLOW_DOWN_STEPS - 1;
+  if ((el_state == NORMAL_UP) || (el_state == SLOW_START_UP)) {
+    el_state = SLOW_DOWN_UP;
+    #ifdef DEBUG_SERVICE_ROTATION
+    debug.print("UP");
+    #endif // DEBUG_SERVICE_ROTATION
+  } else {
+    el_state = SLOW_DOWN_DOWN;
+    #ifdef DEBUG_SERVICE_ROTATION
+    debug.print("DOWN");
+    #endif // DEBUG_SERVICE_ROTATION
+  }
+
+  if ((el_state_was == SLOW_START_UP) || (el_state_was == SLOW_START_DOWN)){
+    el_initial_slow_down_voltage = EL_INITIALLY_IN_SLOW_DOWN_PWM;
+    update_el_variable_outputs(el_initial_slow_down_voltage);
+    #ifdef DEBUG_SERVICE_ROTATION
+    debug.print(" SLOW_START -> SLOW_DOWN el_initial_slow_down_voltage:");
+    debug.print(el_initial_slow_down_voltage);
+    debug.print(" ");
+    #endif // DEBUG_SERVICE_ROTATION
+  } else {
+    if (EL_SLOW_DOWN_PWM_START < current_el_speed_voltage) {
+      update_el_variable_outputs(EL_SLOW_DOWN_PWM_START);
+      el_initial_slow_down_voltage = EL_SLOW_DOWN_PWM_START;
+    } else {
+      el_initial_slow_down_voltage = current_el_speed_voltage;
+    }
+  }
+}
+
+if ((el_state != IDLE) && (el_request_queue_state == IN_PROGRESS_TO_TARGET) ) {
+  read_elevation(0);
+  if ((el_state == NORMAL_UP) || (el_state == SLOW_START_UP) || (el_state == SLOW_DOWN_UP)) {
+    if ((abs(elevation - target_elevation) < (ELEVATION_TOLERANCE * HEADING_MULTIPLIER)) || ((elevation > target_elevation) && ((elevation - target_elevation) < ((ELEVATION_TOLERANCE + 5) * HEADING_MULTIPLIER)))) {
+      #ifndef OPTION_NO_ELEVATION_CHECK_TARGET_DELAY
+      delay(50);
+      #endif //OPTION_NO_ELEVATION_CHECK_TARGET_DELAY
+      read_elevation(0);
+      if ((abs(elevation - target_elevation) < (ELEVATION_TOLERANCE * HEADING_MULTIPLIER)) || ((elevation > target_elevation) && ((elevation - target_elevation) < ((ELEVATION_TOLERANCE + 5) * HEADING_MULTIPLIER)))) {
+        rotator(DEACTIVATE, UP);
+        rotator(DEACTIVATE, DOWN);
+        el_state = IDLE;
+        el_request_queue_state = NONE;
+        #ifdef DEBUG_SERVICE_ROTATION
+        debug.print("service_rotation: IDLE");
+        #endif // DEBUG_SERVICE_ROTATION
+      }
+    }
+  } else {
+    read_elevation(0);
+    if ((abs(elevation - target_elevation) <= (ELEVATION_TOLERANCE * HEADING_MULTIPLIER)) || ((elevation < target_elevation) && ((target_elevation - elevation) < ((ELEVATION_TOLERANCE + 5) * HEADING_MULTIPLIER)))) {
+      #ifndef OPTION_NO_ELEVATION_CHECK_TARGET_DELAY
+      delay(50);
+      #endif //OPTION_NO_ELEVATION_CHECK_TARGET_DELAY
+      read_elevation(0);
+      if ((abs(elevation - target_elevation) <= (ELEVATION_TOLERANCE * HEADING_MULTIPLIER)) || ((elevation < target_elevation) && ((target_elevation - elevation) < ((ELEVATION_TOLERANCE + 5) * HEADING_MULTIPLIER)))) {
+        rotator(DEACTIVATE, UP);
+        rotator(DEACTIVATE, DOWN);
+        el_state = IDLE;
+        el_request_queue_state = NONE;
+        #ifdef DEBUG_SERVICE_ROTATION
+        debug.print("service_rotation: IDLE");
+        #endif // DEBUG_SERVICE_ROTATION
+      }
+    }
+  }
+}
+
+} /* service_rotation */
 
 void check_for_dirty_configuration() {
-
   static unsigned long last_config_write_time = 0;
-
   if ((configuration_dirty) && ((millis() - last_config_write_time) > ((unsigned long)EEPROM_WRITE_DIRTY_CONFIG_TIME * 1000))) {
     write_settings_to_eeprom();
     last_config_write_time = millis();
   }
-
 } // check_for_dirty_configuration
 
 byte current_az_state() {
@@ -2786,16 +3157,16 @@ byte current_el_state() {
 } // current_el_state
 
 byte get_analog_pin(byte pin_number) {
-
   byte return_output = 0;
   switch (pin_number) {
-    case 0: return_output = A0; break;
-    case 1: return_output = A1; break;
-    case 2: return_output = A2; break;
-    case 3: return_output = A3; break;
-    case 4: return_output = A4; break;
-    case 5: return_output = A5; break;
-    case 6: return_output = A6; break;
+    case 0: { return_output = A0; break; }
+    case 1: { return_output = A1; break; }
+    case 2: { return_output = A2; break; }
+    case 3: { return_output = A3; break; }
+    case 4: { return_output = A4; break; }
+    case 5: { return_output = A5; break; }
+    case 6: { return_output = A6; break; }
+    default: { break; }
   }
   return return_output;
 }
@@ -2835,10 +3206,6 @@ void port_flush() {
   #if defined(CONTROL_PORT_MAPPED_TO) && (defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_EASYCOM_EMULATION))
   control_port->flush();
   #endif //CONTROL_PORT_MAPPED_TO
-
-  #if defined(GPS_PORT_MAPPED_TO) && defined(FEATURE_GPS)
-  gps_port->flush();
-  #endif //defined(GPS_PORT_MAPPED_TO) && defined(FEATURE_GPS)
 }
 
 char *coordinates_to_maidenhead(float latitude_degrees,float longitude_degrees) {
@@ -2858,24 +3225,6 @@ char *coordinates_to_maidenhead(float latitude_degrees,float longitude_degrees) 
   return temp_string;
 }
 
-#ifdef FEATURE_ANALOG_OUTPUT_PINS
-void service_analog_output_pins() {
-  static int last_azimith_voltage_out = 0;
-  int azimuth_voltage_out = map(azimuth/HEADING_MULTIPLIER,0,360,0,255);
-  if (last_azimith_voltage_out != azimuth_voltage_out){
-    analogWriteEnhanced(pin_analog_az_out,azimuth_voltage_out);
-    last_azimith_voltage_out = azimuth_voltage_out;
-  }
-  #ifdef FEATURE_ELEVATION_CONTROL
-  static int last_elevation_voltage_out = 0;
-  int elevation_voltage_out = map(elevation/HEADING_MULTIPLIER,0,ANALOG_OUTPUT_MAX_EL_DEGREES,0,255);
-  if (last_elevation_voltage_out != elevation_voltage_out){
-    analogWriteEnhanced(pin_analog_el_out,elevation_voltage_out);
-    last_elevation_voltage_out = elevation_voltage_out;
-  }
-  #endif //FEATURE_ELEVATION_CONTROL
-}
-#endif //FEATURE_ANALOG_OUTPUT_PINS
 
 #ifdef FEATURE_AUTOCORRECT
 void submit_autocorrect(byte axis,float heading){
@@ -2914,12 +3263,7 @@ void submit_autocorrect(byte axis,float heading){
 }
 #endif //FEATURE_AUTOCORRECT
 
-#ifdef FEATURE_YAESU_EMULATION
-
 void get_keystroke() {
-  while (control_port->available() == 0) {
-    // do nothing lol
-  }
   while (control_port->available() > 0) {
     incoming_serial_byte = control_port->read();
   }
@@ -2934,7 +3278,528 @@ void clear_serial_buffer() {
   while (control_port->available()) {
     incoming_serial_byte = control_port->read();
   }
-}
+} // clear_serial_buffer
+
+byte process_backslash_command(byte input_buffer[], int input_buffer_index, byte source_port, char * return_string) {
+
+  strcpy(return_string,"");
+  static unsigned long serial_led_time = 0;
+  float tempfloat = 0;
+  float heading = 0;
+  long place_multiplier = 0;
+  byte decimalplace = 0;
+  int new_azimuth_starting_point;
+  int new_azimuth_rotation_capability;
+  byte brake_az_disabled;
+  char temp_string[20] = "";
+
+  switch (input_buffer[1]) {
+    case 'A': {
+      place_multiplier = 1;
+      for (int x = input_buffer_index - 1; x > 1; x--) {
+        if (char(input_buffer[x]) != '.') {
+          tempfloat += (input_buffer[x] - 48) * place_multiplier;
+          place_multiplier = place_multiplier * 10;
+        } else {
+          decimalplace = x;
+        }
+      }
+      if (decimalplace) {
+        tempfloat = tempfloat / pow(10, (input_buffer_index - decimalplace - 1));
+      }
+      if ((tempfloat >= 0) && (tempfloat <= 360)) {
+        configuration.azimuth_offset = 0;
+        read_azimuth(1);
+        configuration.azimuth_offset = tempfloat - float(raw_azimuth / HEADING_MULTIPLIER);
+        configuration_dirty = 1;
+        strcpy(return_string, "Azimuth calibrated to ");
+        dtostrf(tempfloat, 0, 2, temp_string);
+        strcat(return_string, temp_string);
+      } else {
+        strcpy(return_string, "Error.");
+      }
+      break;
+    } // \Ax[xxx][.][xxxx] - manually set azimuth
+    case 'I': {
+      new_azimuth_starting_point = 9999;
+      switch (input_buffer_index) {
+        case 2: {
+          new_azimuth_starting_point = configuration.azimuth_starting_point;
+          break;
+        }
+        case 3: {
+          new_azimuth_starting_point = (input_buffer[2] - 48);
+          break;
+        }
+        case 4: {
+          new_azimuth_starting_point = ((input_buffer[2] - 48) * 10) + (input_buffer[3] - 48);
+          break;
+        }
+        case 5: {
+          new_azimuth_starting_point = ((input_buffer[2] - 48) * 100) + ((input_buffer[3] - 48) * 10) + (input_buffer[4] - 48);
+          break;
+        }
+        default: {
+          break;
+        }
+      } // switch
+      if ((new_azimuth_starting_point  >= 0) && (new_azimuth_starting_point  < 360)) {
+        if (input_buffer_index > 2) {
+          azimuth_starting_point = configuration.azimuth_starting_point = new_azimuth_starting_point;
+          configuration_dirty = 1;
+        }
+        strcpy(return_string, "Azimuth starting point set to ");
+        dtostrf(new_azimuth_starting_point, 0, 0, temp_string);
+        strcat(return_string, temp_string);
+      } else {
+        strcpy(return_string, "Error.  Format: \\Ix[x][x]");
+      }
+      break;
+    } // \Ix[x][x] - set az starting point
+    case 'J': {
+      new_azimuth_rotation_capability = 9999;
+      switch (input_buffer_index) {
+        case 2: {
+          new_azimuth_rotation_capability = configuration.azimuth_rotation_capability;
+          break;
+        }
+        case 3: {
+          new_azimuth_rotation_capability = (input_buffer[2] - 48);
+          break;
+        }
+        case 4: {
+          new_azimuth_rotation_capability = ((input_buffer[2] - 48) * 10) + (input_buffer[3] - 48);
+          break;
+        }
+        case 5: {
+          new_azimuth_rotation_capability = ((input_buffer[2] - 48) * 100) + ((input_buffer[3] - 48) * 10) + (input_buffer[4] - 48);
+          break;
+        }
+      }
+      if ((new_azimuth_rotation_capability >= 0) && (new_azimuth_rotation_capability <= 450)) {
+        if (input_buffer_index > 2) {
+          azimuth_rotation_capability = configuration.azimuth_rotation_capability = new_azimuth_rotation_capability;
+          configuration_dirty = 1;
+        }
+        strcpy(return_string, "Azimuth rotation capability set to ");
+        dtostrf(new_azimuth_rotation_capability, 0, 0, temp_string);
+        strcat(return_string, temp_string);
+      } else {
+        strcpy(return_string, "Error.  Format: \\Jx[x][x]");
+      }
+      break;
+    } // \Jx[x][x] - set az rotation capability
+    case 'K': {
+      brake_az_disabled = 2;
+      if (input_buffer_index == 2) {
+        brake_az_disabled = configuration.brake_az_disabled;
+      } else {
+        switch (input_buffer[2]) {
+          case '0': brake_az_disabled = 0; break;
+          case '1': brake_az_disabled = 1; break;
+        }
+      }
+      if ((brake_az_disabled >=0) && (brake_az_disabled <= 1)) {
+        if (input_buffer_index > 2) {
+          configuration.brake_az_disabled = brake_az_disabled;
+          configuration_dirty = 1;
+        }
+        strcpy(return_string, "Az brake ");
+        strcat(return_string, (brake_az_disabled ? "disabled." : "enabled."));
+      } else {
+        strcpy(return_string, "Error.");
+      }
+      break;
+    } // \Kx   - Force disable the az brake even if a pin is defined (x: 0 = enable, 1 = disable)
+    case 'B': {
+      place_multiplier = 1;
+      for (int x = input_buffer_index - 1; x > 1; x--) {
+        if (char(input_buffer[x]) != '.') {
+          tempfloat += (input_buffer[x] - 48) * place_multiplier;
+          place_multiplier = place_multiplier * 10;
+        } else {
+          decimalplace = x;
+        }
+      }
+      if (decimalplace) {
+        tempfloat = tempfloat / pow(10, (input_buffer_index - decimalplace - 1));
+      }
+      if ((tempfloat >= 0) && (tempfloat <= 180)) {
+        configuration.elevation_offset = 0;
+        read_elevation(1);
+        configuration.elevation_offset = tempfloat - float(elevation / HEADING_MULTIPLIER);
+        configuration_dirty = 1;
+        strcpy(return_string, "Elevation calibrated to ");
+        dtostrf(tempfloat, 0, 2, temp_string);
+        strcat(return_string, temp_string);
+      } else {
+        strcpy(return_string, "Error.");
+      }
+      break;
+    } // \Bx[xxx][.][xxxx] - manually set elevation
+    case 'D': {
+      if (debug_mode & source_port) {
+        debug_mode = debug_mode & (~source_port);
+      } else {
+        debug_mode = debug_mode | source_port;
+      }
+      break;
+    } // \D - Debug
+    case 'E': {
+      initialize_eeprom_with_defaults();
+      strcpy(return_string, "Initialized eeprom, resetting unit in 5 seconds...");
+      reset_the_unit = 1;
+      break;
+    } // \E - Initialize eeprom
+    case 'Q': {
+      write_settings_to_eeprom();
+      strcpy(return_string, "Settings saved in EEPROM, resetting unit in 5 seconds...");
+      reset_the_unit = 1;
+      break;
+    } // \Q - Save settings in the EEPROM and restart
+    case 'L': {
+      if (azimuth < (180 * HEADING_MULTIPLIER)) {
+        submit_request(AZ, REQUEST_AZIMUTH, (azimuth + (180 * HEADING_MULTIPLIER)), 15);
+      } else {
+        submit_request(AZ, REQUEST_AZIMUTH, (azimuth - (180 * HEADING_MULTIPLIER)), 16);
+      }
+      break;
+    } // \L - rotate to long path
+    case '+': {
+      if (configuration.azimuth_display_mode == AZ_DISPLAY_MODE_OVERLAP_PLUS){
+        configuration.azimuth_display_mode = AZ_DISPLAY_MODE_NORMAL;
+        strcpy(return_string, "Azimuth Display Mode: Normal");
+      } else {
+        if (configuration.azimuth_display_mode == AZ_DISPLAY_MODE_RAW){
+          configuration.azimuth_display_mode = AZ_DISPLAY_MODE_OVERLAP_PLUS;
+          strcpy(return_string, "Azimuth Display Mode: +Overlap");
+        } else {
+          if (configuration.azimuth_display_mode == AZ_DISPLAY_MODE_NORMAL){
+            configuration.azimuth_display_mode = AZ_DISPLAY_MODE_RAW;
+            strcpy(return_string, "Azimuth Display Mode: Raw Degrees");
+          }
+        }
+      }
+      configuration_dirty = 1;
+      break;
+    }
+    case '?': {
+      strcpy(return_string, "\\!??");  //  \\??xxyy - failed response back
+      if (input_buffer_index == 4){
+        if ((input_buffer[2] == 'F') && (input_buffer[3] == 'S')) {  // \?FS - Full Status
+          strcpy(return_string, "\\!OKFS");
+          // AZ
+          if ((raw_azimuth/HEADING_MULTIPLIER) < 100) {
+            strcat(return_string,"0");
+          }
+          if ((raw_azimuth/HEADING_MULTIPLIER) < 10) {
+            strcat(return_string,"0");
+          }
+          dtostrf(float(raw_azimuth/(float)HEADING_MULTIPLIER),0,6,temp_string);
+          strcat(return_string,temp_string);
+          strcat(return_string,",");
+          // EL
+          if ((elevation/HEADING_MULTIPLIER) >= 0) {
+            strcat(return_string,"+");
+          } else {
+            strcat(return_string,"-");
+          }
+          if (abs(elevation/HEADING_MULTIPLIER) < 100) {
+            strcat(return_string,"0");
+          }
+          if (abs(elevation/HEADING_MULTIPLIER) < 10) {
+            strcat(return_string,"0");
+          }
+          dtostrf(float(abs(elevation/(float)HEADING_MULTIPLIER)),0,6,temp_string);
+          strcat(return_string,temp_string);
+          strcat(return_string,",");
+          // AS
+          dtostrf(az_state, 0, 0, temp_string);
+          strcat(return_string, temp_string);
+          strcat(return_string,",");
+          // ES
+          dtostrf(el_state, 0, 0, temp_string);
+          strcat(return_string, temp_string);
+          strcat(return_string,",");
+
+        }
+        if ((input_buffer[2] == 'A') && (input_buffer[3] == 'Z')) {  // \?AZ - query AZ
+          strcpy(return_string, "\\!OKAZ");
+          if ((raw_azimuth/HEADING_MULTIPLIER) < 100) {
+            strcat(return_string,"0");
+          }
+          if ((raw_azimuth/HEADING_MULTIPLIER) < 10) {
+            strcat(return_string,"0");
+          }
+          dtostrf(float(raw_azimuth/(float)HEADING_MULTIPLIER),0,6,temp_string);
+          strcat(return_string,temp_string);
+        }
+        if ((input_buffer[2] == 'E') && (input_buffer[3] == 'L')) {  // \?EL - query EL
+          strcpy(return_string, "\\!OKEL");
+          if ((elevation/HEADING_MULTIPLIER) >= 0) {
+            strcat(return_string,"+");
+          } else {
+            strcat(return_string,"-");
+          }
+          if (abs(elevation/HEADING_MULTIPLIER) < 100) {
+            strcat(return_string,"0");
+          }
+          if (abs(elevation/HEADING_MULTIPLIER) < 10) {
+            strcat(return_string,"0");
+          }
+          dtostrf(float(abs(elevation/(float)HEADING_MULTIPLIER)),0,6,temp_string);
+          strcat(return_string,temp_string);
+        }
+        if ((input_buffer[2] == 'A') && (input_buffer[3] == 'S')) {  // \?AS - AZ status
+          strcpy(return_string, "\\!OKAS");
+          dtostrf(az_state, 0, 0, temp_string);
+          strcat(return_string, temp_string);
+        }
+        if ((input_buffer[2] == 'E') && (input_buffer[3] == 'S')) {  // \?ES - EL Status
+          strcpy(return_string, "\\!OKES");
+          dtostrf(el_state, 0, 0, temp_string);
+          strcat(return_string, temp_string);
+        }
+        if ((input_buffer[2] == 'P') && (input_buffer[3] == 'G')) {  // \?PG - Ping
+          strcpy(return_string, "\\!OKPG");
+        }
+        if ((input_buffer[2] == 'R') && (input_buffer[3] == 'L')) {  // \?RL - rotate left
+          submit_request(AZ, REQUEST_CCW, 0, 121);
+          strcpy(return_string, "\\!OKRL");
+        }
+        if ((input_buffer[2] == 'R') && (input_buffer[3] == 'R')) {  // \?RR - rotate right
+          submit_request(AZ, REQUEST_CW, 0, 122);
+          strcpy(return_string, "\\!OKRR");
+        }
+        if ((input_buffer[2] == 'R') && (input_buffer[3] == 'U')) {  //  \?RU - elevate up
+          submit_request(EL, REQUEST_UP, 0, 129);
+          strcpy(return_string, "\\!OKRU");
+        }
+        if ((input_buffer[2] == 'R') && (input_buffer[3] == 'D')) {  // \?RD - elevate down
+          submit_request(EL, REQUEST_DOWN, 0, 130);
+          strcpy(return_string, "\\!OKRD");
+        }
+        if ((input_buffer[2] == 'S') && (input_buffer[3] == 'A')) {  // \?SA - stop azimuth rotation
+          submit_request(AZ, REQUEST_STOP, 0, 124);
+          strcpy(return_string,"\\!OKSA");
+        }
+        if ((input_buffer[2] == 'S') && (input_buffer[3] == 'E')) {  // \?SE - stop elevation rotation
+          submit_request(EL, REQUEST_STOP, 0, 125);
+          strcpy(return_string,"\\!OKSE");
+        }
+        if ((input_buffer[2] == 'S') && (input_buffer[3] == 'S')) {  // \?SS - stop all rotation
+          submit_request(AZ, REQUEST_STOP, 0, 124);
+          submit_request(EL, REQUEST_STOP, 0, 125);
+          strcpy(return_string,"\\!OKSS");
+        }
+        if ((input_buffer[2] == 'C') && (input_buffer[3] == 'L')) {  // \?CL - read the clock
+          strcpy(return_string,"\\!??CL");
+        }
+        if ((input_buffer[2] == 'R') && (input_buffer[3] == 'B')) {  // \?RB - reboot
+          wdt_enable(WDTO_30MS); while (1) {}  //ZZZZZZ - TODO - change to reboot flag
+        }
+        if ((input_buffer[2] == 'C') && (input_buffer[3] == 'V')) {  // \?CV Code Verson
+          strcpy(return_string,"\\!OKCV");
+          strcat(return_string,CODE_VERSION);
+        }
+
+      } //if (input_buffer_index == 4)
+
+      if (input_buffer_index == 6){
+        if ((input_buffer[2] == 'D') && (input_buffer[3] == 'O')) {  // \?DOxx - digital pin initialize as output; xx = pin # (01, 02, A0,etc.)
+          if ((((input_buffer[4] > 47) && (input_buffer[4] < 58)) || (toupper(input_buffer[4]) == 'A')) && (input_buffer[5] > 47) && (input_buffer[5] < 58)) {
+            byte pin_value = 0;
+            if (toupper(input_buffer[4]) == 'A') {
+              pin_value = get_analog_pin(input_buffer[4] - 48);
+            } else {
+              pin_value = ((input_buffer[4] - 48) * 10) + (input_buffer[5] - 48);
+            }
+            strcpy(return_string,"\\!OKDO");
+            pinModeEnhanced(pin_value, OUTPUT);
+          }
+        }
+
+        if ((input_buffer[2] == 'D') && ((input_buffer[3] == 'H') || (input_buffer[3] == 'L'))) { // \?DLxx - digital pin write low; xx = pin #   \?DHxx - digital pin write high; xx = pin #
+          if ((((input_buffer[4] > 47) && (input_buffer[4] < 58)) || (toupper(input_buffer[4]) == 'A')) && (input_buffer[5] > 47) && (input_buffer[5] < 58)) {
+            byte pin_value = 0;
+            if (toupper(input_buffer[4]) == 'A') {
+              pin_value = get_analog_pin(input_buffer[5] - 48);
+            } else {
+              pin_value = ((input_buffer[4] - 48) * 10) + (input_buffer[5] - 48);
+            }
+            if (input_buffer[3] == 'H') {
+              digitalWriteEnhanced(pin_value, HIGH);
+              strcpy(return_string,"\\!OKDH");
+            } else {
+              digitalWriteEnhanced(pin_value, LOW);
+              strcpy(return_string,"\\!OKDL");
+            }
+          }
+        }
+
+        if ((input_buffer[2] == 'D') && (input_buffer[3] == 'I')) {  // \?DIxx - digital pin initialize as input; xx = pin #
+          if ((((input_buffer[4] > 47) && (input_buffer[4] < 58)) || (toupper(input_buffer[4]) == 'A')) && (input_buffer[5] > 47) && (input_buffer[5] < 58)) {
+            byte pin_value = 0;
+            if (toupper(input_buffer[4]) == 'A') {
+              pin_value = get_analog_pin(input_buffer[5] - 48);
+            } else {
+              pin_value = ((input_buffer[4] - 48) * 10) + (input_buffer[5] - 48);
+            }
+            pinModeEnhanced(pin_value, INPUT);
+            strcpy(return_string,"\\!OKDI");
+          }
+        }
+
+        if ((input_buffer[2] == 'D') && (input_buffer[3] == 'P')) {  // \?DPxx - digital pin initialize as input with pullup; xx = pin #
+          if ((((input_buffer[4] > 47) && (input_buffer[4] < 58)) || (toupper(input_buffer[4]) == 'A')) && (input_buffer[5] > 47) && (input_buffer[5] < 58)) {
+            byte pin_value = 0;
+            if (toupper(input_buffer[4]) == 'A') {
+              pin_value = get_analog_pin(input_buffer[5] - 48);
+            } else {
+              pin_value = ((input_buffer[4] - 48) * 10) + (input_buffer[5] - 48);
+            }
+            pinModeEnhanced(pin_value, INPUT);
+            digitalWriteEnhanced(pin_value, HIGH);
+            strcpy(return_string,"\\!OKDP");
+          }
+        }
+
+        if ((input_buffer[2] == 'D') && (input_buffer[3] == 'R')) {  // \?DRxx - digital pin read; xx = pin #
+          if ((((input_buffer[4] > 47) && (input_buffer[4] < 58)) || (toupper(input_buffer[4]) == 'A')) && (input_buffer[5] > 47) && (input_buffer[5] < 58)) {
+            byte pin_value = 0;
+            if (toupper(input_buffer[4]) == 'A') {
+              pin_value = get_analog_pin(input_buffer[5] - 48);
+            } else {
+              pin_value = ((input_buffer[4] - 48) * 10) + (input_buffer[5] - 48);
+            }
+            byte pin_read = digitalReadEnhanced(pin_value);
+            strcpy(return_string,"\\!OKDR");
+            dtostrf((input_buffer[4]-48),0,0,temp_string);
+            strcat(return_string,temp_string);
+            dtostrf((input_buffer[5]-48),0,0,temp_string);
+            strcat(return_string,temp_string);
+            if (pin_read) {
+              strcat(return_string,"1");
+            } else {
+              strcat(return_string,"0");
+            }
+          }
+        }
+        if ((input_buffer[2] == 'A') && (input_buffer[3] == 'R')) {  //  \?ARxx - analog pin read; xx = pin #
+          if ((((input_buffer[4] > 47) && (input_buffer[4] < 58)) || (toupper(input_buffer[4]) == 'A')) && (input_buffer[5] > 47) && (input_buffer[5] < 58)) {
+            byte pin_value = 0;
+            if (toupper(input_buffer[4]) == 'A') {
+              pin_value = get_analog_pin(input_buffer[5] - 48);
+            } else {
+              pin_value = ((input_buffer[4] - 48) * 10) + (input_buffer[5] - 48);
+            }
+            int pin_read = analogReadEnhanced(pin_value);
+            strcpy(return_string,"\\!OKAR");
+            if (toupper(input_buffer[4]) == 'A') {
+              strcat(return_string,"A");
+            } else {
+              dtostrf((input_buffer[4]-48),0,0,temp_string);
+              strcat(return_string,temp_string);
+            }
+
+            dtostrf((input_buffer[5]-48),0,0,temp_string);
+            strcat(return_string,temp_string);
+            if (pin_read < 1000) {
+              strcat(return_string,"0");
+            }
+            if (pin_read < 100) {
+              strcat(return_string,"0");
+            }
+            if (pin_read < 10) {
+              strcat(return_string,"0");
+            }
+            dtostrf(pin_read,0,0,temp_string);
+            strcat(return_string,temp_string);
+          }
+        }
+
+        if ((input_buffer[2] == 'N') && (input_buffer[3] == 'T')) { // \?NTxx - no tone; xx = pin #
+          byte pin_value = 0;
+          if (toupper(input_buffer[4]) == 'A') {
+            pin_value = get_analog_pin(input_buffer[5] - 48);
+          } else {
+            pin_value = ((input_buffer[4] - 48) * 10) + (input_buffer[5] - 48);
+          }
+          noTone(pin_value);
+          strcpy(return_string,"\\!OKNT");
+        }
+      }  //if ((input_buffer_index == 6)
+
+      if (input_buffer_index == 9) {
+
+        if ((input_buffer[2] == 'G') && (input_buffer[3] == 'A')) {  // \?GAxxx.x - go to AZ xxx.x
+          heading = ((input_buffer[4] - 48) * 100.) + ((input_buffer[5] - 48) * 10.) + (input_buffer[6] - 48.) + ((input_buffer[8] - 48) / 10.);
+          if (((heading >= 0) && (heading < 451))  && (input_buffer[7] == '.')) {
+            submit_request(AZ, REQUEST_AZIMUTH, (heading * HEADING_MULTIPLIER), 136);
+            strcpy(return_string,"\\!OKGA");
+          } else {
+            strcpy(return_string,"\\!??GA");
+          }
+        }
+        if ((input_buffer[2] == 'G') && (input_buffer[3] == 'E')) {  // \?GExxx.x - go to EL
+          #ifdef FEATURE_ELEVATION_CONTROL
+          heading = ((input_buffer[4] - 48) * 100.) + ((input_buffer[5] - 48) * 10.) + (input_buffer[5] - 48) + ((input_buffer[8] - 48) / 10.);
+          if (((heading >= 0) && (heading < 181)) && (input_buffer[7] == '.')) {
+            submit_request(EL, REQUEST_ELEVATION, (heading * HEADING_MULTIPLIER), 37);
+            strcpy(return_string,"\\!OKGE");
+          } else {
+            strcpy(return_string,"\\!??GE");
+          }
+          #else
+          strcpy(return_string,"\\!OKGE");
+          #endif // #FEATURE_ELEVATION_CONTROL
+        }
+
+
+        if ((input_buffer[2] == 'A') && (input_buffer[3] == 'W')) {  // \?AWxxyyy - analog pin write; xx = pin #, yyy = value to write (0 - 255)
+          if ((((input_buffer[4] > 47) && (input_buffer[4] < 58)) || (toupper(input_buffer[4]) == 'A')) && (input_buffer[5] > 47) && (input_buffer[5] < 58)) {
+            byte pin_value = 0;
+            if (toupper(input_buffer[4]) == 'A') {
+              pin_value = get_analog_pin(input_buffer[5] - 48);
+            } else {
+              pin_value = ((input_buffer[4] - 48) * 10) + (input_buffer[5] - 48);
+            }
+            int write_value = ((input_buffer[6] - 48) * 100) + ((input_buffer[7] - 48) * 10) + (input_buffer[8] - 48);
+            if ((write_value >= 0) && (write_value < 256)) {
+              analogWriteEnhanced(pin_value, write_value);
+              strcpy(return_string,"\\!OKAW");
+            }
+          }
+        }
+      } //if (input_buffer_index == 9)
+
+      if (input_buffer_index == 10) {
+        if ((input_buffer[2] == 'D') && (input_buffer[3] == 'T')) { // \?DTxxyyyy - digital pin tone output; xx = pin #, yyyy = frequency
+          if ((((input_buffer[4] > 47) && (input_buffer[4] < 58)) || (toupper(input_buffer[4]) == 'A')) && (input_buffer[5] > 47) && (input_buffer[5] < 58)) {
+            byte pin_value = 0;
+            if (toupper(input_buffer[4]) == 'A') {
+              pin_value = get_analog_pin(input_buffer[5] - 48);
+            } else {
+              pin_value = ((input_buffer[4] - 48) * 10) + (input_buffer[5] - 48);
+            }
+            int write_value = ((input_buffer[6] - 48) * 1000) + ((input_buffer[7] - 48) * 100) + ((input_buffer[8] - 48) * 10) + (input_buffer[9] - 48);
+            if ((write_value >= 0) && (write_value <= 9999)) {
+              tone(pin_value, write_value);
+              strcpy(return_string,"\\!OKDT");
+
+            }
+          }
+        }
+      }  //if (input_buffer_index == 10)
+
+      break;
+    } // \?
+    default: {
+      break;
+    }
+  } // switch
+  return(0);
+} // process_backslash_command
 
 void process_yaesu_command(byte * yaesu_command_buffer, int yaesu_command_buffer_index, byte source_port, char * return_string) {
 
@@ -2948,47 +3813,333 @@ void process_yaesu_command(byte * yaesu_command_buffer, int yaesu_command_buffer
 
   strcpy(return_string,"");
 
-  switch (yaesu_command_buffer[0]) {          // look at the first character of the command
-    case 'C':                                // C - return current azimuth
-    #ifdef DEBUG_PROCESS_YAESU
-    if (debug_mode) {
-      debug.print("yaesu_serial_command: C\n");
-    }
-    #endif // DEBUG_PROCESS_YAESU
-    #ifdef OPTION_DELAY_C_CMD_OUTPUT
-    delay(400);
-    #endif
-    //strcpy(return_string,"");
-    #ifndef OPTION_GS_232B_EMULATION
-    strcat(return_string,"+0");
-    #else
-    strcat(return_string,"AZ=");
-    #endif
-    dtostrf(int(azimuth / HEADING_MULTIPLIER),0,0,tempstring);
-    if (int(azimuth / HEADING_MULTIPLIER) < 10) {
-      strcat(return_string,"0");
-    }
-    if (int(azimuth / HEADING_MULTIPLIER) < 100) {
-      strcat(return_string,"0");
-    }
-    strcat(return_string,tempstring);
-
-    #ifdef FEATURE_ELEVATION_CONTROL
-    #ifndef OPTION_C_COMMAND_SENDS_AZ_AND_EL
-    if ((yaesu_command_buffer[1] == '2') && (yaesu_command_buffer_index > 1)) {     // did we get the C2 command?
+  // look at the first character of the command
+  switch (yaesu_command_buffer[0]) {
+    case 'C': {
+      #ifdef DEBUG_PROCESS_YAESU
+      if (debug_mode) {
+        debug.print("yaesu_serial_command: C\n");
+      }
+      #endif // DEBUG_PROCESS_YAESU
+      #ifdef OPTION_DELAY_C_CMD_OUTPUT
+      delay(400);
       #endif
+      #ifndef OPTION_GS_232B_EMULATION
+      strcat(return_string,"+0");
+      #else
+      strcat(return_string,"AZ=");
+      #endif
+      dtostrf(int(azimuth / HEADING_MULTIPLIER),0,0,tempstring);
+      if (int(azimuth / HEADING_MULTIPLIER) < 10) {
+        strcat(return_string,"0");
+      }
+      if (int(azimuth / HEADING_MULTIPLIER) < 100) {
+        strcat(return_string,"0");
+      }
+      strcat(return_string,tempstring);
 
+      #ifdef FEATURE_ELEVATION_CONTROL
+      #ifndef OPTION_C_COMMAND_SENDS_AZ_AND_EL
+      if ((yaesu_command_buffer[1] == '2') && (yaesu_command_buffer_index > 1)) {     // did we get the C2 command?
+        #endif
+        #ifndef OPTION_GS_232B_EMULATION
+        if (elevation < 0) {
+          strcat(return_string,"-0");
+        } else {
+          strcat(return_string,"+0");
+        }
+        #endif
+        #ifdef OPTION_GS_232B_EMULATION
+        strcat(return_string,"EL=");
+        #endif
+        dtostrf(int(elevation / HEADING_MULTIPLIER),0,0,tempstring);
+        if (int(elevation / HEADING_MULTIPLIER) < 10) {
+          strcat(return_string,("0"));
+        }
+        if (int(elevation / HEADING_MULTIPLIER) < 100) {
+          strcat(return_string,"0");
+        }
+        strcat(return_string,tempstring);
 
+        #ifndef OPTION_C_COMMAND_SENDS_AZ_AND_EL
+      } else {
+        //strcat(return_string,"\n");
+      }
+      #endif // OPTION_C_COMMAND_SENDS_AZ_AND_EL
+      #endif // FEATURE_ELEVATION_CONTROL
+
+      if ((yaesu_command_buffer[1] == '2') && (yaesu_command_buffer_index > 1)) {     // did we get the C2 command?
+        #ifndef OPTION_GS_232B_EMULATION
+        strcat(return_string,"+0000");    // return a dummy elevation since we don't have the elevation feature turned on
+        #else
+        strcat(return_string,"EL=000");
+        #endif
+      } else {
+        //strcat(return_string,"\n");
+      }
+      break;
+    } // C - return current azimuth
+    case 'F': {
+      #ifdef DEBUG_PROCESS_YAESU
+      if (debug_mode) {
+        debug.print("yaesu_serial_command: F\n");
+      }
+      #endif // DEBUG_PROCESS_YAESU
+      if ((yaesu_command_buffer[1] == '2') && (yaesu_command_buffer_index > 1)) {     // did we get the F2 command?
+
+        clear_serial_buffer();
+        if (source_port == CONTROL_PORT0){
+          control_port->println(F("Elevate to 180 (or max elevation) and send keystroke..."));
+        }
+        get_keystroke();
+        read_elevation(1);
+        configuration.analog_el_max_elevation = analog_el;
+        write_settings_to_eeprom();
+        strcpy(return_string,"Wrote to memory");
+        return;
+      }
+      clear_serial_buffer();
+      if (source_port == CONTROL_PORT0){
+        control_port->println(F("Rotate to full CW and send keystroke..."));
+        get_keystroke();
+      }
+      read_azimuth(1);
+      configuration.analog_az_full_cw = analog_az;
+      write_settings_to_eeprom();
+      strcpy(return_string,"Wrote to memory");
+      break;
+    } // F - full scale calibration
+    case 'H': {
+      print_help(source_port);
+      break;
+    } // H - print help - depricated
+    case 'L': {
+      #ifdef DEBUG_PROCESS_YAESU
+      if (debug_mode) {
+        debug.print("yaesu_serial_command: L\n");
+      }
+      #endif // DEBUG_PROCESS_YAESU
+      submit_request(AZ, REQUEST_CCW, 0, 21);
+      //strcpy(return_string,"\n");
+      break;
+    } // L - manual left (CCW) rotation
+    case 'O': {
+      #ifdef DEBUG_PROCESS_YAESU
+      if (debug_mode) {
+        debug.print("yaesu_serial_command: O\n");
+      }
+      #endif // DEBUG_PROCESS_YAESU
+      if ((yaesu_command_buffer[1] == '2') && (yaesu_command_buffer_index > 1)) {     // did we get the O2 command?
+        clear_serial_buffer();
+        if (source_port == CONTROL_PORT0){
+          control_port->println(F("Elevate to 0 degrees and send keystroke..."));
+        }
+        get_keystroke();
+        read_elevation(1);
+        configuration.analog_el_0_degrees = analog_el;
+        write_settings_to_eeprom();
+        strcpy(return_string,"Wrote to memory");
+        return;
+      }
+      clear_serial_buffer();
+      if (source_port == CONTROL_PORT0){
+        control_port->println(F("Rotate to full CCW and send keystroke..."));
+      }
+      get_keystroke();
+      read_azimuth(1);
+      configuration.analog_az_full_ccw = analog_az;
+      write_settings_to_eeprom();
+      strcpy(return_string,"Wrote to memory");
+      break;
+    } // O - offset calibration
+    case 'R': {
+      #ifdef DEBUG_PROCESS_YAESU
+      if (debug_mode) {
+        debug.print("yaesu_serial_command: R\n");
+      }
+      #endif // DEBUG_PROCESS_YAESU
+      submit_request(AZ, REQUEST_CW, 0, 22);
+      strcpy(return_string,"\n");
+      break;
+    } // R - manual right (CW) rotation
+    case 'A': {
+      #ifdef DEBUG_PROCESS_YAESU
+      if (debug_mode) {
+        debug.print("yaesu_serial_command: A\n");
+      }
+      #endif // DEBUG_PROCESS_YAESU
+      submit_request(AZ, REQUEST_STOP, 0, 23);
+      //strcpy(return_string,"\n");
+      break;
+    } // A - CW/CCW rotation stop
+    case 'S': {
+      #ifdef DEBUG_PROCESS_YAESU
+      if (debug_mode) {
+        debug.print("yaesu_serial_command: S\n");
+      }
+      #endif // DEBUG_PROCESS_YAESU
+      submit_request(AZ, REQUEST_STOP, 0, 24);
+      submit_request(EL, REQUEST_STOP, 0, 25);
+      #ifdef FEATURE_TIMED_BUFFER
+      clear_timed_buffer();
+      #endif // FEATURE_TIMED_BUFFER
+      break;
+    } // S - all stop
+    case 'M': {
+      #ifdef DEBUG_PROCESS_YAESU
+      if (debug_mode) {
+        debug.print("yaesu_serial_command: M\n");
+      }
+      #endif // DEBUG_PROCESS_YAESU
+
+      if (yaesu_command_buffer_index > 4) {  // if there are more than 4 characters in the command buffer, we got a timed interval command
+        #ifdef FEATURE_TIMED_BUFFER
+        clear_timed_buffer();
+        parsed_value = ((int(yaesu_command_buffer[1]) - 48) * 100) + ((int(yaesu_command_buffer[2]) - 48) * 10) + (int(yaesu_command_buffer[3]) - 48);
+        if ((parsed_value > 0) && (parsed_value < 1000)) {
+          timed_buffer_interval_value_seconds = parsed_value;
+          for (int x = 5; x < yaesu_command_buffer_index; x = x + 4) {
+            parsed_value = ((int(yaesu_command_buffer[x]) - 48) * 100) + ((int(yaesu_command_buffer[x + 1]) - 48) * 10) + (int(yaesu_command_buffer[x + 2]) - 48);
+            if ((parsed_value >= 0) && (parsed_value <= (azimuth_starting_point + azimuth_rotation_capability))) {  // is it a valid azimuth?
+              timed_buffer_azimuths[timed_buffer_number_entries_loaded] = parsed_value * HEADING_MULTIPLIER;
+              timed_buffer_number_entries_loaded++;
+              timed_buffer_status = LOADED_AZIMUTHS;
+              if (timed_buffer_number_entries_loaded > TIMED_INTERVAL_ARRAY_SIZE) {   // is the array full?
+                submit_request(AZ, REQUEST_AZIMUTH, timed_buffer_azimuths[0], 26);  // array is full, go to the first azimuth
+                timed_buffer_entry_pointer = 1;
+                return;
+              }
+            } else {   // we hit an invalid bearing
+              timed_buffer_status = EMPTY;
+              timed_buffer_number_entries_loaded = 0;
+              strcpy(return_string,"?>");  // error
+              return;
+            }
+          }
+          submit_request(AZ, REQUEST_AZIMUTH, timed_buffer_azimuths[0], 27);   // go to the first azimuth
+          timed_buffer_entry_pointer = 1;
+        } else {
+          strcpy(return_string,"?>");  // error
+        }
+        #else
+        strcpy(return_string,"?>");
+        #endif // FEATURE_TIMED_BUFFER
+        return;
+      } else {                         // if there are four characters, this is just a single direction setting
+        if (yaesu_command_buffer_index == 4) {
+          parsed_value = ((int(yaesu_command_buffer[1]) - 48) * 100) + ((int(yaesu_command_buffer[2]) - 48) * 10) + (int(yaesu_command_buffer[3]) - 48);
+          #ifdef FEATURE_TIMED_BUFFER
+          clear_timed_buffer();
+          #endif // FEATURE_TIMED_BUFFER
+          if ((parsed_value >= 0) && (parsed_value <= (azimuth_starting_point + azimuth_rotation_capability))) {
+            submit_request(AZ, REQUEST_AZIMUTH, (parsed_value * HEADING_MULTIPLIER), 28);
+            return;
+          }
+        }
+      }
+      strcpy(return_string,"?>");
+      break;
+    } // M - auto azimuth rotation
+    case 'X': {
+      #ifdef DEBUG_PROCESS_YAESU
+      if (debug_mode) {
+        debug.print("yaesu_serial_command: X\n");
+      }
+      #endif // DEBUG_PROCESS_YAESU
+
+      if (yaesu_command_buffer_index > 1) {
+        switch (yaesu_command_buffer[1]) {
+          case '4':{
+            normal_az_speed_voltage = PWM_SPEED_VOLTAGE_X4;
+            update_az_variable_outputs(PWM_SPEED_VOLTAGE_X4);
+            #if defined(FEATURE_ELEVATION_CONTROL) && defined(OPTION_EL_SPEED_FOLLOWS_AZ_SPEED)
+            normal_el_speed_voltage = PWM_SPEED_VOLTAGE_X4;
+            update_el_variable_outputs(PWM_SPEED_VOLTAGE_X4);
+            #endif
+            strcpy(return_string,"Speed X4");
+            break;
+          }
+          case '3': {
+            normal_az_speed_voltage = PWM_SPEED_VOLTAGE_X3;
+            update_az_variable_outputs(PWM_SPEED_VOLTAGE_X3);
+            #if defined(FEATURE_ELEVATION_CONTROL) && defined(OPTION_EL_SPEED_FOLLOWS_AZ_SPEED)
+            normal_el_speed_voltage = PWM_SPEED_VOLTAGE_X3;
+            update_el_variable_outputs(PWM_SPEED_VOLTAGE_X3);
+            #endif
+            strcpy(return_string,"Speed X3");
+            break;
+          }
+          case '2': {
+            normal_az_speed_voltage = PWM_SPEED_VOLTAGE_X2;
+            update_az_variable_outputs(PWM_SPEED_VOLTAGE_X2);
+            #if defined(FEATURE_ELEVATION_CONTROL) && defined(OPTION_EL_SPEED_FOLLOWS_AZ_SPEED)
+            normal_el_speed_voltage = PWM_SPEED_VOLTAGE_X2;
+            update_el_variable_outputs(PWM_SPEED_VOLTAGE_X2);
+            #endif
+            strcpy(return_string,"Speed X2");
+            break;
+          }
+          case '1': {
+            normal_az_speed_voltage = PWM_SPEED_VOLTAGE_X1;
+            update_az_variable_outputs(PWM_SPEED_VOLTAGE_X1);
+            #if defined(FEATURE_ELEVATION_CONTROL) && defined(OPTION_EL_SPEED_FOLLOWS_AZ_SPEED)
+            normal_el_speed_voltage = PWM_SPEED_VOLTAGE_X1;
+            update_el_variable_outputs(PWM_SPEED_VOLTAGE_X1);
+            #endif
+            strcpy(return_string,"Speed X1");
+            break;
+          }
+          default: {
+            strcpy(return_string,"?>");
+            break;
+          }
+        } /* switch */
+      } else {
+        strcpy(return_string,"?>");
+      }
+      break;
+    } // X - azimuth speed change
+    case 'U': {
+      #ifdef DEBUG_PROCESS_YAESU
+      if (debug_mode) {
+        debug.print("yaesu_serial_command: U\n");
+      }
+      #endif // DEBUG_PROCESS_YAESU
+      submit_request(EL, REQUEST_UP, 0, 29);
+      //strcpy(return_string,"\n");
+      break;
+    } // U - manual up rotation
+    case 'D':  {
+      #ifdef DEBUG_PROCESS_YAESU
+      if (debug_mode) {
+        debug.print("yaesu_serial_command: D\n");
+      }
+      #endif // DEBUG_PROCESS_YAESU
+      submit_request(EL, REQUEST_DOWN, 0, 30);
+      //strcpy(return_string,"\n");
+      break;
+    } // D - manual down rotation
+    case 'E': {
+      #ifdef DEBUG_PROCESS_YAESU
+      if (debug_mode) {
+        debug.print("yaesu_serial_command: E\n");
+      }
+      #endif // DEBUG_PROCESS_YAESU
+
+      submit_request(EL, REQUEST_STOP, 0, 31);
+      //strcpy(return_string,"\n");
+      break;
+    } // E - stop elevation rotation
+    case 'B': {
       #ifndef OPTION_GS_232B_EMULATION
       if (elevation < 0) {
         strcat(return_string,"-0");
       } else {
         strcat(return_string,"+0");
       }
-      #endif
-      #ifdef OPTION_GS_232B_EMULATION
+      #else
       strcat(return_string,"EL=");
-      #endif
+      #endif //OPTION_GS_232B_EMULATION
       dtostrf(int(elevation / HEADING_MULTIPLIER),0,0,tempstring);
       if (int(elevation / HEADING_MULTIPLIER) < 10) {
         strcat(return_string,("0"));
@@ -2997,466 +4148,136 @@ void process_yaesu_command(byte * yaesu_command_buffer, int yaesu_command_buffer
         strcat(return_string,"0");
       }
       strcat(return_string,tempstring);
-
-      #ifndef OPTION_C_COMMAND_SENDS_AZ_AND_EL
-    } else {
-      //strcat(return_string,"\n");
-    }
-    #endif // OPTION_C_COMMAND_SENDS_AZ_AND_EL
-    #endif // FEATURE_ELEVATION_CONTROL
-
-    #ifndef FEATURE_ELEVATION_CONTROL
-    if ((yaesu_command_buffer[1] == '2') && (yaesu_command_buffer_index > 1)) {     // did we get the C2 command?
-      #ifndef OPTION_GS_232B_EMULATION
-      strcat(return_string,"+0000");    // return a dummy elevation since we don't have the elevation feature turned on
-      #else
-      strcat(return_string,"EL=000");
-      #endif
-    } else {
-      //strcat(return_string,"\n");
-    }
-    #endif // FEATURE_ELEVATION_CONTROL
-    break;
-
-
-    //-----------------end of C command-----------------
-
-    #ifdef FEATURE_AZ_POSITION_POTENTIOMETER
-    case 'F': // F - full scale calibration
-    #ifdef DEBUG_PROCESS_YAESU
-    if (debug_mode) {
-      debug.print("yaesu_serial_command: F\n");
-    }
-    #endif // DEBUG_PROCESS_YAESU
-
-
-    #ifdef FEATURE_ELEVATION_CONTROL
-    if ((yaesu_command_buffer[1] == '2') && (yaesu_command_buffer_index > 1)) {     // did we get the F2 command?
-
-      clear_serial_buffer();
-      if (source_port == CONTROL_PORT0){
-        control_port->println(F("Elevate to 180 (or max elevation) and send keystroke..."));
+      break;
+    } // B - return current elevation
+    case 'W': {
+      #ifdef DEBUG_PROCESS_YAESU
+      if (debug_mode) {
+        debug.print("yaesu_serial_command: W\n");
       }
-      get_keystroke();
-      read_elevation(1);
-      configuration.analog_el_max_elevation = analog_el;
-      write_settings_to_eeprom();
-      strcpy(return_string,"Wrote to memory");
-      return;
-    }
-    #endif
+      #endif // DEBUG_PROCESS_YAESU
+      // parse out W command
+      // Short Format: WXXX YYY            XXX = azimuth YYY = elevation
+      // Long Format : WSSS XXX YYY        SSS = timed interval   XXX = azimuth    YYY = elevation
+      if (yaesu_command_buffer_index > 8) {
+        // if there are more than 4 characters in the command buffer, we got a timed interval command
+        #if defined(FEATURE_TIMED_BUFFER) && defined(FEATURE_ELEVATION_CONTROL)
+        parsed_value = ((int(yaesu_command_buffer[1]) - 48) * 100) + ((int(yaesu_command_buffer[2]) - 48) * 10) + (int(yaesu_command_buffer[3]) - 48);
+        if ((parsed_value > 0) && (parsed_value < 1000)) {
+          timed_buffer_interval_value_seconds = parsed_value;
+          for (int x = 5; x < yaesu_command_buffer_index; x = x + 8) {
+            parsed_value = ((int(yaesu_command_buffer[x]) - 48) * 100) + ((int(yaesu_command_buffer[x + 1]) - 48) * 10) + (int(yaesu_command_buffer[x + 2]) - 48);
+            parsed_value2 = ((int(yaesu_command_buffer[x + 4]) - 48) * 100) + ((int(yaesu_command_buffer[x + 5]) - 48) * 10) + (int(yaesu_command_buffer[x + 6]) - 48);
+            if ((parsed_value > -1) && (parsed_value < 361) && (parsed_value2 > -1) && (parsed_value2 < 181)) {  // is it a valid azimuth?
+              timed_buffer_azimuths[timed_buffer_number_entries_loaded] = (parsed_value * HEADING_MULTIPLIER);
+              timed_buffer_elevations[timed_buffer_number_entries_loaded] = (parsed_value2 * HEADING_MULTIPLIER);
+              timed_buffer_number_entries_loaded++;
+              timed_buffer_status = LOADED_AZIMUTHS_ELEVATIONS;
+              if (timed_buffer_number_entries_loaded > TIMED_INTERVAL_ARRAY_SIZE) {   // is the array full?
+                x = yaesu_command_buffer_index;  // array is full, go to the first azimuth and elevation
 
-    clear_serial_buffer();
-    if (source_port == CONTROL_PORT0){
-      control_port->println(F("Rotate to full CW and send keystroke..."));
-      get_keystroke();
-    }
-    read_azimuth(1);
-    configuration.analog_az_full_cw = analog_az;
-    write_settings_to_eeprom();
-    strcpy(return_string,"Wrote to memory");
-    break;
-    #endif // FEATURE_AZ_POSITION_POTENTIOMETER
-    case 'H': print_help(source_port); break;                     // H - print help - depricated
-    case 'L':  // L - manual left (CCW) rotation
-    #ifdef DEBUG_PROCESS_YAESU
-    if (debug_mode) {
-      debug.print("yaesu_serial_command: L\n");
-    }
-    #endif // DEBUG_PROCESS_YAESU
-    submit_request(AZ, REQUEST_CCW, 0, 21);
-    //strcpy(return_string,"\n");
-    break;
-
-    #ifdef FEATURE_AZ_POSITION_POTENTIOMETER
-    case 'O':  // O - offset calibration
-    #ifdef DEBUG_PROCESS_YAESU
-    if (debug_mode) {
-      debug.print("yaesu_serial_command: O\n");
-    }
-    #endif // DEBUG_PROCESS_YAESU
-
-    #ifdef FEATURE_ELEVATION_CONTROL
-    if ((yaesu_command_buffer[1] == '2') && (yaesu_command_buffer_index > 1)) {     // did we get the O2 command?
-      clear_serial_buffer();
-      if (source_port == CONTROL_PORT0){
-        control_port->println(F("Elevate to 0 degrees and send keystroke..."));
-      }
-      get_keystroke();
-      read_elevation(1);
-      configuration.analog_el_0_degrees = analog_el;
-      write_settings_to_eeprom();
-      strcpy(return_string,"Wrote to memory");
-      return;
-    }
-    #endif
-
-    clear_serial_buffer();
-    if (source_port == CONTROL_PORT0){
-      control_port->println(F("Rotate to full CCW and send keystroke..."));
-    }
-    get_keystroke();
-    read_azimuth(1);
-    configuration.analog_az_full_ccw = analog_az;
-    write_settings_to_eeprom();
-    strcpy(return_string,"Wrote to memory");
-    break;
-    #endif // FEATURE_AZ_POSITION_POTENTIOMETER
-
-    case 'R':  // R - manual right (CW) rotation
-    #ifdef DEBUG_PROCESS_YAESU
-    if (debug_mode) {
-      debug.print("yaesu_serial_command: R\n");
-    }
-    #endif // DEBUG_PROCESS_YAESU
-    submit_request(AZ, REQUEST_CW, 0, 22);
-    strcpy(return_string,"\n");
-    break;
-
-    case 'A':  // A - CW/CCW rotation stop
-    #ifdef DEBUG_PROCESS_YAESU
-    if (debug_mode) {
-      debug.print("yaesu_serial_command: A\n");
-    }
-    #endif // DEBUG_PROCESS_YAESU
-    submit_request(AZ, REQUEST_STOP, 0, 23);
-    //strcpy(return_string,"\n");
-    break;
-
-    case 'S':         // S - all stop
-    #ifdef DEBUG_PROCESS_YAESU
-    if (debug_mode) {
-      debug.print("yaesu_serial_command: S\n");
-    }
-    #endif // DEBUG_PROCESS_YAESU
-    submit_request(AZ, REQUEST_STOP, 0, 24);
-    #ifdef FEATURE_ELEVATION_CONTROL
-    submit_request(EL, REQUEST_STOP, 0, 25);
-    #endif
-    #ifdef FEATURE_TIMED_BUFFER
-    clear_timed_buffer();
-    #endif // FEATURE_TIMED_BUFFER
-    //strcpy(return_string,"");
-    break;
-
-    case 'M': // M - auto azimuth rotation
-    #ifdef DEBUG_PROCESS_YAESU
-    if (debug_mode) {
-      debug.print("yaesu_serial_command: M\n");
-    }
-    #endif // DEBUG_PROCESS_YAESU
-
-    if (yaesu_command_buffer_index > 4) {  // if there are more than 4 characters in the command buffer, we got a timed interval command
-      #ifdef FEATURE_TIMED_BUFFER
-      clear_timed_buffer();
-      parsed_value = ((int(yaesu_command_buffer[1]) - 48) * 100) + ((int(yaesu_command_buffer[2]) - 48) * 10) + (int(yaesu_command_buffer[3]) - 48);
-      if ((parsed_value > 0) && (parsed_value < 1000)) {
-        timed_buffer_interval_value_seconds = parsed_value;
-        for (int x = 5; x < yaesu_command_buffer_index; x = x + 4) {
-          parsed_value = ((int(yaesu_command_buffer[x]) - 48) * 100) + ((int(yaesu_command_buffer[x + 1]) - 48) * 10) + (int(yaesu_command_buffer[x + 2]) - 48);
-          if ((parsed_value >= 0) && (parsed_value <= (azimuth_starting_point + azimuth_rotation_capability))) {  // is it a valid azimuth?
-            timed_buffer_azimuths[timed_buffer_number_entries_loaded] = parsed_value * HEADING_MULTIPLIER;
-            timed_buffer_number_entries_loaded++;
-            timed_buffer_status = LOADED_AZIMUTHS;
-            if (timed_buffer_number_entries_loaded > TIMED_INTERVAL_ARRAY_SIZE) {   // is the array full?
-              submit_request(AZ, REQUEST_AZIMUTH, timed_buffer_azimuths[0], 26);  // array is full, go to the first azimuth
-              timed_buffer_entry_pointer = 1;
+              }
+            } else {   // we hit an invalid bearing
+              timed_buffer_status = EMPTY;
+              timed_buffer_number_entries_loaded = 0;
+              strcpy(return_string,"?>");  // error
               return;
             }
-          } else {   // we hit an invalid bearing
-            timed_buffer_status = EMPTY;
-            timed_buffer_number_entries_loaded = 0;
-            strcpy(return_string,"?>");  // error
-            return;
           }
         }
-        submit_request(AZ, REQUEST_AZIMUTH, timed_buffer_azimuths[0], 27);   // go to the first azimuth
-        timed_buffer_entry_pointer = 1;
+        timed_buffer_entry_pointer = 1;             // go to the first bearings
+        parsed_value = timed_buffer_azimuths[0];
+        parsed_elevation = timed_buffer_elevations[0];
+        #else /* ifdef FEATURE_TIMED_BUFFER FEATURE_ELEVATION_CONTROL*/
+        strcpy(return_string,"?>");
+        #endif // FEATURE_TIMED_BUFFER FEATURE_ELEVATION_CONTROL
       } else {
-        strcpy(return_string,"?>");  // error
+        // this is a short form W command, just parse the azimuth and elevation and initiate rotation
+        parsed_value = (((int(yaesu_command_buffer[1]) - 48) * 100) + ((int(yaesu_command_buffer[2]) - 48) * 10) + (int(yaesu_command_buffer[3]) - 48)) * HEADING_MULTIPLIER;
+        parsed_elevation = (((int(yaesu_command_buffer[5]) - 48) * 100) + ((int(yaesu_command_buffer[6]) - 48) * 10) + (int(yaesu_command_buffer[7]) - 48)) * HEADING_MULTIPLIER;
       }
-      #else
-      strcpy(return_string,"?>");
-      #endif // FEATURE_TIMED_BUFFER
-      return;
-    } else {                         // if there are four characters, this is just a single direction setting
-      if (yaesu_command_buffer_index == 4) {
-        parsed_value = ((int(yaesu_command_buffer[1]) - 48) * 100) + ((int(yaesu_command_buffer[2]) - 48) * 10) + (int(yaesu_command_buffer[3]) - 48);
-        #ifdef FEATURE_TIMED_BUFFER
-        clear_timed_buffer();
-        #endif // FEATURE_TIMED_BUFFER
-        if ((parsed_value >= 0) && (parsed_value <= (azimuth_starting_point + azimuth_rotation_capability))) {
-          submit_request(AZ, REQUEST_AZIMUTH, (parsed_value * HEADING_MULTIPLIER), 28);
-          return;
+
+      if ((parsed_value >= 0) && (parsed_value <= ((azimuth_starting_point + azimuth_rotation_capability)* HEADING_MULTIPLIER)) && (parsed_elevation >= 0) && (parsed_elevation <= (ELEVATION_MAXIMUM_DEGREES * HEADING_MULTIPLIER))) {
+        submit_request(AZ, REQUEST_AZIMUTH, parsed_value, 33);
+        submit_request(EL, REQUEST_ELEVATION, parsed_elevation, 34);
+      } else {
+        #ifdef DEBUG_PROCESS_YAESU
+        if (debug_mode) {
+          debug.print("process_yaesu_command: W cmd az/el error");
         }
+        #endif // DEBUG_PROCESS_YAESU
+        strcpy(return_string,"?>");      // bogus elevation - return and error and don't do anything
       }
-    }
-    strcpy(return_string,"?>");
-    break;
-
-    #ifdef FEATURE_TIMED_BUFFER
-    case 'N': // N - number of loaded timed interval entries
-    #ifdef DEBUG_PROCESS_YAESU
-    if (debug_mode) {
-      debug.print("yaesu_serial_command: N\n");
-    }
-    #endif // DEBUG_PROCESS_YAESU
-
-    sprintf(return_string,"%d",timed_buffer_number_entries_loaded);
-    break;
-    #endif // FEATURE_TIMED_BUFFER
-
-    #ifdef FEATURE_TIMED_BUFFER
-    case 'T': // T - initiate timed tracking
-    initiate_timed_buffer(source_port);
-    break;
-    #endif // FEATURE_TIMED_BUFFER
-
-    case 'X':  // X - azimuth speed change
-    #ifdef DEBUG_PROCESS_YAESU
-    if (debug_mode) {
-      debug.print("yaesu_serial_command: X\n");
-    }
-    #endif // DEBUG_PROCESS_YAESU
-
-
-    if (yaesu_command_buffer_index > 1) {
-      switch (yaesu_command_buffer[1]) {
-        case '4':
-        normal_az_speed_voltage = PWM_SPEED_VOLTAGE_X4;
-        update_az_variable_outputs(PWM_SPEED_VOLTAGE_X4);
-        #if defined(FEATURE_ELEVATION_CONTROL) && defined(OPTION_EL_SPEED_FOLLOWS_AZ_SPEED)
-        normal_el_speed_voltage = PWM_SPEED_VOLTAGE_X4;
-        update_el_variable_outputs(PWM_SPEED_VOLTAGE_X4);
-        #endif
-        strcpy(return_string,"Speed X4");
-        break;
-        case '3':
-        normal_az_speed_voltage = PWM_SPEED_VOLTAGE_X3;
-        update_az_variable_outputs(PWM_SPEED_VOLTAGE_X3);
-        #if defined(FEATURE_ELEVATION_CONTROL) && defined(OPTION_EL_SPEED_FOLLOWS_AZ_SPEED)
-        normal_el_speed_voltage = PWM_SPEED_VOLTAGE_X3;
-        update_el_variable_outputs(PWM_SPEED_VOLTAGE_X3);
-        #endif
-        strcpy(return_string,"Speed X3");
-        break;
-        case '2':
-        normal_az_speed_voltage = PWM_SPEED_VOLTAGE_X2;
-        update_az_variable_outputs(PWM_SPEED_VOLTAGE_X2);
-        #if defined(FEATURE_ELEVATION_CONTROL) && defined(OPTION_EL_SPEED_FOLLOWS_AZ_SPEED)
-        normal_el_speed_voltage = PWM_SPEED_VOLTAGE_X2;
-        update_el_variable_outputs(PWM_SPEED_VOLTAGE_X2);
-        #endif
-        strcpy(return_string,"Speed X2");
-        break;
-        case '1':
-        normal_az_speed_voltage = PWM_SPEED_VOLTAGE_X1;
-        update_az_variable_outputs(PWM_SPEED_VOLTAGE_X1);
-        #if defined(FEATURE_ELEVATION_CONTROL) && defined(OPTION_EL_SPEED_FOLLOWS_AZ_SPEED)
-        normal_el_speed_voltage = PWM_SPEED_VOLTAGE_X1;
-        update_el_variable_outputs(PWM_SPEED_VOLTAGE_X1);
-        #endif
-        strcpy(return_string,"Speed X1");
-        break;
-        default: strcpy(return_string,"?>"); break;
-      } /* switch */
-    } else {
-      strcpy(return_string,"?>");
-    }
-    break;
-
-    #ifdef FEATURE_ELEVATION_CONTROL
-    case 'U':  // U - manual up rotation
-    #ifdef DEBUG_PROCESS_YAESU
-    if (debug_mode) {
-      debug.print("yaesu_serial_command: U\n");
-    }
-    #endif // DEBUG_PROCESS_YAESU
-
-    submit_request(EL, REQUEST_UP, 0, 29);
-    //strcpy(return_string,"\n");
-    break;
-
-    case 'D':  // D - manual down rotation
-    #ifdef DEBUG_PROCESS_YAESU
-    if (debug_mode) {
-      debug.print("yaesu_serial_command: D\n");
-    }
-    #endif // DEBUG_PROCESS_YAESU
-
-    submit_request(EL, REQUEST_DOWN, 0, 30);
-    //strcpy(return_string,"\n");
-    break;
-
-    case 'E':  // E - stop elevation rotation
-    #ifdef DEBUG_PROCESS_YAESU
-    if (debug_mode) {
-      debug.print("yaesu_serial_command: E\n");
-    }
-    #endif // DEBUG_PROCESS_YAESU
-
-    submit_request(EL, REQUEST_STOP, 0, 31);
-    //strcpy(return_string,"\n");
-    break;
-
-    case 'B': // B - return current elevation
-    #ifndef OPTION_GS_232B_EMULATION
-    if (elevation < 0) {
-      strcat(return_string,"-0");
-    } else {
-      strcat(return_string,"+0");
-    }
-    #else
-    strcat(return_string,"EL=");
-    #endif //OPTION_GS_232B_EMULATION
-    dtostrf(int(elevation / HEADING_MULTIPLIER),0,0,tempstring);
-    if (int(elevation / HEADING_MULTIPLIER) < 10) {
-      strcat(return_string,("0"));
-    }
-    if (int(elevation / HEADING_MULTIPLIER) < 100) {
-      strcat(return_string,"0");
-    }
-    strcat(return_string,tempstring);
-    break;
-
-    #endif /* ifdef FEATURE_ELEVATION_CONTROL */
-
-    case 'W':  // W - auto elevation rotation
-    #ifdef DEBUG_PROCESS_YAESU
-    if (debug_mode) {
-      debug.print("yaesu_serial_command: W\n");
-    }
-    #endif // DEBUG_PROCESS_YAESU
-
-
-    // parse out W command
-    // Short Format: WXXX YYY            XXX = azimuth YYY = elevation
-    // Long Format : WSSS XXX YYY        SSS = timed interval   XXX = azimuth    YYY = elevation
-
-    if (yaesu_command_buffer_index > 8) {  // if there are more than 4 characters in the command buffer, we got a timed interval command
-      #if defined(FEATURE_TIMED_BUFFER) && defined(FEATURE_ELEVATION_CONTROL)
-      parsed_value = ((int(yaesu_command_buffer[1]) - 48) * 100) + ((int(yaesu_command_buffer[2]) - 48) * 10) + (int(yaesu_command_buffer[3]) - 48);
-      if ((parsed_value > 0) && (parsed_value < 1000)) {
-        timed_buffer_interval_value_seconds = parsed_value;
-        for (int x = 5; x < yaesu_command_buffer_index; x = x + 8) {
-          parsed_value = ((int(yaesu_command_buffer[x]) - 48) * 100) + ((int(yaesu_command_buffer[x + 1]) - 48) * 10) + (int(yaesu_command_buffer[x + 2]) - 48);
-          parsed_value2 = ((int(yaesu_command_buffer[x + 4]) - 48) * 100) + ((int(yaesu_command_buffer[x + 5]) - 48) * 10) + (int(yaesu_command_buffer[x + 6]) - 48);
-          if ((parsed_value > -1) && (parsed_value < 361) && (parsed_value2 > -1) && (parsed_value2 < 181)) {  // is it a valid azimuth?
-            timed_buffer_azimuths[timed_buffer_number_entries_loaded] = (parsed_value * HEADING_MULTIPLIER);
-            timed_buffer_elevations[timed_buffer_number_entries_loaded] = (parsed_value2 * HEADING_MULTIPLIER);
-            timed_buffer_number_entries_loaded++;
-            timed_buffer_status = LOADED_AZIMUTHS_ELEVATIONS;
-            if (timed_buffer_number_entries_loaded > TIMED_INTERVAL_ARRAY_SIZE) {   // is the array full?
-              x = yaesu_command_buffer_index;  // array is full, go to the first azimuth and elevation
-
-            }
-          } else {   // we hit an invalid bearing
-            timed_buffer_status = EMPTY;
-            timed_buffer_number_entries_loaded = 0;
-            strcpy(return_string,"?>");  // error
-            return;
-          }
-        }
-      }
-      timed_buffer_entry_pointer = 1;             // go to the first bearings
-      parsed_value = timed_buffer_azimuths[0];
-      parsed_elevation = timed_buffer_elevations[0];
-      #else /* ifdef FEATURE_TIMED_BUFFER FEATURE_ELEVATION_CONTROL*/
-      strcpy(return_string,"?>");
-      #endif // FEATURE_TIMED_BUFFER FEATURE_ELEVATION_CONTROL
-    } else {
-      // this is a short form W command, just parse the azimuth and elevation and initiate rotation
-      parsed_value = (((int(yaesu_command_buffer[1]) - 48) * 100) + ((int(yaesu_command_buffer[2]) - 48) * 10) + (int(yaesu_command_buffer[3]) - 48)) * HEADING_MULTIPLIER;
-      parsed_elevation = (((int(yaesu_command_buffer[5]) - 48) * 100) + ((int(yaesu_command_buffer[6]) - 48) * 10) + (int(yaesu_command_buffer[7]) - 48)) * HEADING_MULTIPLIER;
-    }
-
-    #ifndef FEATURE_ELEVATION_CONTROL
-
-    if ((parsed_value >= 0) && (parsed_value <= ((azimuth_starting_point + azimuth_rotation_capability)* HEADING_MULTIPLIER))) {
-      //if ((parsed_value >= 0) && (parsed_value <= (360 * HEADING_MULTIPLIER))) {
-      submit_request(AZ, REQUEST_AZIMUTH, parsed_value, 32);
-    } else {
-      #ifdef DEBUG_PROCESS_YAESU
-      if (debug_mode) {
-        debug.print("process_yaesu_command: W cmd az error");
-      }
-      #endif // DEBUG_PROCESS_YAESU
-      strcpy(return_string,"?>");      // bogus elevation - return and error and don't do anything
-    }
-
-    #else
-    if ((parsed_value >= 0) && (parsed_value <= ((azimuth_starting_point + azimuth_rotation_capability)* HEADING_MULTIPLIER)) && (parsed_elevation >= 0) && (parsed_elevation <= (ELEVATION_MAXIMUM_DEGREES * HEADING_MULTIPLIER))) {
-
-      //if ((parsed_value >= 0) && (parsed_value <= (360 * HEADING_MULTIPLIER)) && (parsed_elevation >= 0) && (parsed_elevation <= (180 * HEADING_MULTIPLIER))) {
-      submit_request(AZ, REQUEST_AZIMUTH, parsed_value, 33);
-      submit_request(EL, REQUEST_ELEVATION, parsed_elevation, 34);
-    } else {
-      #ifdef DEBUG_PROCESS_YAESU
-      if (debug_mode) {
-        debug.print("process_yaesu_command: W cmd az/el error");
-      }
-      #endif // DEBUG_PROCESS_YAESU
-      strcpy(return_string,"?>");      // bogus elevation - return and error and don't do anything
-    }
-    #endif // FEATURE_ELEVATION_CONTROL
-
-
-    break;
+      break;
+    } // W - auto elevation rotation
 
     #ifdef OPTION_GS_232B_EMULATION
-    case 'P':  // P - switch between 360 and 450 degree mode
-
-    if ((yaesu_command_buffer[1] == '3') && (yaesu_command_buffer_index > 2)) {  // P36 command
-      azimuth_rotation_capability = 360;
-      strcpy(return_string,"Mode 360 degree");
-      // write_settings_to_eeprom();
-    } else {
-      if ((yaesu_command_buffer[1] == '4') && (yaesu_command_buffer_index > 2)) { // P45 command
-        azimuth_rotation_capability = 450;
-        strcpy(return_string,"Mode 450 degree");
+    case 'P':  {
+      if ((yaesu_command_buffer[1] == '3') && (yaesu_command_buffer_index > 2)) {  // P36 command
+        azimuth_rotation_capability = 360;
+        strcpy(return_string,"Mode 360 degree");
         // write_settings_to_eeprom();
       } else {
-        strcpy(return_string,"?>");
+        if ((yaesu_command_buffer[1] == '4') && (yaesu_command_buffer_index > 2)) { // P45 command
+          azimuth_rotation_capability = 450;
+          strcpy(return_string,"Mode 450 degree");
+          // write_settings_to_eeprom();
+        } else {
+          strcpy(return_string,"?>");
+        }
       }
-    }
-
-
-    break;
-    case 'Z':                                           // Z - Starting point toggle
-
-    if (azimuth_starting_point == 180) {
-      azimuth_starting_point = 0;
-      strcpy(return_string,"N");
-    } else {
-      azimuth_starting_point = 180;
-      strcpy(return_string,"S");
-    }
-    strcat(return_string," Center");
-    // write_settings_to_eeprom();
-    break;
-    #endif
-
-    default:
-    strcpy(return_string,"?>");
-    #ifdef DEBUG_PROCESS_YAESU
-    if (debug_mode) {
-      debug.print("process_yaesu_command: yaesu_command_buffer_index: ");
-      debug.print(yaesu_command_buffer_index);
-      for (int debug_x = 0; debug_x < yaesu_command_buffer_index; debug_x++) {
-        debug.print("process_yaesu_command: yaesu_command_buffer[");
-        debug.print(debug_x);
-        debug.print("]: ");
-        debug.print(yaesu_command_buffer[debug_x]);
-        debug.print(" ");
-        debug.write(yaesu_command_buffer[debug_x]);
-        debug.print("\n");;
+      break;
+    } // P - switch between 360 and 450 degree mode
+    case 'Z': {
+      if (azimuth_starting_point == 180) {
+        azimuth_starting_point = 0;
+        strcpy(return_string,"N");
+      } else {
+        azimuth_starting_point = 180;
+        strcpy(return_string,"S");
       }
+      strcat(return_string," Center");
+      break;
+    } // Z - Starting point toggle
+    #endif // OPTION_GS_232B_EMULATION
+
+    #ifdef FEATURE_TIMED_BUFFER
+    case 'N': {
+      #ifdef DEBUG_PROCESS_YAESU
+      if (debug_mode) {
+        debug.print("yaesu_serial_command: N\n");
+      }
+      #endif // DEBUG_PROCESS_YAESU
+      sprintf(return_string,"%d",timed_buffer_number_entries_loaded);
+      break;
+    } // N - number of loaded timed interval entries
+    case 'T': {
+      initiate_timed_buffer(source_port);
+      break;
+    } // T - initiate timed tracking
+    #endif // FEATURE_TIMED_BUFFER
+
+    default: {
+      strcpy(return_string,"?>");
+      #ifdef DEBUG_PROCESS_YAESU
+      if (debug_mode) {
+        debug.print("process_yaesu_command: yaesu_command_buffer_index: ");
+        debug.print(yaesu_command_buffer_index);
+        for (int debug_x = 0; debug_x < yaesu_command_buffer_index; debug_x++) {
+          debug.print("process_yaesu_command: yaesu_command_buffer[");
+          debug.print(debug_x);
+          debug.print("]: ");
+          debug.print(yaesu_command_buffer[debug_x]);
+          debug.print(" ");
+          debug.write(yaesu_command_buffer[debug_x]);
+          debug.print("\n");;
+        }
+      }
+      #endif // DEBUG_PROCESS_YAESU
+      break;
     }
-    #endif // DEBUG_PROCESS_YAESU
   } /* switch */
-
 } /* yaesu_serial_command */
-#endif // FEATURE_YAESU_EMULATION
 
 #ifdef FEATURE_TIMED_BUFFER
 void clear_timed_buffer() {
@@ -3468,18 +4289,13 @@ void clear_timed_buffer() {
 void initiate_timed_buffer(byte source_port) {
 
   if (timed_buffer_status == LOADED_AZIMUTHS) {
-
     timed_buffer_status = RUNNING_AZIMUTHS;
-
     submit_request(AZ, REQUEST_AZIMUTH, timed_buffer_azimuths[1], 79);
-
     last_timed_buffer_action_time = millis();
     timed_buffer_entry_pointer = 2;
-
     #ifdef DEBUG_TIMED_BUFFER
     debug.println("initiate_timed_buffer: changing state to RUNNING_AZIMUTHS");
     #endif // DEBUG_TIMED_BUFFER
-
   } else {
     #ifdef FEATURE_ELEVATION_CONTROL
     if (timed_buffer_status == LOADED_AZIMUTHS_ELEVATIONS) {
@@ -3488,27 +4304,23 @@ void initiate_timed_buffer(byte source_port) {
       submit_request(EL, REQUEST_ELEVATION, timed_buffer_elevations[1], 81);
       last_timed_buffer_action_time = millis();
       timed_buffer_entry_pointer = 2;
-
       #ifdef DEBUG_TIMED_BUFFER
       debug.println("initiate_timed_buffer: changing state to RUNNING_AZIMUTHS_ELEVATIONS");
       #endif // DEBUG_TIMED_BUFFER
-
     } else {
       print_to_port(">",source_port);  // error
     }
-    #endif
+    #endif // FEATURE_ELEVATION_CONTROL
   }
 } // initiate_timed_buffer
 
 void print_timed_buffer_empty_message() {
-
   #ifdef DEBUG_TIMED_BUFFER
   debug.println("check_timed_interval: completed timed buffer; changing state to EMPTY");
   #endif // DEBUG_TIMED_BUFFER
-
 } // print_timed_buffer_empty_message
 
-void check_timed_interval(){
+void check_timed_interval() {
   if ((timed_buffer_status == RUNNING_AZIMUTHS) && (((millis() - last_timed_buffer_action_time) / 1000) > timed_buffer_interval_value_seconds)) {
     timed_buffer_entry_pointer++;
     #ifdef DEBUG_TIMED_BUFFER
@@ -3533,11 +4345,9 @@ void check_timed_interval(){
     if (timed_buffer_entry_pointer == timed_buffer_number_entries_loaded) {
       clear_timed_buffer();
       print_timed_buffer_empty_message();
-
     }
   }
   #endif // FEATURE_ELEVATION_CONTROL
-
 } /* check_timed_interval */
 
 #endif // FEATURE_TIMED_BUFFER
