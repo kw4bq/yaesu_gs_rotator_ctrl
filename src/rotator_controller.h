@@ -93,71 +93,64 @@ struct config_t {
 } configuration;
 
 #ifdef FEATURE_TIMED_BUFFER
-  int timed_buffer_azimuths[TIMED_INTERVAL_ARRAY_SIZE];
-  int timed_buffer_number_entries_loaded = 0;
-  int timed_buffer_entry_pointer = 0;
-  int timed_buffer_interval_value_seconds = 0;
-  unsigned long last_timed_buffer_action_time = 0;
-  byte timed_buffer_status = EMPTY;
+int timed_buffer_azimuths[TIMED_INTERVAL_ARRAY_SIZE];
+int timed_buffer_number_entries_loaded = 0;
+int timed_buffer_entry_pointer = 0;
+int timed_buffer_interval_value_seconds = 0;
+unsigned long last_timed_buffer_action_time = 0;
+byte timed_buffer_status = EMPTY;
+int timed_buffer_elevations[TIMED_INTERVAL_ARRAY_SIZE];
 #endif // FEATURE_TIMED_BUFFER
 
 byte normal_az_speed_voltage = 0;
 byte current_az_speed_voltage = 0;
 
-#ifdef FEATURE_ELEVATION_CONTROL
-  int elevation = 0;
-  int target_elevation = 0;
+int elevation = 0;
+int target_elevation = 0;
 
-  byte el_request = 0;
-  int el_request_parm = 0;
-  byte el_request_queue_state = NONE;
-  byte el_slowstart_active = EL_SLOWSTART_DEFAULT;
-  byte el_slowdown_active = EL_SLOWDOWN_DEFAULT;
-  unsigned long el_slowstart_start_time = 0;
-  byte el_slow_start_step = 0;
-  unsigned long el_last_step_time = 0;
-  byte el_slow_down_step = 0;
-  unsigned long el_timed_slow_down_start_time = 0;
-  byte normal_el_speed_voltage = 0;
-  byte current_el_speed_voltage = 0;
+byte el_request = 0;
+int el_request_parm = 0;
+byte el_request_queue_state = NONE;
+byte el_slowstart_active = EL_SLOWSTART_DEFAULT;
+byte el_slowdown_active = EL_SLOWDOWN_DEFAULT;
+unsigned long el_slowstart_start_time = 0;
+byte el_slow_start_step = 0;
+unsigned long el_last_step_time = 0;
+byte el_slow_down_step = 0;
+unsigned long el_timed_slow_down_start_time = 0;
+byte normal_el_speed_voltage = 0;
+byte current_el_speed_voltage = 0;
 
-  int display_elevation = 0;
-  byte el_state = IDLE;
-  int analog_el = 0;
+int display_elevation = 0;
+byte el_state = IDLE;
+int analog_el = 0;
 
-  unsigned long el_last_rotate_initiation = 0;
-
-  #ifdef FEATURE_TIMED_BUFFER
-    int timed_buffer_elevations[TIMED_INTERVAL_ARRAY_SIZE];
-  #endif // FEATURE_TIMED_BUFFER
-  byte elevation_button_was_pushed = 0;
-
-#endif // FEATURE_ELEVATION_CONTROL
-
+unsigned long el_last_rotate_initiation = 0;
+byte elevation_button_was_pushed = 0;
 byte push_lcd_update = 0;
 
 double latitude = DEFAULT_LATITUDE;
 double longitude = DEFAULT_LONGITUDE;
 
 #ifdef FEATURE_AZIMUTH_CORRECTION
-  const float azimuth_calibration_from[]  = AZIMUTH_CALIBRATION_FROM_ARRAY;
-  const float azimuth_calibration_to[]    = AZIMUTH_CALIBRATION_TO_ARRAY;
+const float azimuth_calibration_from[]  = AZIMUTH_CALIBRATION_FROM_ARRAY;
+const float azimuth_calibration_to[]    = AZIMUTH_CALIBRATION_TO_ARRAY;
 #endif // FEATURE_AZIMUTH_CORRECTION
 
 #ifdef FEATURE_ELEVATION_CORRECTION
-  const float elevation_calibration_from[]  = ELEVATION_CALIBRATION_FROM_ARRAY;
-  const float elevation_calibration_to[]    = ELEVATION_CALIBRATION_TO_ARRAY;
+const float elevation_calibration_from[]  = ELEVATION_CALIBRATION_FROM_ARRAY;
+const float elevation_calibration_to[]    = ELEVATION_CALIBRATION_TO_ARRAY;
 #endif // FEATURE_ELEVATION_CORRECTION
 
 #ifdef FEATURE_AUTOCORRECT
-  byte autocorrect_state_az = AUTOCORRECT_INACTIVE;
-  float autocorrect_az = 0;
-  unsigned long autocorrect_az_submit_time = 0;
-  #ifdef FEATURE_ELEVATION_CONTROL
-    byte autocorrect_state_el = AUTOCORRECT_INACTIVE;
-    float autocorrect_el = 0;
-    unsigned long autocorrect_el_submit_time = 0;
-  #endif //FEATURE_ELEVATION_CONTROL
+byte autocorrect_state_az = AUTOCORRECT_INACTIVE;
+float autocorrect_az = 0;
+unsigned long autocorrect_az_submit_time = 0;
+#ifdef FEATURE_ELEVATION_CONTROL
+byte autocorrect_state_el = AUTOCORRECT_INACTIVE;
+float autocorrect_el = 0;
+unsigned long autocorrect_el_submit_time = 0;
+#endif //FEATURE_ELEVATION_CONTROL
 #endif //FEATURE_AUTOCORRECT
 
 DebugClass debug;

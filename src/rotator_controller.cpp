@@ -8,7 +8,6 @@ void setup() {
   initialize_pins();
   read_azimuth(0);
   initialize_display();
-  initialize_interrupts();
 } // setup
 
 void loop() {
@@ -1339,21 +1338,8 @@ void read_azimuth(byte force_read) {
   unsigned int previous_raw_azimuth = raw_azimuth;
   static unsigned long last_measurement_time = 0;
 
-  if (heading_reading_inhibit_pin) {
-    if (digitalReadEnhanced(heading_reading_inhibit_pin)) {
-      return;
-    }
-  }
-
-  #ifdef DEBUG_HEADING_READING_TIME
-  static unsigned long last_time = 0;
-  static unsigned long last_print_time = 0;
-  static float average_read_time = 0;
-  #endif // DEBUG_HEADING_READING_TIME
-
   if (((millis() - last_measurement_time) > AZIMUTH_MEASUREMENT_FREQUENCY_MS) || (force_read)) {
 
-    #ifdef FEATURE_AZ_POSITION_POTENTIOMETER
     analog_az = analogReadEnhanced(rotator_analog_az);
     raw_azimuth = map(analog_az, configuration.analog_az_full_ccw, configuration.analog_az_full_cw, (azimuth_starting_point * HEADING_MULTIPLIER), ((azimuth_starting_point + azimuth_rotation_capability) * HEADING_MULTIPLIER));
 
@@ -1368,22 +1354,17 @@ void read_azimuth(byte force_read) {
     }
 
     if (raw_azimuth >= (360 * HEADING_MULTIPLIER)) {
-
       azimuth = raw_azimuth - (360 * HEADING_MULTIPLIER);
       if (azimuth >= (360 * HEADING_MULTIPLIER)) {
         azimuth = azimuth - (360 * HEADING_MULTIPLIER);
       }
-
     } else {
-
       if (raw_azimuth < 0) {
         azimuth = raw_azimuth + (360 * HEADING_MULTIPLIER);
       } else {
         azimuth = raw_azimuth;
       }
-
     }
-    #endif // FEATURE_AZ_POSITION_POTENTIOMETER
 
     last_measurement_time = millis();
   }
@@ -1792,12 +1773,6 @@ void read_elevation(byte force_read) {
   unsigned int previous_elevation = elevation;
   static unsigned long last_measurement_time = 0;
 
-  if (heading_reading_inhibit_pin) {
-    if (digitalReadEnhanced(heading_reading_inhibit_pin)) {
-      return;
-    }
-  }
-
   #ifdef DEBUG_HEADING_READING_TIME
   static unsigned long last_time = 0;
   static unsigned long last_print_time = 0;
@@ -1806,20 +1781,21 @@ void read_elevation(byte force_read) {
 
   if (((millis() - last_measurement_time) > ELEVATION_MEASUREMENT_FREQUENCY_MS) || (force_read)) {
 
-    #ifdef FEATURE_EL_POSITION_POTENTIOMETER
     analog_el = analogReadEnhanced(rotator_analog_el);
     elevation = (map(analog_el, configuration.analog_el_0_degrees, configuration.analog_el_max_elevation, 0, (ELEVATION_MAXIMUM_DEGREES * HEADING_MULTIPLIER)));
+
     #ifdef FEATURE_ELEVATION_CORRECTION
     elevation = (correct_elevation(elevation / (float) HEADING_MULTIPLIER) * HEADING_MULTIPLIER);
     #endif // FEATURE_ELEVATION_CORRECTION
+
     elevation = elevation + (configuration.elevation_offset * HEADING_MULTIPLIER);
+
     if (ELEVATION_SMOOTHING_FACTOR > 0) {
       elevation = (elevation * (1 - (ELEVATION_SMOOTHING_FACTOR / 100))) + (previous_elevation * (ELEVATION_SMOOTHING_FACTOR / 100));
     }
     if (elevation < 0) {
       elevation = 0;
     }
-    #endif // FEATURE_EL_POSITION_POTENTIOMETER
 
     last_measurement_time = millis();
 
@@ -1968,6 +1944,7 @@ void update_az_variable_outputs(byte speed_voltage){
 } // update_az_variable_outputs
 
 void rotator(byte rotation_action, byte rotation_type) {
+
   #ifdef DEBUG_ROTATOR
   if (debug_mode) {
     control_port->flush();
@@ -1996,85 +1973,15 @@ void rotator(byte rotation_action, byte rotation_type) {
         }
         #endif // DEBUG_ROTATOR
         brake_release(AZ, BRAKE_RELEASE_ON);
-        if (az_slowstart_active) {
-          if (rotate_cw_pwm) {
-            analogWriteEnhanced(rotate_cw_pwm, 0);
-          }
-          if (rotate_ccw_pwm) {
-            analogWriteEnhanced(rotate_ccw_pwm, 0); digitalWriteEnhanced(rotate_ccw_pwm, LOW);
-          }
-          if (rotate_cw_ccw_pwm) {
-            analogWriteEnhanced(rotate_cw_ccw_pwm, 0);
-          }
-          if (rotate_cw_freq) {
-            noTone(rotate_cw_freq);
-          }
-          if (rotate_ccw_freq) {
-            noTone(rotate_ccw_freq);
-          }
-        } else {
-          if (rotate_cw_pwm) {
-            analogWriteEnhanced(rotate_cw_pwm, normal_az_speed_voltage);
-          }
-          if (rotate_ccw_pwm) {
-            analogWriteEnhanced(rotate_ccw_pwm, 0); digitalWriteEnhanced(rotate_ccw_pwm, LOW);
-          }
-          if (rotate_cw_ccw_pwm) {
-            analogWriteEnhanced(rotate_cw_ccw_pwm, normal_az_speed_voltage);
-          }
-          if (rotate_cw_freq) {
-            tone(rotate_cw_freq, map(normal_az_speed_voltage, 0, 255, AZ_VARIABLE_FREQ_OUTPUT_LOW, AZ_VARIABLE_FREQ_OUTPUT_HIGH));
-          }
-          if (rotate_ccw_freq) {
-            noTone(rotate_ccw_freq);
-          }
-        }
-        if (rotate_cw) {
-          digitalWriteEnhanced(rotate_cw, ROTATE_PIN_ACTIVE_VALUE);
-          #if defined(pin_led_cw)
-          digitalWriteEnhanced(pin_led_cw, PIN_LED_ACTIVE_STATE);
-          #endif
-        }
-        if (rotate_ccw) {
-          digitalWriteEnhanced(rotate_ccw, ROTATE_PIN_INACTIVE_VALUE);
-          #if defined(pin_led_ccw)
-          digitalWriteEnhanced(pin_led_ccw, PIN_LED_INACTIVE_STATE);
-          #endif
-        }
-        if (rotate_cw_ccw){
-          digitalWriteEnhanced(rotate_cw_ccw, ROTATE_PIN_ACTIVE_VALUE);
-        }
-        #ifdef DEBUG_ROTATOR
-        if (debug_mode) {
-          debug.print(F("rotator: normal_az_speed_voltage:"));
-          control_port->println(normal_az_speed_voltage);
-          //control_port->flush();
-        }
-        #endif // DEBUG_ROTATOR
+        digitalWriteEnhanced(rotate_cw, ROTATE_PIN_ACTIVE_VALUE);
+        digitalWriteEnhanced(rotate_ccw, ROTATE_PIN_INACTIVE_VALUE);
       } else {
         #ifdef DEBUG_ROTATOR
         if (debug_mode) {
           debug.print(F("DEACTIVATE\n"));
         }
         #endif // DEBUG_ROTATOR
-        if (rotate_cw_pwm) {
-          analogWriteEnhanced(rotate_cw_pwm, 0); digitalWriteEnhanced(rotate_cw_pwm, LOW);
-        }
-        if (rotate_cw_ccw_pwm) {
-          analogWriteEnhanced(rotate_cw_ccw_pwm, 0);
-        }
-        if (rotate_cw) {
-          digitalWriteEnhanced(rotate_cw, ROTATE_PIN_INACTIVE_VALUE);
-          #if defined(pin_led_cw)
-          digitalWriteEnhanced(pin_led_cw, PIN_LED_INACTIVE_STATE);
-          #endif
-        }
-        if (rotate_cw_ccw){
-          digitalWriteEnhanced(rotate_cw_ccw, ROTATE_PIN_INACTIVE_VALUE);
-        }
-        if (rotate_cw_freq) {
-          noTone(rotate_cw_freq);
-        }
+        digitalWriteEnhanced(rotate_cw, ROTATE_PIN_INACTIVE_VALUE);
       }
       break;
     }
@@ -2091,79 +1998,15 @@ void rotator(byte rotation_action, byte rotation_type) {
         }
         #endif // DEBUG_ROTATOR
         brake_release(AZ, BRAKE_RELEASE_ON);
-        if (az_slowstart_active) {
-          if (rotate_cw_pwm) {
-            analogWriteEnhanced(rotate_cw_pwm, 0); digitalWriteEnhanced(rotate_cw_pwm, LOW);
-          }
-          if (rotate_ccw_pwm) {
-            analogWriteEnhanced(rotate_ccw_pwm, 0);
-          }
-          if (rotate_cw_ccw_pwm) {
-            analogWriteEnhanced(rotate_cw_ccw_pwm, 0);
-          }
-          if (rotate_cw_freq) {
-            noTone(rotate_cw_freq);
-          }
-          if (rotate_ccw_freq) {
-            noTone(rotate_ccw_freq);
-          }
-        } else {
-          if (rotate_cw_pwm) {
-            analogWriteEnhanced(rotate_cw_pwm, 0); digitalWriteEnhanced(rotate_cw_pwm, LOW);
-          }
-          if (rotate_ccw_pwm) {
-            analogWriteEnhanced(rotate_ccw_pwm, normal_az_speed_voltage);
-          }
-          if (rotate_cw_ccw_pwm) {
-            analogWriteEnhanced(rotate_cw_ccw_pwm, normal_az_speed_voltage);
-          }
-          if (rotate_cw_freq) {
-            noTone(rotate_cw_freq);
-          }
-          if (rotate_ccw_freq) {
-            tone(rotate_ccw_freq, map(normal_az_speed_voltage, 0, 255, AZ_VARIABLE_FREQ_OUTPUT_LOW, AZ_VARIABLE_FREQ_OUTPUT_HIGH));
-          }
-        }
-        if (rotate_cw) {
-          digitalWriteEnhanced(rotate_cw, ROTATE_PIN_INACTIVE_VALUE);
-          #if defined(pin_led_cw)
-          digitalWriteEnhanced(pin_led_cw, PIN_LED_INACTIVE_STATE);
-          #endif
-        }
-        if (rotate_ccw) {
-          digitalWriteEnhanced(rotate_ccw, ROTATE_PIN_ACTIVE_VALUE);
-          #if defined(pin_led_ccw)
-          digitalWriteEnhanced(pin_led_ccw, PIN_LED_ACTIVE_STATE);
-          #endif
-        }
-        if (rotate_cw_ccw){
-          digitalWriteEnhanced(rotate_cw_ccw, ROTATE_PIN_ACTIVE_VALUE);
-        }
-        #ifdef DEBUG_ROTATOR
-        if (debug_mode) {
-          debug.print(F("rotator: normal_az_speed_voltage:"));
-          control_port->println(normal_az_speed_voltage);
-          control_port->flush();
-        }
-        #endif // DEBUG_ROTATOR
+        digitalWriteEnhanced(rotate_cw, ROTATE_PIN_INACTIVE_VALUE);
+        digitalWriteEnhanced(rotate_ccw, ROTATE_PIN_ACTIVE_VALUE);
       } else {
         #ifdef DEBUG_ROTATOR
         if (debug_mode) {
           debug.print(F("DEACTIVATE\n"));
         }
         #endif // DEBUG_ROTATOR
-        if (rotate_ccw_pwm) {
-          analogWriteEnhanced(rotate_ccw_pwm, 0); digitalWriteEnhanced(rotate_ccw_pwm, LOW);
-        }
-        if (rotate_ccw) {
-          digitalWriteEnhanced(rotate_ccw, ROTATE_PIN_INACTIVE_VALUE);
-          #if defined(pin_led_ccw)
-          digitalWriteEnhanced(pin_led_ccw, PIN_LED_INACTIVE_STATE);
-          #endif
-        }
-        if (rotate_ccw_freq) {
-          noTone(rotate_ccw_freq);
-        }
+        digitalWriteEnhanced(rotate_ccw, ROTATE_PIN_INACTIVE_VALUE);
       }
       break;
     }
@@ -2180,78 +2023,15 @@ void rotator(byte rotation_action, byte rotation_type) {
         }
         #endif // DEBUG_ROTATOR
         brake_release(EL, BRAKE_RELEASE_ON);
-        if (el_slowstart_active) {
-          if (rotate_up_pwm) {
-            analogWriteEnhanced(rotate_up_pwm, 0);
-          }
-          if (rotate_down_pwm) {
-            analogWriteEnhanced(rotate_down_pwm, 0); digitalWriteEnhanced(rotate_down_pwm, LOW);
-          }
-          if (rotate_up_down_pwm) {
-            analogWriteEnhanced(rotate_up_down_pwm, 0);
-          }
-          if (rotate_up_freq) {
-            noTone(rotate_up_freq);
-          }
-          if (rotate_down_freq) {
-            noTone(rotate_down_freq);
-          }
-        } else {
-          if (rotate_up_pwm) {
-            analogWriteEnhanced(rotate_up_pwm, normal_el_speed_voltage);
-          }
-          if (rotate_down_pwm) {
-            analogWriteEnhanced(rotate_down_pwm, 0); digitalWriteEnhanced(rotate_down_pwm, LOW);
-          }
-          if (rotate_up_down_pwm) {
-            analogWriteEnhanced(rotate_up_down_pwm, normal_el_speed_voltage);
-          }
-          if (rotate_up_freq) {
-            tone(rotate_up_freq, map(normal_el_speed_voltage, 0, 255, EL_VARIABLE_FREQ_OUTPUT_LOW, EL_VARIABLE_FREQ_OUTPUT_HIGH));
-          }
-          if (rotate_down_freq) {
-            noTone(rotate_down_freq);
-          }
-        }
-        if (rotate_up) {
-          digitalWriteEnhanced(rotate_up, ROTATE_PIN_ACTIVE_VALUE);
-          #if defined(pin_led_up)
-          digitalWriteEnhanced(pin_led_up, PIN_LED_ACTIVE_STATE);
-          #endif
-        }
-        if (rotate_down) {
-          digitalWriteEnhanced(rotate_down, ROTATE_PIN_INACTIVE_VALUE);
-          #if defined(pin_led_down)
-          digitalWriteEnhanced(pin_led_down, PIN_LED_INACTIVE_STATE);
-          #endif
-        }
-        if (rotate_up_or_down) {
-          digitalWriteEnhanced(rotate_up_or_down, ROTATE_PIN_ACTIVE_VALUE);
-        }
+        digitalWriteEnhanced(rotate_up, ROTATE_PIN_ACTIVE_VALUE);
+        digitalWriteEnhanced(rotate_down, ROTATE_PIN_INACTIVE_VALUE);
       } else {
         #ifdef DEBUG_ROTATOR
         if (debug_mode) {
           debug.print(F("DEACTIVATE\n"));
         }
         #endif // DEBUG_ROTATOR
-        if (rotate_up) {
-          digitalWriteEnhanced(rotate_up, ROTATE_PIN_INACTIVE_VALUE);
-          #if defined(pin_led_up)
-          digitalWriteEnhanced(pin_led_up, PIN_LED_INACTIVE_STATE);
-          #endif
-        }
-        if (rotate_up_pwm) {
-          analogWriteEnhanced(rotate_up_pwm, 0); digitalWriteEnhanced(rotate_up_pwm, LOW);
-        }
-        if (rotate_up_down_pwm) {
-          analogWriteEnhanced(rotate_up_down_pwm, 0);
-        }
-        if (rotate_up_freq) {
-          noTone(rotate_up_freq);
-        }
-        if (rotate_up_or_down) {
-          digitalWriteEnhanced(rotate_up_or_down, ROTATE_PIN_INACTIVE_VALUE);
-        }
+        digitalWriteEnhanced(rotate_up, ROTATE_PIN_INACTIVE_VALUE);
       }
       break;
     }
@@ -2268,78 +2048,15 @@ void rotator(byte rotation_action, byte rotation_type) {
         }
         #endif // DEBUG_ROTATOR
         brake_release(EL, BRAKE_RELEASE_ON);
-        if (el_slowstart_active) {
-          if (rotate_down_pwm) {
-            analogWriteEnhanced(rotate_down_pwm, 0);
-          }
-          if (rotate_up_pwm) {
-            analogWriteEnhanced(rotate_up_pwm, 0); digitalWriteEnhanced(rotate_up_pwm, LOW);
-          }
-          if (rotate_up_down_pwm) {
-            analogWriteEnhanced(rotate_up_down_pwm, 0);
-          }
-          if (rotate_up_freq) {
-            noTone(rotate_up_freq);
-          }
-          if (rotate_down_freq) {
-            noTone(rotate_down_freq);
-          }
-        } else {
-          if (rotate_down_pwm) {
-            analogWriteEnhanced(rotate_down_pwm, normal_el_speed_voltage);
-          }
-          if (rotate_up_pwm) {
-            analogWriteEnhanced(rotate_up_pwm, 0); digitalWriteEnhanced(rotate_up_pwm, LOW);
-          }
-          if (rotate_up_down_pwm) {
-            analogWriteEnhanced(rotate_up_down_pwm, normal_el_speed_voltage);
-          }
-          if (rotate_down_freq) {
-            tone(rotate_down_freq, map(normal_el_speed_voltage, 0, 255, EL_VARIABLE_FREQ_OUTPUT_LOW, EL_VARIABLE_FREQ_OUTPUT_HIGH));
-          }
-          if (rotate_up_freq) {
-            noTone(rotate_up_freq);
-          }
-        }
-        if (rotate_up) {
-          digitalWriteEnhanced(rotate_up, ROTATE_PIN_INACTIVE_VALUE);
-          #if defined(pin_led_up)
-          digitalWriteEnhanced(pin_led_up, PIN_LED_INACTIVE_STATE);
-          #endif
-        }
-        if (rotate_down) {
-          digitalWriteEnhanced(rotate_down, ROTATE_PIN_ACTIVE_VALUE);
-          #if defined(pin_led_down)
-          digitalWriteEnhanced(pin_led_down, PIN_LED_ACTIVE_STATE);
-          #endif
-        }
-        if (rotate_up_or_down) {
-          digitalWriteEnhanced(rotate_up_or_down, ROTATE_PIN_ACTIVE_VALUE);
-        }
+        digitalWriteEnhanced(rotate_up, ROTATE_PIN_INACTIVE_VALUE);
+        digitalWriteEnhanced(rotate_down, ROTATE_PIN_ACTIVE_VALUE);
       } else {
         #ifdef DEBUG_ROTATOR
         if (debug_mode) {
           debug.print(F("DEACTIVATE\n"));
         }
         #endif // DEBUG_ROTATOR
-        if (rotate_down) {
-          digitalWriteEnhanced(rotate_down, ROTATE_PIN_INACTIVE_VALUE);
-          #if defined(pin_led_down)
-          digitalWriteEnhanced(pin_led_down, PIN_LED_INACTIVE_STATE);
-          #endif
-        }
-        if (rotate_down_pwm) {
-          analogWriteEnhanced(rotate_down_pwm, 0); digitalWriteEnhanced(rotate_down_pwm, LOW);
-        }
-        if (rotate_up_down_pwm) {
-          analogWriteEnhanced(rotate_up_down_pwm, 0);
-        }
-        if (rotate_down_freq) {
-          noTone(rotate_down_freq);
-        }
-        if (rotate_up_or_down) {
-          digitalWriteEnhanced(rotate_up_or_down, ROTATE_PIN_INACTIVE_VALUE);
-        }
+        digitalWriteEnhanced(rotate_down, ROTATE_PIN_INACTIVE_VALUE);
       }
       break;
     }
@@ -2357,212 +2074,32 @@ void rotator(byte rotation_action, byte rotation_type) {
 
 } // rotator
 
-void initialize_interrupts() {
-
-  #ifdef DEBUG_LOOP
-  debug.print("initialize_interrupts()\n");
-  Serial.flush();
-  #endif // DEBUG_LOOP
-} // initialize_interrupts
-
 void initialize_pins() {
 
-  #ifdef DEBUG_LOOP
   debug.print("initialize_pins()\n");
+
+  #ifdef DEBUG_LOOP
   Serial.flush();
   #endif // DEBUG_LOOP
 
-  #ifdef reset_pin
-  pinMode(reset_pin, OUTPUT);
-  digitalWrite(reset_pin, LOW);
-  #endif //reset_pin
+  pinModeEnhanced(rotate_cw, OUTPUT);
+  pinModeEnhanced(rotate_ccw, OUTPUT);
 
-  if (serial_led) {
-    pinModeEnhanced(serial_led, OUTPUT);
-  }
+  pinModeEnhanced(rotate_up, OUTPUT);
+  pinModeEnhanced(rotate_down, OUTPUT);
 
-  if (overlap_led) {
-    pinModeEnhanced(overlap_led, OUTPUT);
-  }
-
-  if (brake_az) {
-    pinModeEnhanced(brake_az, OUTPUT);
-    digitalWriteEnhanced(brake_az, BRAKE_INACTIVE_STATE);
-  }
-
-  if (az_speed_pot) {
-    pinModeEnhanced(az_speed_pot, INPUT);
-    digitalWriteEnhanced(az_speed_pot, LOW);
-  }
-
-  if (az_preset_pot) {
-    pinModeEnhanced(az_preset_pot, INPUT);
-    digitalWriteEnhanced(az_preset_pot, LOW);
-  }
-
-  if (preset_start_button) {
-    pinModeEnhanced(preset_start_button, INPUT);
-    digitalWriteEnhanced(preset_start_button, HIGH);
-  }
-
-  if (button_stop) {
-    pinModeEnhanced(button_stop, INPUT);
-    digitalWriteEnhanced(button_stop, HIGH);
-  }
-
-  if (brake_el) {
-    pinModeEnhanced(brake_el, OUTPUT);
-    digitalWriteEnhanced(brake_el, BRAKE_INACTIVE_STATE);
-  }
-
-  if (rotate_cw) {
-    pinModeEnhanced(rotate_cw, OUTPUT);
-  }
-  if (rotate_ccw) {
-    pinModeEnhanced(rotate_ccw, OUTPUT);
-  }
-  if (rotate_cw_pwm) {
-    pinModeEnhanced(rotate_cw_pwm, OUTPUT);
-  }
-  if (rotate_ccw_pwm) {
-    pinModeEnhanced(rotate_ccw_pwm, OUTPUT);
-  }
-  if (rotate_cw_ccw_pwm) {
-    pinModeEnhanced(rotate_cw_ccw_pwm, OUTPUT);
-  }
-  if (rotate_cw_freq) {
-    pinModeEnhanced(rotate_cw_freq, OUTPUT);
-  }
-  if (rotate_ccw_freq) {
-    pinModeEnhanced(rotate_ccw_freq, OUTPUT);
-  }
-
-  if (rotate_cw_ccw) {
-    pinModeEnhanced(rotate_cw_ccw, OUTPUT);
-  }
-
-  #if defined(pin_led_cw)
-  pinModeEnhanced(pin_led_cw, OUTPUT);
-  digitalWriteEnhanced(pin_led_cw, PIN_LED_INACTIVE_STATE);
-  #endif
-
-  #if defined(pin_led_ccw)
-  pinModeEnhanced(pin_led_ccw, OUTPUT);
-  digitalWriteEnhanced(pin_led_ccw, PIN_LED_INACTIVE_STATE);
-  #endif
-
-  #if defined(pin_led_up)
-  pinModeEnhanced(pin_led_up, OUTPUT);
-  digitalWriteEnhanced(pin_led_up, PIN_LED_INACTIVE_STATE);
-  #endif
-
-  #if defined(pin_led_down)
-  pinModeEnhanced(pin_led_down, OUTPUT);
-  digitalWriteEnhanced(pin_led_down, PIN_LED_INACTIVE_STATE);
-  #endif
+  pinModeEnhanced(rotator_analog_az, INPUT);
+  pinModeEnhanced(rotator_analog_el, INPUT);
 
   rotator(DEACTIVATE, CW);
   rotator(DEACTIVATE, CCW);
 
-  #if defined(FEATURE_AZ_POSITION_POTENTIOMETER)
-  pinModeEnhanced(rotator_analog_az, INPUT);
-  #endif
-
-  if (button_cw) {
-    pinModeEnhanced(button_cw, INPUT);
-    digitalWriteEnhanced(button_cw, HIGH);
-  }
-  if (button_ccw) {
-    pinModeEnhanced(button_ccw, INPUT);
-    digitalWriteEnhanced(button_ccw, HIGH);
-  }
-
-  normal_az_speed_voltage = PWM_SPEED_VOLTAGE_X4;
-  current_az_speed_voltage = PWM_SPEED_VOLTAGE_X4;
-
-  normal_el_speed_voltage = PWM_SPEED_VOLTAGE_X4;
-  current_el_speed_voltage = PWM_SPEED_VOLTAGE_X4;
-
-  if (azimuth_speed_voltage) {
-    // if azimuth_speed_voltage pin is configured, set it up for PWM output
-    analogWriteEnhanced(azimuth_speed_voltage, PWM_SPEED_VOLTAGE_X4);
-  }
-
-  pinModeEnhanced(rotate_up, OUTPUT);
-  pinModeEnhanced(rotate_down, OUTPUT);
-  if (rotate_up_or_down) {
-    pinModeEnhanced(rotate_up_or_down, OUTPUT);
-  }
-  if (rotate_up_pwm) {
-    pinModeEnhanced(rotate_up_pwm, OUTPUT);
-  }
-  if (rotate_down_pwm) {
-    pinModeEnhanced(rotate_down_pwm, OUTPUT);
-  }
-  if (rotate_up_down_pwm) {
-    pinModeEnhanced(rotate_up_down_pwm, OUTPUT);
-  }
-  if (rotate_up_freq) {
-    pinModeEnhanced(rotate_up_freq, OUTPUT);
-  }
-  if (rotate_down_freq) {
-    pinModeEnhanced(rotate_down_freq, OUTPUT);
-  }
   rotator(DEACTIVATE, UP);
   rotator(DEACTIVATE, DOWN);
 
-  pinModeEnhanced(rotator_analog_el, INPUT);
-
-  if (button_up) {
-    pinModeEnhanced(button_up, INPUT);
-    digitalWriteEnhanced(button_up, HIGH);
-  }
-  if (button_down) {
-    pinModeEnhanced(button_down, INPUT);
-    digitalWriteEnhanced(button_down, HIGH);
-  }
-
-  if (elevation_speed_voltage) {
-    // if elevation_speed_voltage pin is configured, set it up for PWM output
-    analogWriteEnhanced(elevation_speed_voltage, PWM_SPEED_VOLTAGE_X4);
-    normal_el_speed_voltage = PWM_SPEED_VOLTAGE_X4;
-    current_el_speed_voltage = PWM_SPEED_VOLTAGE_X4;
-  }
+  read_azimuth(0);
   read_elevation(0);
 
-  #ifdef FEATURE_ROTATION_INDICATOR_PIN
-  if (rotation_indication_pin) {
-    pinModeEnhanced(rotation_indication_pin, OUTPUT);
-    digitalWriteEnhanced(rotation_indication_pin, ROTATION_INDICATOR_PIN_INACTIVE_STATE);
-  }
-  #endif // FEATURE_ROTATION_INDICATOR_PIN
-
-  if (blink_led) {
-    pinModeEnhanced(blink_led, OUTPUT);
-  }
-
-  if (heading_reading_inhibit_pin) {
-    pinModeEnhanced(heading_reading_inhibit_pin, INPUT);
-  }
-
-  #ifdef FEATURE_LIMIT_SENSE
-  if (az_limit_sense_pin) {
-    pinModeEnhanced(az_limit_sense_pin, INPUT);
-    digitalWriteEnhanced(az_limit_sense_pin, HIGH);
-  }
-  if (el_limit_sense_pin) {
-    pinModeEnhanced(el_limit_sense_pin, INPUT);
-    digitalWriteEnhanced(el_limit_sense_pin, HIGH);
-  }
-  #endif // FEATURE_LIMIT_SENSE
-
-
-  #ifdef FEATURE_ANALOG_OUTPUT_PINS
-  pinModeEnhanced(pin_analog_az_out, OUTPUT);
-  digitalWriteEnhanced(pin_analog_az_out, LOW);
-  pinModeEnhanced(pin_analog_el_out, OUTPUT);
-  digitalWriteEnhanced(pin_analog_el_out, LOW);
-  #endif //FEATURE_ANALOG_OUTPUT_PINS
 } /* initialize_pins */
 
 void initialize_serial() {
@@ -3203,9 +2740,7 @@ void analogWriteEnhanced(uint8_t pin, int writevalue) {
 }
 
 void port_flush() {
-  #if defined(CONTROL_PORT_MAPPED_TO) && (defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_EASYCOM_EMULATION))
   control_port->flush();
-  #endif //CONTROL_PORT_MAPPED_TO
 }
 
 char *coordinates_to_maidenhead(float latitude_degrees,float longitude_degrees) {
@@ -4384,43 +3919,3 @@ float correct_elevation(float elevation_in) {
   return(elevation_in);
 }
 #endif // FEATURE_ELEVATION_CORRECTION
-
-#ifdef FEATURE_ROTATION_INDICATOR_PIN
-void service_rotation_indicator_pin() {
-
-  static byte rotation_indication_pin_state = 0;
-  static unsigned long time_rotation_went_inactive = 0;
-
-  if ((!rotation_indication_pin_state) && ((az_state != IDLE) || (el_state != IDLE))) {
-    if (rotation_indication_pin) {
-      digitalWriteEnhanced(rotation_indication_pin, ROTATION_INDICATOR_PIN_ACTIVE_STATE);
-    }
-    rotation_indication_pin_state = 1;
-    #ifdef DEBUG_ROTATION_INDICATION_PIN
-    if (debug_mode) {
-      debug.print(F("service_rotation_indicator_pin: active\n"));
-    }
-    #endif
-  }
-
-  if ((rotation_indication_pin_state) && (az_state == IDLE) && (el_state == IDLE)) {
-    if (time_rotation_went_inactive == 0) {
-      time_rotation_went_inactive = millis();
-    } else {
-      if ((millis() - time_rotation_went_inactive) >= (((unsigned long)ROTATION_INDICATOR_PIN_TIME_DELAY_SECONDS * 1000) + ((unsigned long)ROTATION_INDICATOR_PIN_TIME_DELAY_MINUTES * 60 * 1000))) {
-        if (rotation_indication_pin) {
-          digitalWriteEnhanced(rotation_indication_pin, ROTATION_INDICATOR_PIN_INACTIVE_STATE);
-        }
-        rotation_indication_pin_state = 0;
-        time_rotation_went_inactive = 0;
-        #ifdef DEBUG_ROTATION_INDICATION_PIN
-        if (debug_mode) {
-          debug.print(F("service_rotation_indicator_pin: inactive\n"));
-        }
-        #endif
-      }
-    }
-  }
-
-} /* service_rotation_indicator_pin */
-#endif // FEATURE_ROTATION_INDICATOR_PIN
