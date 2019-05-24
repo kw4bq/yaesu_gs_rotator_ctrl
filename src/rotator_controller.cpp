@@ -21,15 +21,43 @@ void loop() {
 
   read_headings();
 
+  service_request_queue();
+
+  service_rotation();
+
+  az_check_operation_timeout();
+
+  #ifdef FEATURE_TIMED_BUFFER
+    check_timed_interval();
+  #endif // FEATURE_TIMED_BUFFER
+
+  read_headings();
+
+  check_overlap();
+
+  check_brake_release();
+
+  #ifdef FEATURE_ELEVATION_CONTROL
+    el_check_operation_timeout();
+  #endif
+
   update_display();
+
+  check_az_speed_pot();
+
+  check_az_preset_potentiometer();
 
   output_debug();
 
   read_headings();
 
+  service_rotation();
+
   check_for_dirty_configuration();
 
   read_headings();
+
+  service_rotation();
 
   service_blink_led();
 
@@ -472,14 +500,6 @@ void update_display() {
 
   k3ngdisplay.clear_pending_buffer();
 
-  #ifdef FEATURE_MOON_TRACKING
-  static unsigned long last_moon_tracking_check_time = 0;
-  #endif
-
-  #ifdef FEATURE_SUN_TRACKING
-  static unsigned long last_sun_tracking_check_time = 0;
-  #endif
-
   #if defined(OPTION_DISPLAY_DIRECTION_STATUS)
   strcpy(workstring,azimuth_direction(azimuth));  // TODO - add left/right/center
   k3ngdisplay.print_center_fixed_field_size(workstring,LCD_DIRECTION_ROW-1,LCD_STATUS_FIELD_SIZE);
@@ -650,63 +670,6 @@ void update_display() {
   #endif //defined(OPTION_DISPLAY_HEADING_EL_ONLY)
 
   #if defined(OPTION_DISPLAY_STATUS)
-  #if !defined(FEATURE_ELEVATION_CONTROL) // ---------------- az only ----------------------------------------------
-  if (az_state != IDLE) {
-    if (az_request_queue_state == IN_PROGRESS_TO_TARGET) {
-      if (current_az_state() == ROTATING_CW) {
-        strcpy(workstring,CW_STRING);
-      } else {
-        strcpy(workstring,CCW_STRING);
-      }
-      strcat(workstring," ");
-      switch(configuration.azimuth_display_mode){
-        case AZ_DISPLAY_MODE_NORMAL:
-        case AZ_DISPLAY_MODE_OVERLAP_PLUS:
-        dtostrf(target_azimuth / LCD_HEADING_MULTIPLIER, 1, LCD_DECIMAL_PLACES, workstring2);
-        break;
-        case AZ_DISPLAY_MODE_RAW:
-        dtostrf(target_raw_azimuth / LCD_HEADING_MULTIPLIER, 1, LCD_DECIMAL_PLACES, workstring2);
-        break;
-      }
-      if ((configuration.azimuth_display_mode == AZ_DISPLAY_MODE_OVERLAP_PLUS) && ((raw_azimuth/LCD_HEADING_MULTIPLIER) > ANALOG_AZ_OVERLAP_DEGREES)){
-        strcat(workstring,"+");
-      }
-      strcat(workstring,workstring2);
-      strcat(workstring,DISPLAY_DEGREES_STRING);
-    } else {
-      if (current_az_state() == ROTATING_CW) {
-        strcpy(workstring,CW_STRING);
-      } else {
-        strcpy(workstring,CCW_STRING);
-      }
-    }
-    k3ngdisplay.print_center_fixed_field_size(workstring,LCD_STATUS_ROW-1,LCD_STATUS_FIELD_SIZE);
-    row_override[LCD_STATUS_ROW] = 1;
-  }
-
-
-  #ifdef FEATURE_AZ_PRESET_ENCODER
-  float target = 0;
-  if (preset_encoders_state == ENCODER_AZ_PENDING) {
-    target = az_encoder_raw_degrees;
-    if (target > (359 * LCD_HEADING_MULTIPLIER)) {
-      target = target - (360 * LCD_HEADING_MULTIPLIER);
-    }
-    if (target > (359 * LCD_HEADING_MULTIPLIER)) {
-      target = target - (360 * LCD_HEADING_MULTIPLIER);
-    }
-    strcpy(workstring,TARGET_STRING);
-    dtostrf(target / LCD_HEADING_MULTIPLIER, 1, LCD_DECIMAL_PLACES, workstring2);
-    strcat(workstring,workstring2);
-    strcat(workstring,DISPLAY_DEGREES_STRING);
-    k3ngdisplay.print_center_fixed_field_size(workstring,LCD_STATUS_ROW-1,LCD_STATUS_FIELD_SIZE);
-    row_override[LCD_STATUS_ROW] = 1;
-  }
-  #endif //FEATURE_AZ_PRESET_ENCODER
-
-  #else                          // az & el ----------------------------------------------------------------------------
-
-
 
   strcpy(workstring,"");
   if (az_state != IDLE) {
@@ -767,7 +730,6 @@ void update_display() {
   if ((az_state != IDLE) || (el_state != IDLE)){
     k3ngdisplay.print_center_fixed_field_size(workstring,LCD_STATUS_ROW-1,LCD_STATUS_FIELD_SIZE);
   } //<added
-
 
   #if defined(FEATURE_AZ_PRESET_ENCODER) && !defined(FEATURE_EL_PRESET_ENCODER)
   float target = 0;
@@ -830,9 +792,6 @@ void update_display() {
     } // switch
   } //if (preset_encoders_state != ENCODER_IDLE)
   #endif  //defined(FEATURE_AZ_PRESET_ENCODER) && !defined(FEATURE_EL_PRESET_ENCODER)
-  /*
-  */
-  #endif //!defined(FEATURE_ELEVATION_CONTROL)
 
   #endif //defined(OPTION_DISPLAY_STATUS)
 
@@ -1378,10 +1337,6 @@ void output_debug() {
 
   if (((millis() - last_debug_output_time) >= 3000) && (debug_mode)) {
 
-    #if defined(DEBUG_GPS_SERIAL)
-    debug.println("");
-    #endif //DEBUG_GPS_SERIAL
-
     //port_flush();
 
     debug.print("debug: \t");
@@ -1415,27 +1370,12 @@ void output_debug() {
     debug.print(tempstring);
     #endif // FEATURE_CLOCK
 
-    #if defined(FEATURE_GPS) || defined(FEATURE_RTC) || (defined(FEATURE_CLOCK) && defined(OPTION_SYNC_MASTER_CLOCK_TO_SLAVE))
-    debug.print("\t");
-    debug.print(clock_status_string());
-    #endif // defined(FEATURE_GPS) || defined(FEATURE_RTC) || (defined(FEATURE_CLOCK) && defined(OPTION_SYNC_MASTER_CLOCK_TO_SLAVE))
-
-    #if defined(FEATURE_MOON_TRACKING) || defined(FEATURE_SUN_TRACKING)
-    debug.print("\t");
-    sprintf(tempstring, "%s", coordinate_string());
-    debug.print(tempstring);
-    debug.print(" ");
-    debug.print(coordinates_to_maidenhead(latitude,longitude));
-    #endif
-
     debug.print("\t\t");
 
     #ifdef FEATURE_YAESU_EMULATION
     debug.print("GS-232");
     #ifdef OPTION_GS_232B_EMULATION
     debug.print("B");
-    #else
-    debug.print("A");
     #endif
     #endif // FEATURE_YAESU_EMULATION
 
@@ -1610,57 +1550,6 @@ void output_debug() {
     } // if (timed_buffer_status != EMPTY)
     #endif // FEATURE_TIMED_BUFFER
 
-
-    #ifdef FEATURE_MOON_TRACKING
-    update_moon_position();
-    debug.print(moon_status_string());
-    #endif // FEATURE_MOON_TRACKING
-
-    #ifdef FEATURE_SUN_TRACKING
-    update_sun_position();
-    debug.print(sun_status_string());
-    #endif // FEATURE_SUN_TRACKING
-
-    #if defined(FEATURE_MOON_TRACKING) || defined(FEATURE_SUN_TRACKING)
-    debug.println("");
-    #endif //defined(FEATURE_MOON_TRACKING) || defined(FEATURE_SUN_TRACKING)
-
-    #ifdef FEATURE_GPS
-    unsigned long gps_chars = 0;
-    unsigned short gps_good_sentences = 0;
-    unsigned short gps_failed_checksum = 0;
-    char gps_temp_string[12] = "";
-    float gps_lat_temp = 0;
-    float gps_long_temp = 0;
-
-    debug.print("\tGPS: satellites:");
-    gps_chars = gps.satellites();
-    //if (gps_chars == 255){gps_chars = 0;}
-    dtostrf(gps_chars,0,0,gps_temp_string);
-    debug.print(gps_temp_string);
-    unsigned long gps_fix_age_temp = 0;
-    gps.f_get_position(&gps_lat_temp,&gps_long_temp,&gps_fix_age_temp);
-    debug.print("  lat:");
-    debug.print(gps_lat_temp,4);
-    debug.print("  long:");
-    debug.print(gps_long_temp,4);
-    debug.print("  altitude(m):");
-    debug.print(gps.altitude()/100,0);
-    debug.print("  fix_age_mS:");
-    dtostrf(gps_fix_age_temp,0,0,gps_temp_string);
-    debug.print(gps_temp_string);
-    gps.stats(&gps_chars,&gps_good_sentences,&gps_failed_checksum);
-    debug.print("  data_chars:");
-    dtostrf(gps_chars,0,0,gps_temp_string);
-    debug.print(gps_temp_string);
-    debug.print("  good_sentences:");
-    dtostrf(gps_good_sentences,0,0,gps_temp_string);
-    debug.print(gps_temp_string);
-    debug.print("  failed_checksum:");
-    dtostrf(gps_failed_checksum,0,0,gps_temp_string);
-    debug.print(gps_temp_string);
-    debug.println("");
-    #endif //FEATURE_GPS
 
 
     #ifdef FEATURE_AUTOCORRECT
@@ -2190,6 +2079,597 @@ void submit_request(byte axis, byte request, int parm, byte called_by) {
   #endif // DEBUG_SUBMIT_REQUEST
 
 } // submit_request
+
+void service_request_queue() {
+
+  int work_target_raw_azimuth = 0;
+  byte direction_to_go = 0;
+  byte within_tolerance_flag = 0;
+
+  if (az_request_queue_state == IN_QUEUE) {
+
+    #ifdef FEATURE_POWER_SWITCH
+    last_activity_time = millis();
+    #endif //FEATURE_POWER_SWITCH
+
+    #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+    debug.print("service_request_queue: AZ ");
+    #endif // DEBUG_SERVICE_REQUEST_QUEUE
+
+    switch (az_request) {
+      case (REQUEST_STOP):
+        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+        debug.print("REQUEST_STOP");
+        #endif // DEBUG_SERVICE_REQUEST_QUEUE
+        #ifdef FEATURE_PARK
+          deactivate_park();
+        #endif // FEATURE_PARK
+        if (az_state != IDLE) {
+          if (az_slowdown_active) {
+            if ((az_state == TIMED_SLOW_DOWN_CW) || (az_state == TIMED_SLOW_DOWN_CCW) || (az_state == SLOW_DOWN_CW) || (az_state == SLOW_DOWN_CCW)) {  // if we're already in timed slow down and we get another stop, do a hard stop
+              rotator(DEACTIVATE, CW);
+              rotator(DEACTIVATE, CCW);
+              az_state = IDLE;
+              az_request_queue_state = NONE;
+            }
+            if ((az_state == SLOW_START_CW) || (az_state == NORMAL_CW)) {
+              az_state = INITIALIZE_TIMED_SLOW_DOWN_CW;
+              az_request_queue_state = IN_PROGRESS_TIMED;
+              az_last_rotate_initiation = millis();
+            }
+            if ((az_state == SLOW_START_CCW) || (az_state == NORMAL_CCW)) {
+              az_state = INITIALIZE_TIMED_SLOW_DOWN_CCW;
+              az_request_queue_state = IN_PROGRESS_TIMED;
+              az_last_rotate_initiation = millis();
+            }
+
+          } else {
+            rotator(DEACTIVATE, CW);
+            rotator(DEACTIVATE, CCW);
+            az_state = IDLE;
+            az_request_queue_state = NONE;
+          }
+        } else {
+          az_request_queue_state = NONE; // nothing to do - we clear the queue
+        }
+        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+        if (debug_mode) {
+          control_port->println();
+        }
+        #endif // DEBUG_SERVICE_REQUEST_QUEUE
+        break; // REQUEST_STOP
+
+      case (REQUEST_AZIMUTH):
+        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+        debug.print("REQUEST_AZIMUTH");
+        #endif // DEBUG_SERVICE_REQUEST_QUEUE
+        if ((az_request_parm >= 0) && (az_request_parm <= (360 * HEADING_MULTIPLIER))) {
+          target_azimuth = az_request_parm;
+          target_raw_azimuth = az_request_parm;
+          if (target_azimuth == (360 * HEADING_MULTIPLIER)) {
+            target_azimuth = 0;
+          }
+          if ((target_azimuth > (azimuth - (AZIMUTH_TOLERANCE * HEADING_MULTIPLIER))) && (target_azimuth < (azimuth + (AZIMUTH_TOLERANCE * HEADING_MULTIPLIER)))) {
+            #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+            debug.print(" request within tolerance");
+            #endif // DEBUG_SERVICE_REQUEST_QUEUE
+            within_tolerance_flag = 1;
+            // az_request_queue_state = NONE;
+            if (az_state != IDLE){
+              submit_request(AZ, REQUEST_STOP, 0, 137);
+            } else {
+              az_request_queue_state = NONE;
+            }
+          } else {  // target azimuth is not within tolerance, we need to rotate
+            #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+            debug.print(" ->A");
+            #endif // DEBUG_SERVICE_REQUEST_QUEUE
+            work_target_raw_azimuth = target_azimuth;
+            #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+            debug.print(" work_target_raw_azimuth:");
+            debug.print(work_target_raw_azimuth / HEADING_MULTIPLIER);
+            debug.print(" azimuth_starting_point:");
+            debug.print(azimuth_starting_point);
+            debug.print(" ");
+            #endif // DEBUG_SERVICE_REQUEST_QUEUE
+
+            if (work_target_raw_azimuth < (azimuth_starting_point * HEADING_MULTIPLIER)) {
+              work_target_raw_azimuth = work_target_raw_azimuth + (360 * HEADING_MULTIPLIER);
+              target_raw_azimuth = work_target_raw_azimuth;
+              #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+              debug.print("->B");
+              #endif // DEBUG_SERVICE_REQUEST_QUEUE
+            }
+            if ((work_target_raw_azimuth + (360 * HEADING_MULTIPLIER)) < ((azimuth_starting_point + azimuth_rotation_capability) * HEADING_MULTIPLIER)) { // is there a second possible heading in overlap?
+              if (abs(raw_azimuth - work_target_raw_azimuth) < abs((work_target_raw_azimuth + (360 * HEADING_MULTIPLIER)) - raw_azimuth)) { // is second possible heading closer?
+                #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+                debug.print("->C");
+                #endif // DEBUG_SERVICE_REQUEST_QUEUE
+                if (work_target_raw_azimuth  > raw_azimuth) { // not closer, use position in non-overlap
+                  direction_to_go = CW;
+                  #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+                  debug.print("->CW!");
+                  #endif // DEBUG_SERVICE_REQUEST_QUEUE
+                } else {
+                  direction_to_go = CCW;
+                  #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+                  debug.print("->CCW!");
+                  #endif // DEBUG_SERVICE_REQUEST_QUEUE
+                }
+              } else { // go to position in overlap
+                #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+                debug.print("->D");
+                #endif // DEBUG_SERVICE_REQUEST_QUEUE
+                target_raw_azimuth = work_target_raw_azimuth + (360 * HEADING_MULTIPLIER);
+                if ((work_target_raw_azimuth + (360 * HEADING_MULTIPLIER)) > raw_azimuth) {
+                  direction_to_go = CW;
+                  #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+                  debug.print("->CW!");
+                  #endif // DEBUG_SERVICE_REQUEST_QUEUE
+                } else {
+                  direction_to_go = CCW;
+                  #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+                  debug.print("->CCW!");
+                  #endif // DEBUG_SERVICE_REQUEST_QUEUE
+                }
+              }
+            } else {  // no possible second heading in overlap
+              #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+              debug.print("->E");
+              #endif // DEBUG_SERVICE_REQUEST_QUEUE
+              if (work_target_raw_azimuth  > raw_azimuth) {
+                direction_to_go = CW;
+              } else {
+                direction_to_go = CCW;
+              }
+            }
+          }
+        } else {
+          #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+              debug.print("->F");
+          #endif // DEBUG_SERVICE_REQUEST_QUEUE
+          if ((az_request_parm > (360 * HEADING_MULTIPLIER)) && (az_request_parm <= ((azimuth_starting_point + azimuth_rotation_capability) * HEADING_MULTIPLIER))) {
+            target_azimuth = az_request_parm - (360 * HEADING_MULTIPLIER);
+            target_raw_azimuth = az_request_parm;
+            if (az_request_parm > raw_azimuth) {
+              direction_to_go = CW;
+            } else {
+              direction_to_go = CCW;
+            }
+          } else {
+            #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+                debug.print(" error: bogus azimuth request:");
+                debug.print(az_request_parm);
+                debug.println("");
+            #endif // DEBUG_SERVICE_REQUEST_QUEUE
+            rotator(DEACTIVATE, CW);
+            rotator(DEACTIVATE, CCW);
+            az_state = IDLE;
+            az_request_queue_state = NONE;
+            return;
+          }
+        }
+        if (direction_to_go == CW) {
+          if (((az_state == SLOW_START_CCW) || (az_state == NORMAL_CCW) || (az_state == SLOW_DOWN_CCW) || (az_state == TIMED_SLOW_DOWN_CCW)) && (az_slowstart_active)) {
+            az_state = INITIALIZE_DIR_CHANGE_TO_CW;
+            #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+            debug.print(" INITIALIZE_DIR_CHANGE_TO_CW");
+            #endif // DEBUG_SERVICE_REQUEST_QUEUE
+          } else {
+            if ((az_state != INITIALIZE_SLOW_START_CW) && (az_state != SLOW_START_CW) && (az_state != NORMAL_CW)) { // if we're already rotating CW, don't do anything
+              // rotator(ACTIVATE,CW);
+              if (az_slowstart_active) {
+                az_state = INITIALIZE_SLOW_START_CW;
+              } else { az_state = INITIALIZE_NORMAL_CW; };
+            }
+          }
+        }
+        if (direction_to_go == CCW) {
+          if (((az_state == SLOW_START_CW) || (az_state == NORMAL_CW) || (az_state == SLOW_DOWN_CW) || (az_state == TIMED_SLOW_DOWN_CW)) && (az_slowstart_active)) {
+            az_state = INITIALIZE_DIR_CHANGE_TO_CCW;
+            #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+            debug.print(" INITIALIZE_DIR_CHANGE_TO_CCW");
+            #endif // DEBUG_SERVICE_REQUEST_QUEUE
+          } else {
+            if ((az_state != INITIALIZE_SLOW_START_CCW) && (az_state != SLOW_START_CCW) && (az_state != NORMAL_CCW)) { // if we're already rotating CCW, don't do anything
+              // rotator(ACTIVATE,CCW);
+              if (az_slowstart_active) {
+                az_state = INITIALIZE_SLOW_START_CCW;
+              } else { az_state = INITIALIZE_NORMAL_CCW; };
+            }
+          }
+        }
+        if (!within_tolerance_flag) {
+          az_request_queue_state = IN_PROGRESS_TO_TARGET;
+          az_last_rotate_initiation = millis();
+        }
+        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+        if (debug_mode) {
+          control_port->println();
+        }
+        #endif // DEBUG_SERVICE_REQUEST_QUEUE
+        break; // REQUEST_AZIMUTH
+
+      case (REQUEST_AZIMUTH_RAW):
+        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+        debug.print("REQUEST_AZIMUTH_RAW");
+        #endif // DEBUG_SERVICE_REQUEST_QUEUE
+        target_raw_azimuth = az_request_parm;
+        target_azimuth = target_raw_azimuth;
+        if (target_azimuth >= (360 * HEADING_MULTIPLIER)) {
+          target_azimuth = target_azimuth - (360 * HEADING_MULTIPLIER);
+        }
+
+        if (((abs(raw_azimuth - target_raw_azimuth) < (AZIMUTH_TOLERANCE * HEADING_MULTIPLIER))) && (az_state == IDLE)) {
+          #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+          debug.print(" request within tolerance");
+          #endif // DEBUG_SERVICE_REQUEST_QUEUE
+          if (az_state != IDLE){
+            submit_request(AZ, REQUEST_STOP, 0, 138);
+          } else {
+            az_request_queue_state = NONE;
+          }
+          within_tolerance_flag = 1;
+        } else {
+          if (target_raw_azimuth > raw_azimuth) {
+            if (((az_state == SLOW_START_CCW) || (az_state == NORMAL_CCW) || (az_state == SLOW_DOWN_CCW) || (az_state == TIMED_SLOW_DOWN_CCW)) && (az_slowstart_active)) {
+              az_state = INITIALIZE_DIR_CHANGE_TO_CW;
+              #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+              debug.print(" INITIALIZE_DIR_CHANGE_TO_CW");
+              #endif // DEBUG_SERVICE_REQUEST_QUEUE
+            } else {
+              if ((az_state != INITIALIZE_SLOW_START_CW) && (az_state != SLOW_START_CW) && (az_state != NORMAL_CW)) { // if we're already rotating CW, don't do anything
+                if (az_slowstart_active) {
+                  az_state = INITIALIZE_SLOW_START_CW;
+                } else { az_state = INITIALIZE_NORMAL_CW; };
+              }
+            }
+          }
+          if (target_raw_azimuth < raw_azimuth) {
+            if (((az_state == SLOW_START_CW) || (az_state == NORMAL_CW) || (az_state == SLOW_DOWN_CW) || (az_state == TIMED_SLOW_DOWN_CW)) && (az_slowstart_active)) {
+              az_state = INITIALIZE_DIR_CHANGE_TO_CCW;
+              #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+              debug.print(" INITIALIZE_DIR_CHANGE_TO_CCW");
+              #endif // DEBUG_SERVICE_REQUEST_QUEUE
+            } else {
+              if ((az_state != INITIALIZE_SLOW_START_CCW) && (az_state != SLOW_START_CCW) && (az_state != NORMAL_CCW)) { // if we're already rotating CCW, don't do anything
+                if (az_slowstart_active) {
+                  az_state = INITIALIZE_SLOW_START_CCW;
+                } else { az_state = INITIALIZE_NORMAL_CCW; };
+              }
+            }
+          }
+          if (!within_tolerance_flag) {
+            az_request_queue_state = IN_PROGRESS_TO_TARGET;
+            az_last_rotate_initiation = millis();
+          }
+        }
+      #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+        if (debug_mode) {
+          control_port->println();
+        }
+      #endif // DEBUG_SERVICE_REQUEST_QUEUE
+        break; // REQUEST_AZIMUTH_RAW
+
+      case (REQUEST_CW):
+        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+        debug.print("REQUEST_CW");
+        #endif // DEBUG_SERVICE_REQUEST_QUEUE
+        #ifdef FEATURE_PARK
+          deactivate_park();
+        #endif // FEATURE_PARK
+        if (((az_state == SLOW_START_CCW) || (az_state == NORMAL_CCW) || (az_state == SLOW_DOWN_CCW) || (az_state == TIMED_SLOW_DOWN_CCW)) && (az_slowstart_active)) {
+          az_state = INITIALIZE_DIR_CHANGE_TO_CW;
+          #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+            debug.print(" INITIALIZE_DIR_CHANGE_TO_CW");
+          #endif // DEBUG_SERVICE_REQUEST_QUEUE
+        } else {
+          if ((az_state != SLOW_START_CW) && (az_state != NORMAL_CW)) {
+            // rotator(ACTIVATE,CW);
+            if (az_slowstart_active) {
+              az_state = INITIALIZE_SLOW_START_CW;
+            } else {
+              az_state = INITIALIZE_NORMAL_CW;
+            };
+          }
+        }
+        az_request_queue_state = NONE;
+        az_last_rotate_initiation = millis();
+        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+        if (debug_mode) {
+          control_port->println();
+        }
+        #endif // DEBUG_SERVICE_REQUEST_QUEUE
+        break; // REQUEST_CW
+
+      case (REQUEST_CCW):
+        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+        debug.print("REQUEST_CCW");
+        #endif // DEBUG_SERVICE_REQUEST_QUEUE
+        #ifdef FEATURE_PARK
+          deactivate_park();
+        #endif // FEATURE_PARK
+        if (((az_state == SLOW_START_CW) || (az_state == NORMAL_CW) || (az_state == SLOW_DOWN_CW) || (az_state == TIMED_SLOW_DOWN_CW)) && (az_slowstart_active)) {
+          az_state = INITIALIZE_DIR_CHANGE_TO_CCW;
+          #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+            debug.print(" INITIALIZE_DIR_CHANGE_TO_CCW");
+          #endif // DEBUG_SERVICE_REQUEST_QUEUE
+        } else {
+          if ((az_state != SLOW_START_CCW) && (az_state != NORMAL_CCW)) {
+            // rotator(ACTIVATE,CCW);
+            if (az_slowstart_active) {
+              az_state = INITIALIZE_SLOW_START_CCW;
+            } else { az_state = INITIALIZE_NORMAL_CCW; };
+          }
+        }
+        az_request_queue_state = NONE;
+        az_last_rotate_initiation = millis();
+        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+        if (debug_mode) {
+          control_port->println();
+        }
+        #endif // DEBUG_SERVICE_REQUEST_QUEUE
+        break; // REQUEST_CCW
+
+      case (REQUEST_KILL):
+        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+        debug.print("REQUEST_KILL");
+        #endif // DEBUG_SERVICE_REQUEST_QUEUE
+        #ifdef FEATURE_PARK
+          deactivate_park();
+        #endif // FEATURE_PARK
+        rotator(DEACTIVATE, CW);
+        rotator(DEACTIVATE, CCW);
+        az_state = IDLE;
+        az_request_queue_state = NONE;
+        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+        debug.println("");
+        #endif // DEBUG_SERVICE_REQUEST_QUEUE
+        break; // REQUEST_KILL
+    } /* switch */
+
+    #ifdef FEATURE_LCD_DISPLAY
+    if (az_request_queue_state != IN_QUEUE) {push_lcd_update = 1;}
+    #endif //FEATURE_LCD_DISPLAY
+  }
+
+  #ifdef FEATURE_ELEVATION_CONTROL
+  if (el_request_queue_state == IN_QUEUE) {
+
+    #ifdef FEATURE_POWER_SWITCH
+    last_activity_time = millis();
+    #endif //FEATURE_POWER_SWITCH
+
+    within_tolerance_flag = 0;
+    #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+    debug.print("service_request_queue: EL ");
+    #endif // DEBUG_SERVICE_REQUEST_QUEUE
+    switch (el_request) {
+      case (REQUEST_ELEVATION):
+        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+        debug.print("REQUEST_ELEVATION ");
+        #endif // DEBUG_SERVICE_REQUEST_QUEUE
+        target_elevation = el_request_parm;
+
+        if (target_elevation > (ELEVATION_MAXIMUM_DEGREES * HEADING_MULTIPLIER)) {
+          target_elevation = ELEVATION_MAXIMUM_DEGREES * HEADING_MULTIPLIER;
+          #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+          if (debug_mode) {
+            debug.print(F("REQUEST_ELEVATION: target_elevation > ELEVATION_MAXIMUM_DEGREES"));
+          }
+          #endif // DEBUG_SERVICE_REQUEST_QUEUE
+        }
+
+        #ifdef OPTION_EL_MANUAL_ROTATE_LIMITS
+        if (target_elevation < (EL_MANUAL_ROTATE_DOWN_LIMIT * HEADING_MULTIPLIER)) {
+          target_elevation = EL_MANUAL_ROTATE_DOWN_LIMIT * HEADING_MULTIPLIER;
+          #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+          if (debug_mode) {
+            debug.print(F("REQUEST_ELEVATION: target_elevation < EL_MANUAL_ROTATE_DOWN_LIMIT"));
+          }
+          #endif // DEBUG_SERVICE_REQUEST_QUEUE
+        }
+        if (target_elevation > (EL_MANUAL_ROTATE_UP_LIMIT * HEADING_MULTIPLIER)) {
+          target_elevation = EL_MANUAL_ROTATE_UP_LIMIT * HEADING_MULTIPLIER;
+          #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+          if (debug_mode) {
+            debug.print(F("REQUEST_ELEVATION: target_elevation > EL_MANUAL_ROTATE_UP_LIMIT"));
+          }
+          #endif // DEBUG_SERVICE_REQUEST_QUEUE
+        }
+        #endif // OPTION_EL_MANUAL_ROTATE_LIMITS
+
+        if (abs(target_elevation - elevation) < (ELEVATION_TOLERANCE * HEADING_MULTIPLIER)) {
+          #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+          if (debug_mode) {
+            debug.print(F("requested elevation within tolerance\n"));
+          }
+          #endif // DEBUG_SERVICE_REQUEST_QUEUE
+          within_tolerance_flag = 1;
+          el_request_queue_state = NONE;
+        } else {
+          if (target_elevation > elevation) {
+            if (((el_state == SLOW_START_DOWN) || (el_state == NORMAL_DOWN) || (el_state == SLOW_DOWN_DOWN) || (el_state == TIMED_SLOW_DOWN_DOWN)) && (el_slowstart_active)) {
+              el_state = INITIALIZE_DIR_CHANGE_TO_UP;
+                #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+              if (debug_mode) {
+                debug.print(F(" INITIALIZE_DIR_CHANGE_TO_UP\n"));
+              }
+                #endif // DEBUG_SERVICE_REQUEST_QUEUE
+            } else {
+              if ((el_state != INITIALIZE_SLOW_START_UP) && (el_state != SLOW_START_UP) && (el_state != NORMAL_UP)) { // if we're already rotating UP, don't do anything
+                if (el_slowstart_active) {
+                  el_state = INITIALIZE_SLOW_START_UP;
+                } else { el_state = INITIALIZE_NORMAL_UP; };
+              }
+            }
+          } // (target_elevation > elevation)
+          if (target_elevation < elevation) {
+            if (((el_state == SLOW_START_UP) || (el_state == NORMAL_UP) || (el_state == SLOW_DOWN_UP) || (el_state == TIMED_SLOW_DOWN_UP)) && (el_slowstart_active)) {
+              el_state = INITIALIZE_DIR_CHANGE_TO_DOWN;
+              #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+              if (debug_mode) {
+                debug.print(F(" INITIALIZE_DIR_CHANGE_TO_DOWN\n"));
+              }
+              #endif // DEBUG_SERVICE_REQUEST_QUEUE
+            } else {
+              if ((el_state != INITIALIZE_SLOW_START_DOWN) && (el_state != SLOW_START_DOWN) && (el_state != NORMAL_DOWN)) { // if we're already rotating DOWN, don't do anything
+                if (el_slowstart_active) {
+                  el_state = INITIALIZE_SLOW_START_DOWN;
+                } else { el_state = INITIALIZE_NORMAL_DOWN; };
+              }
+            }
+          }  // (target_elevation < elevation)
+        }  // (abs(target_elevation - elevation) < ELEVATION_TOLERANCE)
+        if (!within_tolerance_flag) {
+          el_request_queue_state = IN_PROGRESS_TO_TARGET;
+          el_last_rotate_initiation = millis();
+        }
+        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+        if (debug_mode) {
+          control_port->println();
+        }
+        #endif // DEBUG_SERVICE_REQUEST_QUEUE
+        break; // REQUEST_ELEVATION
+
+      case (REQUEST_UP):
+        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+        if (debug_mode) {
+          debug.print(F("REQUEST_UP\n"));
+        }
+        #endif // DEBUG_SERVICE_REQUEST_QUEUE
+        #ifdef FEATURE_PARK
+          deactivate_park();
+        #endif // FEATURE_PARK
+        if (((el_state == SLOW_START_DOWN) || (el_state == NORMAL_DOWN) || (el_state == SLOW_DOWN_DOWN) || (el_state == TIMED_SLOW_DOWN_DOWN)) && (el_slowstart_active)) {
+          el_state = INITIALIZE_DIR_CHANGE_TO_UP;
+          #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+          if (debug_mode) {
+            debug.print(F("service_request_queue: INITIALIZE_DIR_CHANGE_TO_UP\n"));
+          }
+          #endif // DEBUG_SERVICE_REQUEST_QUEUE
+        } else {
+          if ((el_state != SLOW_START_UP) && (el_state != NORMAL_UP)) {
+            if (el_slowstart_active) {
+              el_state = INITIALIZE_SLOW_START_UP;
+            } else { el_state = INITIALIZE_NORMAL_UP; };
+          }
+        }
+        el_request_queue_state = NONE;
+        el_last_rotate_initiation = millis();
+          #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+        if (debug_mode) {
+          control_port->println();
+        }
+          #endif // DEBUG_SERVICE_REQUEST_QUEUE
+        break; // REQUEST_UP
+
+      case (REQUEST_DOWN):
+        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+        if (debug_mode) {
+          debug.print(F("REQUEST_DOWN\n"));
+        }
+        #endif // DEBUG_SERVICE_REQUEST_QUEUE
+        #ifdef FEATURE_PARK
+          deactivate_park();
+        #endif // FEATURE_PARK
+        if (((el_state == SLOW_START_UP) || (el_state == NORMAL_UP) || (el_state == SLOW_DOWN_UP) || (el_state == TIMED_SLOW_DOWN_UP)) && (el_slowstart_active)) {
+          el_state = INITIALIZE_DIR_CHANGE_TO_DOWN;
+          #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+          if (debug_mode) {
+            debug.print(F("service_request_queue: INITIALIZE_DIR_CHANGE_TO_DOWN\n"));
+          }
+          #endif // DEBUG_SERVICE_REQUEST_QUEUE
+        } else {
+          if ((el_state != SLOW_START_DOWN) && (el_state != NORMAL_DOWN)) {
+            if (el_slowstart_active) {
+              el_state = INITIALIZE_SLOW_START_DOWN;
+            } else { el_state = INITIALIZE_NORMAL_DOWN; };
+          }
+        }
+        el_request_queue_state = NONE;
+        el_last_rotate_initiation = millis();
+        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+        if (debug_mode) {
+          control_port->println();
+        }
+        #endif // DEBUG_SERVICE_REQUEST_QUEUE
+        break; // REQUEST_DOWN
+
+      case (REQUEST_STOP):
+        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+        if (debug_mode) {
+          debug.print(F("REQUEST_STOP\n"));
+        }
+        #endif // DEBUG_SERVICE_REQUEST_QUEUE
+        #ifdef FEATURE_PARK
+          deactivate_park();
+        #endif // FEATURE_PARK
+        if (el_state != IDLE) {
+          if (el_slowdown_active) {
+            if ((el_state == TIMED_SLOW_DOWN_UP) || (el_state == TIMED_SLOW_DOWN_DOWN) || (el_state == SLOW_DOWN_UP) || (el_state == SLOW_DOWN_DOWN)) {  // if we're already in timed slow down and we get another stop, do a hard stop
+              rotator(DEACTIVATE, UP);
+              rotator(DEACTIVATE, DOWN);
+              el_state = IDLE;
+              el_request_queue_state = NONE;
+            }
+            if ((el_state == SLOW_START_UP) || (el_state == NORMAL_UP)) {
+              el_state = INITIALIZE_TIMED_SLOW_DOWN_UP;
+              el_request_queue_state = IN_PROGRESS_TIMED;
+              el_last_rotate_initiation = millis();
+            }
+            if ((el_state == SLOW_START_DOWN) || (el_state == NORMAL_DOWN)) {
+              el_state = INITIALIZE_TIMED_SLOW_DOWN_DOWN;
+              el_request_queue_state = IN_PROGRESS_TIMED;
+              el_last_rotate_initiation = millis();
+            }
+          } else {
+            rotator(DEACTIVATE, UP);
+            rotator(DEACTIVATE, DOWN);
+            el_state = IDLE;
+            el_request_queue_state = NONE;
+          }
+        } else {
+          el_request_queue_state = NONE; // nothing to do, we're already in IDLE state
+        }
+        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+        if (debug_mode) {
+          control_port->println();
+        }
+        #endif // DEBUG_SERVICE_REQUEST_QUEUE
+        break; // REQUEST_STOP
+
+      case (REQUEST_KILL):
+        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+        if (debug_mode) {
+          debug.print(F("REQUEST_KILL\n"));
+        }
+        #endif // DEBUG_SERVICE_REQUEST_QUEUE
+        #ifdef FEATURE_PARK
+          deactivate_park();
+        #endif // FEATURE_PARK
+        rotator(DEACTIVATE, UP);
+        rotator(DEACTIVATE, DOWN);
+        el_state = IDLE;
+        el_request_queue_state = NONE;
+        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+        if (debug_mode) {
+          control_port->println();
+        }
+        #endif // DEBUG_SERVICE_REQUEST_QUEUE
+        break; // REQUEST_KILL
+    } /* switch */
+
+    #ifdef FEATURE_LCD_DISPLAY
+    if (el_request_queue_state != IN_QUEUE) {push_lcd_update = 1;}
+    #endif //FEATURE_LCD_DISPLAY
+
+  } // (el_request_queue_state == IN_QUEUE)
+  #endif // FEATURE_ELEVATION_CONTROL
+
+
+} /* service_request_queue */
+
 
 void service_rotation() {
 
@@ -2759,44 +3239,6 @@ char *coordinates_to_maidenhead(float latitude_degrees,float longitude_degrees) 
 
   return temp_string;
 }
-
-
-#ifdef FEATURE_AUTOCORRECT
-void submit_autocorrect(byte axis,float heading){
-
-  #ifdef DEBUG_AUTOCORRECT
-  debug.print("submit_autocorrect: ");
-  #endif //DEBUG_AUTOCORRECT
-
-  if (axis == AZ){
-    autocorrect_state_az = AUTOCORRECT_WATCHING_AZ;
-    autocorrect_az = heading;
-    autocorrect_az_submit_time = millis();
-
-    #ifdef DEBUG_AUTOCORRECT
-    debug.print("AZ: ");
-    #endif //DEBUG_AUTOCORRECT
-
-  }
-
-  if (axis == EL){
-    autocorrect_state_el = AUTOCORRECT_WATCHING_EL;
-    autocorrect_el = heading;
-    autocorrect_el_submit_time = millis();
-
-    #ifdef DEBUG_AUTOCORRECT
-    debug.print("EL: ");
-    #endif //DEBUG_AUTOCORRECT
-
-  }
-
-  #ifdef DEBUG_AUTOCORRECT
-  debug.print(heading,2);
-  debug.println("");
-  #endif //DEBUG_AUTOCORRECT
-
-}
-#endif //FEATURE_AUTOCORRECT
 
 void get_keystroke() {
   while (control_port->available() > 0) {
@@ -3886,6 +4328,43 @@ void check_timed_interval() {
 } /* check_timed_interval */
 
 #endif // FEATURE_TIMED_BUFFER
+
+#ifdef FEATURE_AUTOCORRECT
+void submit_autocorrect(byte axis,float heading){
+
+  #ifdef DEBUG_AUTOCORRECT
+  debug.print("submit_autocorrect: ");
+  #endif //DEBUG_AUTOCORRECT
+
+  if (axis == AZ){
+    autocorrect_state_az = AUTOCORRECT_WATCHING_AZ;
+    autocorrect_az = heading;
+    autocorrect_az_submit_time = millis();
+
+    #ifdef DEBUG_AUTOCORRECT
+    debug.print("AZ: ");
+    #endif //DEBUG_AUTOCORRECT
+
+  }
+
+  if (axis == EL){
+    autocorrect_state_el = AUTOCORRECT_WATCHING_EL;
+    autocorrect_el = heading;
+    autocorrect_el_submit_time = millis();
+
+    #ifdef DEBUG_AUTOCORRECT
+    debug.print("EL: ");
+    #endif //DEBUG_AUTOCORRECT
+
+  }
+
+  #ifdef DEBUG_AUTOCORRECT
+  debug.print(heading,2);
+  debug.println("");
+  #endif //DEBUG_AUTOCORRECT
+
+}
+#endif //FEATURE_AUTOCORRECT
 
 #ifdef FEATURE_AZIMUTH_CORRECTION
 float correct_azimuth(float azimuth_in){

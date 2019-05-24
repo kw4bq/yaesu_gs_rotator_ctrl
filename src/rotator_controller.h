@@ -192,6 +192,7 @@ void initialize_display();
 void initialize_peripherals();
 void submit_request(byte axis, byte request, int parm, byte called_by);
 void service_rotation();
+void service_request_queue();
 void stop_all_tracking();
 void check_for_dirty_configuration();
 void service_rotation_indicator_pin();
