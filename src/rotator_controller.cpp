@@ -28,7 +28,7 @@ void loop() {
   az_check_operation_timeout();
 
   #ifdef FEATURE_TIMED_BUFFER
-    check_timed_interval();
+  check_timed_interval();
   #endif // FEATURE_TIMED_BUFFER
 
   read_headings();
@@ -38,7 +38,7 @@ void loop() {
   check_brake_release();
 
   #ifdef FEATURE_ELEVATION_CONTROL
-    el_check_operation_timeout();
+  el_check_operation_timeout();
   #endif
 
   update_display();
@@ -2029,10 +2029,6 @@ void initialize_peripherals() {
   Wire.begin();
   #endif
 
-  #ifdef SET_I2C_BUS_SPEED
-  TWBR = ((F_CPU / SET_I2C_BUS_SPEED) - 16) / 2;
-  #endif
-
 } // initialize_peripherals
 
 void submit_request(byte axis, byte request, int parm, byte called_by) {
@@ -2062,7 +2058,7 @@ void submit_request(byte axis, byte request, int parm, byte called_by) {
   }
 
   #ifdef DEBUG_SUBMIT_REQUEST
-  switch(request){
+  switch(request) {
     case 0: debug.print("REQUEST_STOP");break;
     case 1: debug.print("REQUEST_AZIMUTH");break;
     case 2: debug.print("REQUEST_AZIMUTH_RAW");break;
@@ -2088,596 +2084,582 @@ void service_request_queue() {
 
   if (az_request_queue_state == IN_QUEUE) {
 
-    #ifdef FEATURE_POWER_SWITCH
-    last_activity_time = millis();
-    #endif //FEATURE_POWER_SWITCH
-
     #ifdef DEBUG_SERVICE_REQUEST_QUEUE
     debug.print("service_request_queue: AZ ");
     #endif // DEBUG_SERVICE_REQUEST_QUEUE
 
     switch (az_request) {
       case (REQUEST_STOP):
-        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-        debug.print("REQUEST_STOP");
-        #endif // DEBUG_SERVICE_REQUEST_QUEUE
-        #ifdef FEATURE_PARK
-          deactivate_park();
-        #endif // FEATURE_PARK
-        if (az_state != IDLE) {
-          if (az_slowdown_active) {
-            if ((az_state == TIMED_SLOW_DOWN_CW) || (az_state == TIMED_SLOW_DOWN_CCW) || (az_state == SLOW_DOWN_CW) || (az_state == SLOW_DOWN_CCW)) {  // if we're already in timed slow down and we get another stop, do a hard stop
-              rotator(DEACTIVATE, CW);
-              rotator(DEACTIVATE, CCW);
-              az_state = IDLE;
-              az_request_queue_state = NONE;
-            }
-            if ((az_state == SLOW_START_CW) || (az_state == NORMAL_CW)) {
-              az_state = INITIALIZE_TIMED_SLOW_DOWN_CW;
-              az_request_queue_state = IN_PROGRESS_TIMED;
-              az_last_rotate_initiation = millis();
-            }
-            if ((az_state == SLOW_START_CCW) || (az_state == NORMAL_CCW)) {
-              az_state = INITIALIZE_TIMED_SLOW_DOWN_CCW;
-              az_request_queue_state = IN_PROGRESS_TIMED;
-              az_last_rotate_initiation = millis();
-            }
-
-          } else {
-            rotator(DEACTIVATE, CW);
-            rotator(DEACTIVATE, CCW);
-            az_state = IDLE;
-            az_request_queue_state = NONE;
-          }
-        } else {
-          az_request_queue_state = NONE; // nothing to do - we clear the queue
+      #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+      debug.print("REQUEST_STOP");
+      #endif // DEBUG_SERVICE_REQUEST_QUEUE
+      #ifdef FEATURE_PARK
+      deactivate_park();
+      #endif // FEATURE_PARK
+      if (az_state != IDLE) {
+        if (az_slowdown_active) {
+          if ((az_state == TIMED_SLOW_DOWN_CW) || (az_state == TIMED_SLOW_DOWN_CCW) || (az_state == SLOW_DOWN_CW) || (az_state == SLOW_DOWN_CCW)) {  // if we're already in timed slow down and we get another stop, do a hard stop
+          rotator(DEACTIVATE, CW);
+          rotator(DEACTIVATE, CCW);
+          az_state = IDLE;
+          az_request_queue_state = NONE;
         }
-        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-        if (debug_mode) {
-          control_port->println();
-        }
-        #endif // DEBUG_SERVICE_REQUEST_QUEUE
-        break; // REQUEST_STOP
-
-      case (REQUEST_AZIMUTH):
-        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-        debug.print("REQUEST_AZIMUTH");
-        #endif // DEBUG_SERVICE_REQUEST_QUEUE
-        if ((az_request_parm >= 0) && (az_request_parm <= (360 * HEADING_MULTIPLIER))) {
-          target_azimuth = az_request_parm;
-          target_raw_azimuth = az_request_parm;
-          if (target_azimuth == (360 * HEADING_MULTIPLIER)) {
-            target_azimuth = 0;
-          }
-          if ((target_azimuth > (azimuth - (AZIMUTH_TOLERANCE * HEADING_MULTIPLIER))) && (target_azimuth < (azimuth + (AZIMUTH_TOLERANCE * HEADING_MULTIPLIER)))) {
-            #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-            debug.print(" request within tolerance");
-            #endif // DEBUG_SERVICE_REQUEST_QUEUE
-            within_tolerance_flag = 1;
-            // az_request_queue_state = NONE;
-            if (az_state != IDLE){
-              submit_request(AZ, REQUEST_STOP, 0, 137);
-            } else {
-              az_request_queue_state = NONE;
-            }
-          } else {  // target azimuth is not within tolerance, we need to rotate
-            #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-            debug.print(" ->A");
-            #endif // DEBUG_SERVICE_REQUEST_QUEUE
-            work_target_raw_azimuth = target_azimuth;
-            #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-            debug.print(" work_target_raw_azimuth:");
-            debug.print(work_target_raw_azimuth / HEADING_MULTIPLIER);
-            debug.print(" azimuth_starting_point:");
-            debug.print(azimuth_starting_point);
-            debug.print(" ");
-            #endif // DEBUG_SERVICE_REQUEST_QUEUE
-
-            if (work_target_raw_azimuth < (azimuth_starting_point * HEADING_MULTIPLIER)) {
-              work_target_raw_azimuth = work_target_raw_azimuth + (360 * HEADING_MULTIPLIER);
-              target_raw_azimuth = work_target_raw_azimuth;
-              #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-              debug.print("->B");
-              #endif // DEBUG_SERVICE_REQUEST_QUEUE
-            }
-            if ((work_target_raw_azimuth + (360 * HEADING_MULTIPLIER)) < ((azimuth_starting_point + azimuth_rotation_capability) * HEADING_MULTIPLIER)) { // is there a second possible heading in overlap?
-              if (abs(raw_azimuth - work_target_raw_azimuth) < abs((work_target_raw_azimuth + (360 * HEADING_MULTIPLIER)) - raw_azimuth)) { // is second possible heading closer?
-                #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-                debug.print("->C");
-                #endif // DEBUG_SERVICE_REQUEST_QUEUE
-                if (work_target_raw_azimuth  > raw_azimuth) { // not closer, use position in non-overlap
-                  direction_to_go = CW;
-                  #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-                  debug.print("->CW!");
-                  #endif // DEBUG_SERVICE_REQUEST_QUEUE
-                } else {
-                  direction_to_go = CCW;
-                  #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-                  debug.print("->CCW!");
-                  #endif // DEBUG_SERVICE_REQUEST_QUEUE
-                }
-              } else { // go to position in overlap
-                #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-                debug.print("->D");
-                #endif // DEBUG_SERVICE_REQUEST_QUEUE
-                target_raw_azimuth = work_target_raw_azimuth + (360 * HEADING_MULTIPLIER);
-                if ((work_target_raw_azimuth + (360 * HEADING_MULTIPLIER)) > raw_azimuth) {
-                  direction_to_go = CW;
-                  #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-                  debug.print("->CW!");
-                  #endif // DEBUG_SERVICE_REQUEST_QUEUE
-                } else {
-                  direction_to_go = CCW;
-                  #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-                  debug.print("->CCW!");
-                  #endif // DEBUG_SERVICE_REQUEST_QUEUE
-                }
-              }
-            } else {  // no possible second heading in overlap
-              #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-              debug.print("->E");
-              #endif // DEBUG_SERVICE_REQUEST_QUEUE
-              if (work_target_raw_azimuth  > raw_azimuth) {
-                direction_to_go = CW;
-              } else {
-                direction_to_go = CCW;
-              }
-            }
-          }
-        } else {
-          #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-              debug.print("->F");
-          #endif // DEBUG_SERVICE_REQUEST_QUEUE
-          if ((az_request_parm > (360 * HEADING_MULTIPLIER)) && (az_request_parm <= ((azimuth_starting_point + azimuth_rotation_capability) * HEADING_MULTIPLIER))) {
-            target_azimuth = az_request_parm - (360 * HEADING_MULTIPLIER);
-            target_raw_azimuth = az_request_parm;
-            if (az_request_parm > raw_azimuth) {
-              direction_to_go = CW;
-            } else {
-              direction_to_go = CCW;
-            }
-          } else {
-            #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-                debug.print(" error: bogus azimuth request:");
-                debug.print(az_request_parm);
-                debug.println("");
-            #endif // DEBUG_SERVICE_REQUEST_QUEUE
-            rotator(DEACTIVATE, CW);
-            rotator(DEACTIVATE, CCW);
-            az_state = IDLE;
-            az_request_queue_state = NONE;
-            return;
-          }
-        }
-        if (direction_to_go == CW) {
-          if (((az_state == SLOW_START_CCW) || (az_state == NORMAL_CCW) || (az_state == SLOW_DOWN_CCW) || (az_state == TIMED_SLOW_DOWN_CCW)) && (az_slowstart_active)) {
-            az_state = INITIALIZE_DIR_CHANGE_TO_CW;
-            #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-            debug.print(" INITIALIZE_DIR_CHANGE_TO_CW");
-            #endif // DEBUG_SERVICE_REQUEST_QUEUE
-          } else {
-            if ((az_state != INITIALIZE_SLOW_START_CW) && (az_state != SLOW_START_CW) && (az_state != NORMAL_CW)) { // if we're already rotating CW, don't do anything
-              // rotator(ACTIVATE,CW);
-              if (az_slowstart_active) {
-                az_state = INITIALIZE_SLOW_START_CW;
-              } else { az_state = INITIALIZE_NORMAL_CW; };
-            }
-          }
-        }
-        if (direction_to_go == CCW) {
-          if (((az_state == SLOW_START_CW) || (az_state == NORMAL_CW) || (az_state == SLOW_DOWN_CW) || (az_state == TIMED_SLOW_DOWN_CW)) && (az_slowstart_active)) {
-            az_state = INITIALIZE_DIR_CHANGE_TO_CCW;
-            #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-            debug.print(" INITIALIZE_DIR_CHANGE_TO_CCW");
-            #endif // DEBUG_SERVICE_REQUEST_QUEUE
-          } else {
-            if ((az_state != INITIALIZE_SLOW_START_CCW) && (az_state != SLOW_START_CCW) && (az_state != NORMAL_CCW)) { // if we're already rotating CCW, don't do anything
-              // rotator(ACTIVATE,CCW);
-              if (az_slowstart_active) {
-                az_state = INITIALIZE_SLOW_START_CCW;
-              } else { az_state = INITIALIZE_NORMAL_CCW; };
-            }
-          }
-        }
-        if (!within_tolerance_flag) {
-          az_request_queue_state = IN_PROGRESS_TO_TARGET;
+        if ((az_state == SLOW_START_CW) || (az_state == NORMAL_CW)) {
+          az_state = INITIALIZE_TIMED_SLOW_DOWN_CW;
+          az_request_queue_state = IN_PROGRESS_TIMED;
           az_last_rotate_initiation = millis();
         }
-        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-        if (debug_mode) {
-          control_port->println();
-        }
-        #endif // DEBUG_SERVICE_REQUEST_QUEUE
-        break; // REQUEST_AZIMUTH
-
-      case (REQUEST_AZIMUTH_RAW):
-        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-        debug.print("REQUEST_AZIMUTH_RAW");
-        #endif // DEBUG_SERVICE_REQUEST_QUEUE
-        target_raw_azimuth = az_request_parm;
-        target_azimuth = target_raw_azimuth;
-        if (target_azimuth >= (360 * HEADING_MULTIPLIER)) {
-          target_azimuth = target_azimuth - (360 * HEADING_MULTIPLIER);
+        if ((az_state == SLOW_START_CCW) || (az_state == NORMAL_CCW)) {
+          az_state = INITIALIZE_TIMED_SLOW_DOWN_CCW;
+          az_request_queue_state = IN_PROGRESS_TIMED;
+          az_last_rotate_initiation = millis();
         }
 
-        if (((abs(raw_azimuth - target_raw_azimuth) < (AZIMUTH_TOLERANCE * HEADING_MULTIPLIER))) && (az_state == IDLE)) {
-          #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-          debug.print(" request within tolerance");
-          #endif // DEBUG_SERVICE_REQUEST_QUEUE
-          if (az_state != IDLE){
-            submit_request(AZ, REQUEST_STOP, 0, 138);
-          } else {
-            az_request_queue_state = NONE;
-          }
-          within_tolerance_flag = 1;
-        } else {
-          if (target_raw_azimuth > raw_azimuth) {
-            if (((az_state == SLOW_START_CCW) || (az_state == NORMAL_CCW) || (az_state == SLOW_DOWN_CCW) || (az_state == TIMED_SLOW_DOWN_CCW)) && (az_slowstart_active)) {
-              az_state = INITIALIZE_DIR_CHANGE_TO_CW;
-              #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-              debug.print(" INITIALIZE_DIR_CHANGE_TO_CW");
-              #endif // DEBUG_SERVICE_REQUEST_QUEUE
-            } else {
-              if ((az_state != INITIALIZE_SLOW_START_CW) && (az_state != SLOW_START_CW) && (az_state != NORMAL_CW)) { // if we're already rotating CW, don't do anything
-                if (az_slowstart_active) {
-                  az_state = INITIALIZE_SLOW_START_CW;
-                } else { az_state = INITIALIZE_NORMAL_CW; };
-              }
-            }
-          }
-          if (target_raw_azimuth < raw_azimuth) {
-            if (((az_state == SLOW_START_CW) || (az_state == NORMAL_CW) || (az_state == SLOW_DOWN_CW) || (az_state == TIMED_SLOW_DOWN_CW)) && (az_slowstart_active)) {
-              az_state = INITIALIZE_DIR_CHANGE_TO_CCW;
-              #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-              debug.print(" INITIALIZE_DIR_CHANGE_TO_CCW");
-              #endif // DEBUG_SERVICE_REQUEST_QUEUE
-            } else {
-              if ((az_state != INITIALIZE_SLOW_START_CCW) && (az_state != SLOW_START_CCW) && (az_state != NORMAL_CCW)) { // if we're already rotating CCW, don't do anything
-                if (az_slowstart_active) {
-                  az_state = INITIALIZE_SLOW_START_CCW;
-                } else { az_state = INITIALIZE_NORMAL_CCW; };
-              }
-            }
-          }
-          if (!within_tolerance_flag) {
-            az_request_queue_state = IN_PROGRESS_TO_TARGET;
-            az_last_rotate_initiation = millis();
-          }
-        }
-      #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-        if (debug_mode) {
-          control_port->println();
-        }
-      #endif // DEBUG_SERVICE_REQUEST_QUEUE
-        break; // REQUEST_AZIMUTH_RAW
-
-      case (REQUEST_CW):
-        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-        debug.print("REQUEST_CW");
-        #endif // DEBUG_SERVICE_REQUEST_QUEUE
-        #ifdef FEATURE_PARK
-          deactivate_park();
-        #endif // FEATURE_PARK
-        if (((az_state == SLOW_START_CCW) || (az_state == NORMAL_CCW) || (az_state == SLOW_DOWN_CCW) || (az_state == TIMED_SLOW_DOWN_CCW)) && (az_slowstart_active)) {
-          az_state = INITIALIZE_DIR_CHANGE_TO_CW;
-          #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-            debug.print(" INITIALIZE_DIR_CHANGE_TO_CW");
-          #endif // DEBUG_SERVICE_REQUEST_QUEUE
-        } else {
-          if ((az_state != SLOW_START_CW) && (az_state != NORMAL_CW)) {
-            // rotator(ACTIVATE,CW);
-            if (az_slowstart_active) {
-              az_state = INITIALIZE_SLOW_START_CW;
-            } else {
-              az_state = INITIALIZE_NORMAL_CW;
-            };
-          }
-        }
-        az_request_queue_state = NONE;
-        az_last_rotate_initiation = millis();
-        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-        if (debug_mode) {
-          control_port->println();
-        }
-        #endif // DEBUG_SERVICE_REQUEST_QUEUE
-        break; // REQUEST_CW
-
-      case (REQUEST_CCW):
-        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-        debug.print("REQUEST_CCW");
-        #endif // DEBUG_SERVICE_REQUEST_QUEUE
-        #ifdef FEATURE_PARK
-          deactivate_park();
-        #endif // FEATURE_PARK
-        if (((az_state == SLOW_START_CW) || (az_state == NORMAL_CW) || (az_state == SLOW_DOWN_CW) || (az_state == TIMED_SLOW_DOWN_CW)) && (az_slowstart_active)) {
-          az_state = INITIALIZE_DIR_CHANGE_TO_CCW;
-          #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-            debug.print(" INITIALIZE_DIR_CHANGE_TO_CCW");
-          #endif // DEBUG_SERVICE_REQUEST_QUEUE
-        } else {
-          if ((az_state != SLOW_START_CCW) && (az_state != NORMAL_CCW)) {
-            // rotator(ACTIVATE,CCW);
-            if (az_slowstart_active) {
-              az_state = INITIALIZE_SLOW_START_CCW;
-            } else { az_state = INITIALIZE_NORMAL_CCW; };
-          }
-        }
-        az_request_queue_state = NONE;
-        az_last_rotate_initiation = millis();
-        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-        if (debug_mode) {
-          control_port->println();
-        }
-        #endif // DEBUG_SERVICE_REQUEST_QUEUE
-        break; // REQUEST_CCW
-
-      case (REQUEST_KILL):
-        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-        debug.print("REQUEST_KILL");
-        #endif // DEBUG_SERVICE_REQUEST_QUEUE
-        #ifdef FEATURE_PARK
-          deactivate_park();
-        #endif // FEATURE_PARK
+      } else {
         rotator(DEACTIVATE, CW);
         rotator(DEACTIVATE, CCW);
         az_state = IDLE;
         az_request_queue_state = NONE;
-        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-        debug.println("");
-        #endif // DEBUG_SERVICE_REQUEST_QUEUE
-        break; // REQUEST_KILL
-    } /* switch */
-
-    #ifdef FEATURE_LCD_DISPLAY
-    if (az_request_queue_state != IN_QUEUE) {push_lcd_update = 1;}
-    #endif //FEATURE_LCD_DISPLAY
-  }
-
-  #ifdef FEATURE_ELEVATION_CONTROL
-  if (el_request_queue_state == IN_QUEUE) {
-
-    #ifdef FEATURE_POWER_SWITCH
-    last_activity_time = millis();
-    #endif //FEATURE_POWER_SWITCH
-
-    within_tolerance_flag = 0;
+      }
+    } else {
+      az_request_queue_state = NONE; // nothing to do - we clear the queue
+    }
     #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-    debug.print("service_request_queue: EL ");
+    if (debug_mode) {
+      control_port->println();
+    }
     #endif // DEBUG_SERVICE_REQUEST_QUEUE
-    switch (el_request) {
-      case (REQUEST_ELEVATION):
+    break; // REQUEST_STOP
+
+    case (REQUEST_AZIMUTH):
+    #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+    debug.print("REQUEST_AZIMUTH");
+    #endif // DEBUG_SERVICE_REQUEST_QUEUE
+    if ((az_request_parm >= 0) && (az_request_parm <= (360 * HEADING_MULTIPLIER))) {
+      target_azimuth = az_request_parm;
+      target_raw_azimuth = az_request_parm;
+      if (target_azimuth == (360 * HEADING_MULTIPLIER)) {
+        target_azimuth = 0;
+      }
+      if ((target_azimuth > (azimuth - (AZIMUTH_TOLERANCE * HEADING_MULTIPLIER))) && (target_azimuth < (azimuth + (AZIMUTH_TOLERANCE * HEADING_MULTIPLIER)))) {
         #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-        debug.print("REQUEST_ELEVATION ");
+        debug.print(" request within tolerance");
         #endif // DEBUG_SERVICE_REQUEST_QUEUE
-        target_elevation = el_request_parm;
-
-        if (target_elevation > (ELEVATION_MAXIMUM_DEGREES * HEADING_MULTIPLIER)) {
-          target_elevation = ELEVATION_MAXIMUM_DEGREES * HEADING_MULTIPLIER;
-          #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-          if (debug_mode) {
-            debug.print(F("REQUEST_ELEVATION: target_elevation > ELEVATION_MAXIMUM_DEGREES"));
-          }
-          #endif // DEBUG_SERVICE_REQUEST_QUEUE
-        }
-
-        #ifdef OPTION_EL_MANUAL_ROTATE_LIMITS
-        if (target_elevation < (EL_MANUAL_ROTATE_DOWN_LIMIT * HEADING_MULTIPLIER)) {
-          target_elevation = EL_MANUAL_ROTATE_DOWN_LIMIT * HEADING_MULTIPLIER;
-          #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-          if (debug_mode) {
-            debug.print(F("REQUEST_ELEVATION: target_elevation < EL_MANUAL_ROTATE_DOWN_LIMIT"));
-          }
-          #endif // DEBUG_SERVICE_REQUEST_QUEUE
-        }
-        if (target_elevation > (EL_MANUAL_ROTATE_UP_LIMIT * HEADING_MULTIPLIER)) {
-          target_elevation = EL_MANUAL_ROTATE_UP_LIMIT * HEADING_MULTIPLIER;
-          #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-          if (debug_mode) {
-            debug.print(F("REQUEST_ELEVATION: target_elevation > EL_MANUAL_ROTATE_UP_LIMIT"));
-          }
-          #endif // DEBUG_SERVICE_REQUEST_QUEUE
-        }
-        #endif // OPTION_EL_MANUAL_ROTATE_LIMITS
-
-        if (abs(target_elevation - elevation) < (ELEVATION_TOLERANCE * HEADING_MULTIPLIER)) {
-          #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-          if (debug_mode) {
-            debug.print(F("requested elevation within tolerance\n"));
-          }
-          #endif // DEBUG_SERVICE_REQUEST_QUEUE
-          within_tolerance_flag = 1;
-          el_request_queue_state = NONE;
+        within_tolerance_flag = 1;
+        // az_request_queue_state = NONE;
+        if (az_state != IDLE){
+          submit_request(AZ, REQUEST_STOP, 0, 137);
         } else {
-          if (target_elevation > elevation) {
-            if (((el_state == SLOW_START_DOWN) || (el_state == NORMAL_DOWN) || (el_state == SLOW_DOWN_DOWN) || (el_state == TIMED_SLOW_DOWN_DOWN)) && (el_slowstart_active)) {
-              el_state = INITIALIZE_DIR_CHANGE_TO_UP;
-                #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-              if (debug_mode) {
-                debug.print(F(" INITIALIZE_DIR_CHANGE_TO_UP\n"));
-              }
-                #endif // DEBUG_SERVICE_REQUEST_QUEUE
-            } else {
-              if ((el_state != INITIALIZE_SLOW_START_UP) && (el_state != SLOW_START_UP) && (el_state != NORMAL_UP)) { // if we're already rotating UP, don't do anything
-                if (el_slowstart_active) {
-                  el_state = INITIALIZE_SLOW_START_UP;
-                } else { el_state = INITIALIZE_NORMAL_UP; };
-              }
-            }
-          } // (target_elevation > elevation)
-          if (target_elevation < elevation) {
-            if (((el_state == SLOW_START_UP) || (el_state == NORMAL_UP) || (el_state == SLOW_DOWN_UP) || (el_state == TIMED_SLOW_DOWN_UP)) && (el_slowstart_active)) {
-              el_state = INITIALIZE_DIR_CHANGE_TO_DOWN;
+          az_request_queue_state = NONE;
+        }
+      } else {  // target azimuth is not within tolerance, we need to rotate
+        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+        debug.print(" ->A");
+        #endif // DEBUG_SERVICE_REQUEST_QUEUE
+        work_target_raw_azimuth = target_azimuth;
+        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+        debug.print(" work_target_raw_azimuth:");
+        debug.print(work_target_raw_azimuth / HEADING_MULTIPLIER);
+        debug.print(" azimuth_starting_point:");
+        debug.print(azimuth_starting_point);
+        debug.print(" ");
+        #endif // DEBUG_SERVICE_REQUEST_QUEUE
+
+        if (work_target_raw_azimuth < (azimuth_starting_point * HEADING_MULTIPLIER)) {
+          work_target_raw_azimuth = work_target_raw_azimuth + (360 * HEADING_MULTIPLIER);
+          target_raw_azimuth = work_target_raw_azimuth;
+          #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+          debug.print("->B");
+          #endif // DEBUG_SERVICE_REQUEST_QUEUE
+        }
+        if ((work_target_raw_azimuth + (360 * HEADING_MULTIPLIER)) < ((azimuth_starting_point + azimuth_rotation_capability) * HEADING_MULTIPLIER)) { // is there a second possible heading in overlap?
+          if (abs(raw_azimuth - work_target_raw_azimuth) < abs((work_target_raw_azimuth + (360 * HEADING_MULTIPLIER)) - raw_azimuth)) { // is second possible heading closer?
+            #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+            debug.print("->C");
+            #endif // DEBUG_SERVICE_REQUEST_QUEUE
+            if (work_target_raw_azimuth  > raw_azimuth) { // not closer, use position in non-overlap
+              direction_to_go = CW;
               #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-              if (debug_mode) {
-                debug.print(F(" INITIALIZE_DIR_CHANGE_TO_DOWN\n"));
-              }
+              debug.print("->CW!");
               #endif // DEBUG_SERVICE_REQUEST_QUEUE
             } else {
-              if ((el_state != INITIALIZE_SLOW_START_DOWN) && (el_state != SLOW_START_DOWN) && (el_state != NORMAL_DOWN)) { // if we're already rotating DOWN, don't do anything
-                if (el_slowstart_active) {
-                  el_state = INITIALIZE_SLOW_START_DOWN;
-                } else { el_state = INITIALIZE_NORMAL_DOWN; };
-              }
+              direction_to_go = CCW;
+              #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+              debug.print("->CCW!");
+              #endif // DEBUG_SERVICE_REQUEST_QUEUE
             }
-          }  // (target_elevation < elevation)
-        }  // (abs(target_elevation - elevation) < ELEVATION_TOLERANCE)
-        if (!within_tolerance_flag) {
-          el_request_queue_state = IN_PROGRESS_TO_TARGET;
-          el_last_rotate_initiation = millis();
+          } else { // go to position in overlap
+            #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+            debug.print("->D");
+            #endif // DEBUG_SERVICE_REQUEST_QUEUE
+            target_raw_azimuth = work_target_raw_azimuth + (360 * HEADING_MULTIPLIER);
+            if ((work_target_raw_azimuth + (360 * HEADING_MULTIPLIER)) > raw_azimuth) {
+              direction_to_go = CW;
+              #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+              debug.print("->CW!");
+              #endif // DEBUG_SERVICE_REQUEST_QUEUE
+            } else {
+              direction_to_go = CCW;
+              #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+              debug.print("->CCW!");
+              #endif // DEBUG_SERVICE_REQUEST_QUEUE
+            }
+          }
+        } else {  // no possible second heading in overlap
+          #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+          debug.print("->E");
+          #endif // DEBUG_SERVICE_REQUEST_QUEUE
+          if (work_target_raw_azimuth  > raw_azimuth) {
+            direction_to_go = CW;
+          } else {
+            direction_to_go = CCW;
+          }
         }
+      }
+    } else {
+      #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+      debug.print("->F");
+      #endif // DEBUG_SERVICE_REQUEST_QUEUE
+      if ((az_request_parm > (360 * HEADING_MULTIPLIER)) && (az_request_parm <= ((azimuth_starting_point + azimuth_rotation_capability) * HEADING_MULTIPLIER))) {
+        target_azimuth = az_request_parm - (360 * HEADING_MULTIPLIER);
+        target_raw_azimuth = az_request_parm;
+        if (az_request_parm > raw_azimuth) {
+          direction_to_go = CW;
+        } else {
+          direction_to_go = CCW;
+        }
+      } else {
         #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-        if (debug_mode) {
-          control_port->println();
-        }
+        debug.print(" error: bogus azimuth request:");
+        debug.print(az_request_parm);
+        debug.println("");
         #endif // DEBUG_SERVICE_REQUEST_QUEUE
-        break; // REQUEST_ELEVATION
+        rotator(DEACTIVATE, CW);
+        rotator(DEACTIVATE, CCW);
+        az_state = IDLE;
+        az_request_queue_state = NONE;
+        return;
+      }
+    }
+    if (direction_to_go == CW) {
+      if (((az_state == SLOW_START_CCW) || (az_state == NORMAL_CCW) || (az_state == SLOW_DOWN_CCW) || (az_state == TIMED_SLOW_DOWN_CCW)) && (az_slowstart_active)) {
+        az_state = INITIALIZE_DIR_CHANGE_TO_CW;
+        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+        debug.print(" INITIALIZE_DIR_CHANGE_TO_CW");
+        #endif // DEBUG_SERVICE_REQUEST_QUEUE
+      } else {
+        if ((az_state != INITIALIZE_SLOW_START_CW) && (az_state != SLOW_START_CW) && (az_state != NORMAL_CW)) { // if we're already rotating CW, don't do anything
+        // rotator(ACTIVATE,CW);
+        if (az_slowstart_active) {
+          az_state = INITIALIZE_SLOW_START_CW;
+        } else { az_state = INITIALIZE_NORMAL_CW; };
+      }
+    }
+  }
+  if (direction_to_go == CCW) {
+    if (((az_state == SLOW_START_CW) || (az_state == NORMAL_CW) || (az_state == SLOW_DOWN_CW) || (az_state == TIMED_SLOW_DOWN_CW)) && (az_slowstart_active)) {
+      az_state = INITIALIZE_DIR_CHANGE_TO_CCW;
+      #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+      debug.print(" INITIALIZE_DIR_CHANGE_TO_CCW");
+      #endif // DEBUG_SERVICE_REQUEST_QUEUE
+    } else {
+      if ((az_state != INITIALIZE_SLOW_START_CCW) && (az_state != SLOW_START_CCW) && (az_state != NORMAL_CCW)) { // if we're already rotating CCW, don't do anything
+      // rotator(ACTIVATE,CCW);
+      if (az_slowstart_active) {
+        az_state = INITIALIZE_SLOW_START_CCW;
+      } else { az_state = INITIALIZE_NORMAL_CCW; };
+    }
+  }
+}
+if (!within_tolerance_flag) {
+  az_request_queue_state = IN_PROGRESS_TO_TARGET;
+  az_last_rotate_initiation = millis();
+}
+#ifdef DEBUG_SERVICE_REQUEST_QUEUE
+if (debug_mode) {
+  control_port->println();
+}
+#endif // DEBUG_SERVICE_REQUEST_QUEUE
+break; // REQUEST_AZIMUTH
 
-      case (REQUEST_UP):
-        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-        if (debug_mode) {
-          debug.print(F("REQUEST_UP\n"));
-        }
-        #endif // DEBUG_SERVICE_REQUEST_QUEUE
-        #ifdef FEATURE_PARK
-          deactivate_park();
-        #endif // FEATURE_PARK
+case (REQUEST_AZIMUTH_RAW):
+#ifdef DEBUG_SERVICE_REQUEST_QUEUE
+debug.print("REQUEST_AZIMUTH_RAW");
+#endif // DEBUG_SERVICE_REQUEST_QUEUE
+target_raw_azimuth = az_request_parm;
+target_azimuth = target_raw_azimuth;
+if (target_azimuth >= (360 * HEADING_MULTIPLIER)) {
+  target_azimuth = target_azimuth - (360 * HEADING_MULTIPLIER);
+}
+
+if (((abs(raw_azimuth - target_raw_azimuth) < (AZIMUTH_TOLERANCE * HEADING_MULTIPLIER))) && (az_state == IDLE)) {
+  #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+  debug.print(" request within tolerance");
+  #endif // DEBUG_SERVICE_REQUEST_QUEUE
+  if (az_state != IDLE){
+    submit_request(AZ, REQUEST_STOP, 0, 138);
+  } else {
+    az_request_queue_state = NONE;
+  }
+  within_tolerance_flag = 1;
+} else {
+  if (target_raw_azimuth > raw_azimuth) {
+    if (((az_state == SLOW_START_CCW) || (az_state == NORMAL_CCW) || (az_state == SLOW_DOWN_CCW) || (az_state == TIMED_SLOW_DOWN_CCW)) && (az_slowstart_active)) {
+      az_state = INITIALIZE_DIR_CHANGE_TO_CW;
+      #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+      debug.print(" INITIALIZE_DIR_CHANGE_TO_CW");
+      #endif // DEBUG_SERVICE_REQUEST_QUEUE
+    } else {
+      if ((az_state != INITIALIZE_SLOW_START_CW) && (az_state != SLOW_START_CW) && (az_state != NORMAL_CW)) { // if we're already rotating CW, don't do anything
+      if (az_slowstart_active) {
+        az_state = INITIALIZE_SLOW_START_CW;
+      } else { az_state = INITIALIZE_NORMAL_CW; };
+    }
+  }
+}
+if (target_raw_azimuth < raw_azimuth) {
+  if (((az_state == SLOW_START_CW) || (az_state == NORMAL_CW) || (az_state == SLOW_DOWN_CW) || (az_state == TIMED_SLOW_DOWN_CW)) && (az_slowstart_active)) {
+    az_state = INITIALIZE_DIR_CHANGE_TO_CCW;
+    #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+    debug.print(" INITIALIZE_DIR_CHANGE_TO_CCW");
+    #endif // DEBUG_SERVICE_REQUEST_QUEUE
+  } else {
+    if ((az_state != INITIALIZE_SLOW_START_CCW) && (az_state != SLOW_START_CCW) && (az_state != NORMAL_CCW)) { // if we're already rotating CCW, don't do anything
+    if (az_slowstart_active) {
+      az_state = INITIALIZE_SLOW_START_CCW;
+    } else { az_state = INITIALIZE_NORMAL_CCW; };
+  }
+}
+}
+if (!within_tolerance_flag) {
+  az_request_queue_state = IN_PROGRESS_TO_TARGET;
+  az_last_rotate_initiation = millis();
+}
+}
+#ifdef DEBUG_SERVICE_REQUEST_QUEUE
+if (debug_mode) {
+  control_port->println();
+}
+#endif // DEBUG_SERVICE_REQUEST_QUEUE
+break; // REQUEST_AZIMUTH_RAW
+
+case (REQUEST_CW):
+#ifdef DEBUG_SERVICE_REQUEST_QUEUE
+debug.print("REQUEST_CW");
+#endif // DEBUG_SERVICE_REQUEST_QUEUE
+#ifdef FEATURE_PARK
+deactivate_park();
+#endif // FEATURE_PARK
+if (((az_state == SLOW_START_CCW) || (az_state == NORMAL_CCW) || (az_state == SLOW_DOWN_CCW) || (az_state == TIMED_SLOW_DOWN_CCW)) && (az_slowstart_active)) {
+  az_state = INITIALIZE_DIR_CHANGE_TO_CW;
+  #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+  debug.print(" INITIALIZE_DIR_CHANGE_TO_CW");
+  #endif // DEBUG_SERVICE_REQUEST_QUEUE
+} else {
+  if ((az_state != SLOW_START_CW) && (az_state != NORMAL_CW)) {
+    // rotator(ACTIVATE,CW);
+    if (az_slowstart_active) {
+      az_state = INITIALIZE_SLOW_START_CW;
+    } else {
+      az_state = INITIALIZE_NORMAL_CW;
+    };
+  }
+}
+az_request_queue_state = NONE;
+az_last_rotate_initiation = millis();
+#ifdef DEBUG_SERVICE_REQUEST_QUEUE
+if (debug_mode) {
+  control_port->println();
+}
+#endif // DEBUG_SERVICE_REQUEST_QUEUE
+break; // REQUEST_CW
+
+case (REQUEST_CCW):
+#ifdef DEBUG_SERVICE_REQUEST_QUEUE
+debug.print("REQUEST_CCW");
+#endif // DEBUG_SERVICE_REQUEST_QUEUE
+#ifdef FEATURE_PARK
+deactivate_park();
+#endif // FEATURE_PARK
+if (((az_state == SLOW_START_CW) || (az_state == NORMAL_CW) || (az_state == SLOW_DOWN_CW) || (az_state == TIMED_SLOW_DOWN_CW)) && (az_slowstart_active)) {
+  az_state = INITIALIZE_DIR_CHANGE_TO_CCW;
+  #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+  debug.print(" INITIALIZE_DIR_CHANGE_TO_CCW");
+  #endif // DEBUG_SERVICE_REQUEST_QUEUE
+} else {
+  if ((az_state != SLOW_START_CCW) && (az_state != NORMAL_CCW)) {
+    // rotator(ACTIVATE,CCW);
+    if (az_slowstart_active) {
+      az_state = INITIALIZE_SLOW_START_CCW;
+    } else { az_state = INITIALIZE_NORMAL_CCW; };
+  }
+}
+az_request_queue_state = NONE;
+az_last_rotate_initiation = millis();
+#ifdef DEBUG_SERVICE_REQUEST_QUEUE
+if (debug_mode) {
+  control_port->println();
+}
+#endif // DEBUG_SERVICE_REQUEST_QUEUE
+break; // REQUEST_CCW
+
+case (REQUEST_KILL):
+#ifdef DEBUG_SERVICE_REQUEST_QUEUE
+debug.print("REQUEST_KILL");
+#endif // DEBUG_SERVICE_REQUEST_QUEUE
+#ifdef FEATURE_PARK
+deactivate_park();
+#endif // FEATURE_PARK
+rotator(DEACTIVATE, CW);
+rotator(DEACTIVATE, CCW);
+az_state = IDLE;
+az_request_queue_state = NONE;
+#ifdef DEBUG_SERVICE_REQUEST_QUEUE
+debug.println("");
+#endif // DEBUG_SERVICE_REQUEST_QUEUE
+break; // REQUEST_KILL
+} /* switch */
+
+#ifdef FEATURE_LCD_DISPLAY
+if (az_request_queue_state != IN_QUEUE) {push_lcd_update = 1;}
+#endif //FEATURE_LCD_DISPLAY
+}
+
+#ifdef FEATURE_ELEVATION_CONTROL
+if (el_request_queue_state == IN_QUEUE) {
+
+  within_tolerance_flag = 0;
+  #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+  debug.print("service_request_queue: EL ");
+  #endif // DEBUG_SERVICE_REQUEST_QUEUE
+  switch (el_request) {
+    case (REQUEST_ELEVATION):
+    #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+    debug.print("REQUEST_ELEVATION ");
+    #endif // DEBUG_SERVICE_REQUEST_QUEUE
+    target_elevation = el_request_parm;
+
+    if (target_elevation > (ELEVATION_MAXIMUM_DEGREES * HEADING_MULTIPLIER)) {
+      target_elevation = ELEVATION_MAXIMUM_DEGREES * HEADING_MULTIPLIER;
+      #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+      if (debug_mode) {
+        debug.print(F("REQUEST_ELEVATION: target_elevation > ELEVATION_MAXIMUM_DEGREES"));
+      }
+      #endif // DEBUG_SERVICE_REQUEST_QUEUE
+    }
+
+    #ifdef OPTION_EL_MANUAL_ROTATE_LIMITS
+    if (target_elevation < (EL_MANUAL_ROTATE_DOWN_LIMIT * HEADING_MULTIPLIER)) {
+      target_elevation = EL_MANUAL_ROTATE_DOWN_LIMIT * HEADING_MULTIPLIER;
+      #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+      if (debug_mode) {
+        debug.print(F("REQUEST_ELEVATION: target_elevation < EL_MANUAL_ROTATE_DOWN_LIMIT"));
+      }
+      #endif // DEBUG_SERVICE_REQUEST_QUEUE
+    }
+    if (target_elevation > (EL_MANUAL_ROTATE_UP_LIMIT * HEADING_MULTIPLIER)) {
+      target_elevation = EL_MANUAL_ROTATE_UP_LIMIT * HEADING_MULTIPLIER;
+      #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+      if (debug_mode) {
+        debug.print(F("REQUEST_ELEVATION: target_elevation > EL_MANUAL_ROTATE_UP_LIMIT"));
+      }
+      #endif // DEBUG_SERVICE_REQUEST_QUEUE
+    }
+    #endif // OPTION_EL_MANUAL_ROTATE_LIMITS
+
+    if (abs(target_elevation - elevation) < (ELEVATION_TOLERANCE * HEADING_MULTIPLIER)) {
+      #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+      if (debug_mode) {
+        debug.print(F("requested elevation within tolerance\n"));
+      }
+      #endif // DEBUG_SERVICE_REQUEST_QUEUE
+      within_tolerance_flag = 1;
+      el_request_queue_state = NONE;
+    } else {
+      if (target_elevation > elevation) {
         if (((el_state == SLOW_START_DOWN) || (el_state == NORMAL_DOWN) || (el_state == SLOW_DOWN_DOWN) || (el_state == TIMED_SLOW_DOWN_DOWN)) && (el_slowstart_active)) {
           el_state = INITIALIZE_DIR_CHANGE_TO_UP;
           #ifdef DEBUG_SERVICE_REQUEST_QUEUE
           if (debug_mode) {
-            debug.print(F("service_request_queue: INITIALIZE_DIR_CHANGE_TO_UP\n"));
+            debug.print(F(" INITIALIZE_DIR_CHANGE_TO_UP\n"));
           }
           #endif // DEBUG_SERVICE_REQUEST_QUEUE
         } else {
-          if ((el_state != SLOW_START_UP) && (el_state != NORMAL_UP)) {
-            if (el_slowstart_active) {
-              el_state = INITIALIZE_SLOW_START_UP;
-            } else { el_state = INITIALIZE_NORMAL_UP; };
-          }
+          if ((el_state != INITIALIZE_SLOW_START_UP) && (el_state != SLOW_START_UP) && (el_state != NORMAL_UP)) { // if we're already rotating UP, don't do anything
+          if (el_slowstart_active) {
+            el_state = INITIALIZE_SLOW_START_UP;
+          } else { el_state = INITIALIZE_NORMAL_UP; };
         }
-        el_request_queue_state = NONE;
-        el_last_rotate_initiation = millis();
-          #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+      }
+    } // (target_elevation > elevation)
+    if (target_elevation < elevation) {
+      if (((el_state == SLOW_START_UP) || (el_state == NORMAL_UP) || (el_state == SLOW_DOWN_UP) || (el_state == TIMED_SLOW_DOWN_UP)) && (el_slowstart_active)) {
+        el_state = INITIALIZE_DIR_CHANGE_TO_DOWN;
+        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
         if (debug_mode) {
-          control_port->println();
+          debug.print(F(" INITIALIZE_DIR_CHANGE_TO_DOWN\n"));
         }
-          #endif // DEBUG_SERVICE_REQUEST_QUEUE
-        break; // REQUEST_UP
+        #endif // DEBUG_SERVICE_REQUEST_QUEUE
+      } else {
+        if ((el_state != INITIALIZE_SLOW_START_DOWN) && (el_state != SLOW_START_DOWN) && (el_state != NORMAL_DOWN)) { // if we're already rotating DOWN, don't do anything
+        if (el_slowstart_active) {
+          el_state = INITIALIZE_SLOW_START_DOWN;
+        } else { el_state = INITIALIZE_NORMAL_DOWN; };
+      }
+    }
+  }  // (target_elevation < elevation)
+}  // (abs(target_elevation - elevation) < ELEVATION_TOLERANCE)
+if (!within_tolerance_flag) {
+  el_request_queue_state = IN_PROGRESS_TO_TARGET;
+  el_last_rotate_initiation = millis();
+}
+#ifdef DEBUG_SERVICE_REQUEST_QUEUE
+if (debug_mode) {
+  control_port->println();
+}
+#endif // DEBUG_SERVICE_REQUEST_QUEUE
+break; // REQUEST_ELEVATION
 
-      case (REQUEST_DOWN):
-        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-        if (debug_mode) {
-          debug.print(F("REQUEST_DOWN\n"));
-        }
-        #endif // DEBUG_SERVICE_REQUEST_QUEUE
-        #ifdef FEATURE_PARK
-          deactivate_park();
-        #endif // FEATURE_PARK
-        if (((el_state == SLOW_START_UP) || (el_state == NORMAL_UP) || (el_state == SLOW_DOWN_UP) || (el_state == TIMED_SLOW_DOWN_UP)) && (el_slowstart_active)) {
-          el_state = INITIALIZE_DIR_CHANGE_TO_DOWN;
-          #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-          if (debug_mode) {
-            debug.print(F("service_request_queue: INITIALIZE_DIR_CHANGE_TO_DOWN\n"));
-          }
-          #endif // DEBUG_SERVICE_REQUEST_QUEUE
-        } else {
-          if ((el_state != SLOW_START_DOWN) && (el_state != NORMAL_DOWN)) {
-            if (el_slowstart_active) {
-              el_state = INITIALIZE_SLOW_START_DOWN;
-            } else { el_state = INITIALIZE_NORMAL_DOWN; };
-          }
-        }
-        el_request_queue_state = NONE;
-        el_last_rotate_initiation = millis();
-        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-        if (debug_mode) {
-          control_port->println();
-        }
-        #endif // DEBUG_SERVICE_REQUEST_QUEUE
-        break; // REQUEST_DOWN
+case (REQUEST_UP):
+#ifdef DEBUG_SERVICE_REQUEST_QUEUE
+if (debug_mode) {
+  debug.print(F("REQUEST_UP\n"));
+}
+#endif // DEBUG_SERVICE_REQUEST_QUEUE
+#ifdef FEATURE_PARK
+deactivate_park();
+#endif // FEATURE_PARK
+if (((el_state == SLOW_START_DOWN) || (el_state == NORMAL_DOWN) || (el_state == SLOW_DOWN_DOWN) || (el_state == TIMED_SLOW_DOWN_DOWN)) && (el_slowstart_active)) {
+  el_state = INITIALIZE_DIR_CHANGE_TO_UP;
+  #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+  if (debug_mode) {
+    debug.print(F("service_request_queue: INITIALIZE_DIR_CHANGE_TO_UP\n"));
+  }
+  #endif // DEBUG_SERVICE_REQUEST_QUEUE
+} else {
+  if ((el_state != SLOW_START_UP) && (el_state != NORMAL_UP)) {
+    if (el_slowstart_active) {
+      el_state = INITIALIZE_SLOW_START_UP;
+    } else { el_state = INITIALIZE_NORMAL_UP; };
+  }
+}
+el_request_queue_state = NONE;
+el_last_rotate_initiation = millis();
+#ifdef DEBUG_SERVICE_REQUEST_QUEUE
+if (debug_mode) {
+  control_port->println();
+}
+#endif // DEBUG_SERVICE_REQUEST_QUEUE
+break; // REQUEST_UP
 
-      case (REQUEST_STOP):
-        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-        if (debug_mode) {
-          debug.print(F("REQUEST_STOP\n"));
-        }
-        #endif // DEBUG_SERVICE_REQUEST_QUEUE
-        #ifdef FEATURE_PARK
-          deactivate_park();
-        #endif // FEATURE_PARK
-        if (el_state != IDLE) {
-          if (el_slowdown_active) {
-            if ((el_state == TIMED_SLOW_DOWN_UP) || (el_state == TIMED_SLOW_DOWN_DOWN) || (el_state == SLOW_DOWN_UP) || (el_state == SLOW_DOWN_DOWN)) {  // if we're already in timed slow down and we get another stop, do a hard stop
-              rotator(DEACTIVATE, UP);
-              rotator(DEACTIVATE, DOWN);
-              el_state = IDLE;
-              el_request_queue_state = NONE;
-            }
-            if ((el_state == SLOW_START_UP) || (el_state == NORMAL_UP)) {
-              el_state = INITIALIZE_TIMED_SLOW_DOWN_UP;
-              el_request_queue_state = IN_PROGRESS_TIMED;
-              el_last_rotate_initiation = millis();
-            }
-            if ((el_state == SLOW_START_DOWN) || (el_state == NORMAL_DOWN)) {
-              el_state = INITIALIZE_TIMED_SLOW_DOWN_DOWN;
-              el_request_queue_state = IN_PROGRESS_TIMED;
-              el_last_rotate_initiation = millis();
-            }
-          } else {
-            rotator(DEACTIVATE, UP);
-            rotator(DEACTIVATE, DOWN);
-            el_state = IDLE;
-            el_request_queue_state = NONE;
-          }
-        } else {
-          el_request_queue_state = NONE; // nothing to do, we're already in IDLE state
-        }
-        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-        if (debug_mode) {
-          control_port->println();
-        }
-        #endif // DEBUG_SERVICE_REQUEST_QUEUE
-        break; // REQUEST_STOP
+case (REQUEST_DOWN):
+#ifdef DEBUG_SERVICE_REQUEST_QUEUE
+if (debug_mode) {
+  debug.print(F("REQUEST_DOWN\n"));
+}
+#endif // DEBUG_SERVICE_REQUEST_QUEUE
+#ifdef FEATURE_PARK
+deactivate_park();
+#endif // FEATURE_PARK
+if (((el_state == SLOW_START_UP) || (el_state == NORMAL_UP) || (el_state == SLOW_DOWN_UP) || (el_state == TIMED_SLOW_DOWN_UP)) && (el_slowstart_active)) {
+  el_state = INITIALIZE_DIR_CHANGE_TO_DOWN;
+  #ifdef DEBUG_SERVICE_REQUEST_QUEUE
+  if (debug_mode) {
+    debug.print(F("service_request_queue: INITIALIZE_DIR_CHANGE_TO_DOWN\n"));
+  }
+  #endif // DEBUG_SERVICE_REQUEST_QUEUE
+} else {
+  if ((el_state != SLOW_START_DOWN) && (el_state != NORMAL_DOWN)) {
+    if (el_slowstart_active) {
+      el_state = INITIALIZE_SLOW_START_DOWN;
+    } else { el_state = INITIALIZE_NORMAL_DOWN; };
+  }
+}
+el_request_queue_state = NONE;
+el_last_rotate_initiation = millis();
+#ifdef DEBUG_SERVICE_REQUEST_QUEUE
+if (debug_mode) {
+  control_port->println();
+}
+#endif // DEBUG_SERVICE_REQUEST_QUEUE
+break; // REQUEST_DOWN
 
-      case (REQUEST_KILL):
-        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-        if (debug_mode) {
-          debug.print(F("REQUEST_KILL\n"));
-        }
-        #endif // DEBUG_SERVICE_REQUEST_QUEUE
-        #ifdef FEATURE_PARK
-          deactivate_park();
-        #endif // FEATURE_PARK
-        rotator(DEACTIVATE, UP);
-        rotator(DEACTIVATE, DOWN);
-        el_state = IDLE;
-        el_request_queue_state = NONE;
-        #ifdef DEBUG_SERVICE_REQUEST_QUEUE
-        if (debug_mode) {
-          control_port->println();
-        }
-        #endif // DEBUG_SERVICE_REQUEST_QUEUE
-        break; // REQUEST_KILL
-    } /* switch */
+case (REQUEST_STOP):
+#ifdef DEBUG_SERVICE_REQUEST_QUEUE
+if (debug_mode) {
+  debug.print(F("REQUEST_STOP\n"));
+}
+#endif // DEBUG_SERVICE_REQUEST_QUEUE
+#ifdef FEATURE_PARK
+deactivate_park();
+#endif // FEATURE_PARK
+if (el_state != IDLE) {
+  if (el_slowdown_active) {
+    if ((el_state == TIMED_SLOW_DOWN_UP) || (el_state == TIMED_SLOW_DOWN_DOWN) || (el_state == SLOW_DOWN_UP) || (el_state == SLOW_DOWN_DOWN)) {  // if we're already in timed slow down and we get another stop, do a hard stop
+    rotator(DEACTIVATE, UP);
+    rotator(DEACTIVATE, DOWN);
+    el_state = IDLE;
+    el_request_queue_state = NONE;
+  }
+  if ((el_state == SLOW_START_UP) || (el_state == NORMAL_UP)) {
+    el_state = INITIALIZE_TIMED_SLOW_DOWN_UP;
+    el_request_queue_state = IN_PROGRESS_TIMED;
+    el_last_rotate_initiation = millis();
+  }
+  if ((el_state == SLOW_START_DOWN) || (el_state == NORMAL_DOWN)) {
+    el_state = INITIALIZE_TIMED_SLOW_DOWN_DOWN;
+    el_request_queue_state = IN_PROGRESS_TIMED;
+    el_last_rotate_initiation = millis();
+  }
+} else {
+  rotator(DEACTIVATE, UP);
+  rotator(DEACTIVATE, DOWN);
+  el_state = IDLE;
+  el_request_queue_state = NONE;
+}
+} else {
+  el_request_queue_state = NONE; // nothing to do, we're already in IDLE state
+}
+#ifdef DEBUG_SERVICE_REQUEST_QUEUE
+if (debug_mode) {
+  control_port->println();
+}
+#endif // DEBUG_SERVICE_REQUEST_QUEUE
+break; // REQUEST_STOP
 
-    #ifdef FEATURE_LCD_DISPLAY
-    if (el_request_queue_state != IN_QUEUE) {push_lcd_update = 1;}
-    #endif //FEATURE_LCD_DISPLAY
+case (REQUEST_KILL):
+#ifdef DEBUG_SERVICE_REQUEST_QUEUE
+if (debug_mode) {
+  debug.print(F("REQUEST_KILL\n"));
+}
+#endif // DEBUG_SERVICE_REQUEST_QUEUE
+#ifdef FEATURE_PARK
+deactivate_park();
+#endif // FEATURE_PARK
+rotator(DEACTIVATE, UP);
+rotator(DEACTIVATE, DOWN);
+el_state = IDLE;
+el_request_queue_state = NONE;
+#ifdef DEBUG_SERVICE_REQUEST_QUEUE
+if (debug_mode) {
+  control_port->println();
+}
+#endif // DEBUG_SERVICE_REQUEST_QUEUE
+break; // REQUEST_KILL
+} /* switch */
 
-  } // (el_request_queue_state == IN_QUEUE)
-  #endif // FEATURE_ELEVATION_CONTROL
+#ifdef FEATURE_LCD_DISPLAY
+if (el_request_queue_state != IN_QUEUE) {push_lcd_update = 1;}
+#endif //FEATURE_LCD_DISPLAY
+
+} // (el_request_queue_state == IN_QUEUE)
+#endif // FEATURE_ELEVATION_CONTROL
 
 
 } /* service_request_queue */
 
 
 void service_rotation() {
-
-  static byte az_direction_change_flag = 0;
-  static byte az_initial_slow_down_voltage = 0;
-
-  static byte el_direction_change_flag = 0;
-  static byte el_initial_slow_down_voltage = 0;
 
   if (az_state == INITIALIZE_NORMAL_CW) {
     update_az_variable_outputs(normal_az_speed_voltage);
@@ -2691,455 +2673,89 @@ void service_rotation() {
     az_state = NORMAL_CCW;
   }
 
-  if (az_state == INITIALIZE_SLOW_START_CW) {
-    update_az_variable_outputs(AZ_SLOW_START_STARTING_PWM);
-    rotator(ACTIVATE, CW);
-    az_slowstart_start_time = millis();
-    az_last_step_time = 0;
-    az_slow_start_step = 0;
-    az_state = SLOW_START_CW;
-    #ifdef DEBUG_SERVICE_ROTATION
-    debug.print("service_rotation: INITIALIZE_SLOW_START_CW -> SLOW_START_CW");
-    #endif // DEBUG_SERVICE_ROTATION
-  }
-
-  if (az_state == INITIALIZE_SLOW_START_CCW) {
-    update_az_variable_outputs(AZ_SLOW_START_STARTING_PWM);
-    rotator(ACTIVATE, CCW);
-    az_slowstart_start_time = millis();
-    az_last_step_time = 0;
-    az_slow_start_step = 0;
-    az_state = SLOW_START_CCW;
-    #ifdef DEBUG_SERVICE_ROTATION
-    debug.print("service_rotation: INITIALIZE_SLOW_START_CCW -> SLOW_START_CCW");
-    #endif // DEBUG_SERVICE_ROTATION
-  }
-
-  if (az_state == INITIALIZE_TIMED_SLOW_DOWN_CW) {
-    az_direction_change_flag = 0;
-    az_timed_slow_down_start_time = millis();
-    az_last_step_time = millis();
-    az_slow_down_step = AZ_SLOW_DOWN_STEPS - 1;
-    az_state = TIMED_SLOW_DOWN_CW;
-  }
-
-  if (az_state == INITIALIZE_TIMED_SLOW_DOWN_CCW) {
-    az_direction_change_flag = 0;
-    az_timed_slow_down_start_time = millis();
-    az_last_step_time = millis();
-    az_slow_down_step = AZ_SLOW_DOWN_STEPS - 1;
-    az_state = TIMED_SLOW_DOWN_CCW;
-  }
-
-  if (az_state == INITIALIZE_DIR_CHANGE_TO_CW) {
-    az_direction_change_flag = 1;
-    az_timed_slow_down_start_time = millis();
-    az_last_step_time = millis();
-    az_slow_down_step = AZ_SLOW_DOWN_STEPS - 1;
-    az_state = TIMED_SLOW_DOWN_CCW;
-  }
-
-  if (az_state == INITIALIZE_DIR_CHANGE_TO_CCW) {
-    az_direction_change_flag = 1;
-    az_timed_slow_down_start_time = millis();
-    az_last_step_time = millis();
-    az_slow_down_step = AZ_SLOW_DOWN_STEPS - 1;
-    az_state = TIMED_SLOW_DOWN_CW;
-  }
-
-  if ((az_state == SLOW_START_CW) || (az_state == SLOW_START_CCW)) {
-    if ((millis() - az_slowstart_start_time) >= AZ_SLOW_START_UP_TIME) {  // is it time to end slow start?
-      #ifdef DEBUG_SERVICE_ROTATION
-      debug.print("service_rotation: NORMAL_C");
-      #endif // DEBUG_SERVICE_ROTATION
-      if (az_state == SLOW_START_CW) {
-        az_state = NORMAL_CW;
-        #ifdef DEBUG_SERVICE_ROTATION
-        debug.print("W");
-        #endif // DEBUG_SERVICE_ROTATION
-      } else {
-        az_state = NORMAL_CCW;
-        #ifdef DEBUG_SERVICE_ROTATION
-        debug.print("CW");
-        #endif // DEBUG_SERVICE_ROTATION
-      }
-      update_az_variable_outputs(normal_az_speed_voltage);
-    } else {  // it's not time to end slow start yet, but let's check if it's time to step up the speed voltage
-    if (((millis() - az_last_step_time) > (AZ_SLOW_START_UP_TIME / AZ_SLOW_START_STEPS)) && (normal_az_speed_voltage > AZ_SLOW_START_STARTING_PWM)) {
-      #ifdef DEBUG_SERVICE_ROTATION
-      debug.print("service_rotation: step up: ");
-      debug.print(az_slow_start_step);
-      debug.print(" pwm: ");
-      debug.print((int)(AZ_SLOW_START_STARTING_PWM + ((normal_az_speed_voltage - AZ_SLOW_START_STARTING_PWM) * ((float)az_slow_start_step / (float)(AZ_SLOW_START_STEPS - 1)))));
-      debug.println("");
-      #endif // DEBUG_SERVICE_ROTATION
-      update_az_variable_outputs((AZ_SLOW_START_STARTING_PWM + ((normal_az_speed_voltage - AZ_SLOW_START_STARTING_PWM) * ((float)az_slow_start_step / (float)(AZ_SLOW_START_STEPS - 1)))));
-      az_last_step_time = millis();
-      az_slow_start_step++;
-    }
-  }
-} // ((az_state == SLOW_START_CW) || (az_state == SLOW_START_CCW))
-
-if (((az_state == TIMED_SLOW_DOWN_CW) || (az_state == TIMED_SLOW_DOWN_CCW)) && ((millis() - az_last_step_time) >= (TIMED_SLOW_DOWN_TIME / AZ_SLOW_DOWN_STEPS))) {
-  #ifdef DEBUG_SERVICE_ROTATION
-  debug.print("service_rotation: TIMED_SLOW_DOWN step down: ");
-  debug.print(az_slow_down_step);
-  debug.print(" pwm: ");
-  debug.print((int)(normal_az_speed_voltage * ((float)az_slow_down_step / (float)AZ_SLOW_DOWN_STEPS)));
-  debug.println("");
-  #endif // DEBUG_SERVICE_ROTATION
-
-  update_az_variable_outputs((int)(current_az_speed_voltage * ((float)az_slow_down_step / (float)AZ_SLOW_DOWN_STEPS)));
-  az_last_step_time = millis();
-  if (az_slow_down_step > 0) {az_slow_down_step--;}
-
-  if (az_slow_down_step == 0) { // is it time to exit timed slow down?
-    #ifdef DEBUG_SERVICE_ROTATION
-    debug.print("service_rotation: TIMED_SLOW_DOWN->IDLE");
-    #endif // DEBUG_SERVICE_ROTATION
-    rotator(DEACTIVATE, CW);
-    rotator(DEACTIVATE, CCW);
-    if (az_direction_change_flag) {
-      if (az_state == TIMED_SLOW_DOWN_CW) {
-        //rotator(ACTIVATE, CCW);
-        if (az_slowstart_active) {
-          az_state = INITIALIZE_SLOW_START_CCW;
-        } else { az_state = NORMAL_CCW; };
-        az_direction_change_flag = 0;
-      }
-      if (az_state == TIMED_SLOW_DOWN_CCW) {
-        //rotator(ACTIVATE, CW);
-        if (az_slowstart_active) {
-          az_state = INITIALIZE_SLOW_START_CW;
-        } else { az_state = NORMAL_CW; };
-        az_direction_change_flag = 0;
-      }
-    } else {
-      az_state = IDLE;
-      az_request_queue_state = NONE;
-    }
-  }
-}  // ((az_state == TIMED_SLOW_DOWN_CW) || (az_state == TIMED_SLOW_DOWN_CCW))
-
-if ((az_state == SLOW_DOWN_CW) || (az_state == SLOW_DOWN_CCW)) {
-  // is it time to do another step down?
-  if (abs((target_raw_azimuth - raw_azimuth) / HEADING_MULTIPLIER) <= (((float)SLOW_DOWN_BEFORE_TARGET_AZ * ((float)az_slow_down_step / (float)AZ_SLOW_DOWN_STEPS)))) {
-    #ifdef DEBUG_SERVICE_ROTATION
-    debug.print("service_rotation: step down: ");
-    debug.print(az_slow_down_step);
-    debug.print(" pwm: ");
-    debug.print((int)(AZ_SLOW_DOWN_PWM_STOP + ((az_initial_slow_down_voltage - AZ_SLOW_DOWN_PWM_STOP) * ((float)az_slow_down_step / (float)AZ_SLOW_DOWN_STEPS))));
-    debug.println("");
-    #endif // DEBUG_SERVICE_ROTATION
-    update_az_variable_outputs((AZ_SLOW_DOWN_PWM_STOP + ((az_initial_slow_down_voltage - AZ_SLOW_DOWN_PWM_STOP) * ((float)az_slow_down_step / (float)AZ_SLOW_DOWN_STEPS))));
-    if (az_slow_down_step > 0) {
-      az_slow_down_step--;
-    }
-  }
-}  // ((az_state == SLOW_DOWN_CW) || (az_state == SLOW_DOWN_CCW))
-
-if (((az_state == NORMAL_CW) || (az_state == SLOW_START_CW) || (az_state == NORMAL_CCW) || (az_state == SLOW_START_CCW)) &&
-(az_request_queue_state == IN_PROGRESS_TO_TARGET) && az_slowdown_active && (abs((target_raw_azimuth - raw_azimuth) / HEADING_MULTIPLIER) <= SLOW_DOWN_BEFORE_TARGET_AZ)) {
-
-  byte az_state_was = az_state;
-
-  #ifdef DEBUG_SERVICE_ROTATION
-  debug.print("service_rotation: SLOW_DOWN_C");
-  #endif // DEBUG_SERVICE_ROTATION
-  az_slow_down_step = AZ_SLOW_DOWN_STEPS - 1;
-  if ((az_state == NORMAL_CW) || (az_state == SLOW_START_CW)) {
-    az_state = SLOW_DOWN_CW;
-    #ifdef DEBUG_SERVICE_ROTATION
-    debug.print("W");
-    #endif // DEBUG_SERVICE_ROTATION
-  } else {
-    az_state = SLOW_DOWN_CCW;
-    #ifdef DEBUG_SERVICE_ROTATION
-    debug.print("CW");
-    #endif // DEBUG_SERVICE_ROTATION
-  }
-
-  if ((az_state_was == SLOW_START_CW) || (az_state_was == SLOW_START_CCW)){
-    az_initial_slow_down_voltage = (AZ_INITIALLY_IN_SLOW_DOWN_PWM);
-    update_az_variable_outputs(az_initial_slow_down_voltage);
-    #ifdef DEBUG_SERVICE_ROTATION
-    debug.print(" SLOW_START -> SLOW_DOWN az_initial_slow_down_voltage:");
-    debug.print(az_initial_slow_down_voltage);
-    debug.print(" ");
-    #endif // DEBUG_SERVICE_ROTATION
-  } else {
-    if (AZ_SLOW_DOWN_PWM_START < current_az_speed_voltage) {
-      update_az_variable_outputs(AZ_SLOW_DOWN_PWM_START);
-      az_initial_slow_down_voltage = AZ_SLOW_DOWN_PWM_START;
-    } else {
-      az_initial_slow_down_voltage = current_az_speed_voltage;
-    }
-  }
-}
-
-if ((az_state != IDLE) && (az_request_queue_state == IN_PROGRESS_TO_TARGET) ) {
-  if ((az_state == NORMAL_CW) || (az_state == SLOW_START_CW) || (az_state == SLOW_DOWN_CW)) {
-    if ((abs(raw_azimuth - target_raw_azimuth) < (AZIMUTH_TOLERANCE * HEADING_MULTIPLIER)) || ((raw_azimuth > target_raw_azimuth) && ((raw_azimuth - target_raw_azimuth) < ((AZIMUTH_TOLERANCE + 5) * HEADING_MULTIPLIER)))) {
-      delay(50);
-      read_azimuth(0);
+  if ((az_state != IDLE) && (az_request_queue_state == IN_PROGRESS_TO_TARGET) ) {
+    read_azimuth(0);
+    if (az_state == NORMAL_CW) {
       if ((abs(raw_azimuth - target_raw_azimuth) < (AZIMUTH_TOLERANCE * HEADING_MULTIPLIER)) || ((raw_azimuth > target_raw_azimuth) && ((raw_azimuth - target_raw_azimuth) < ((AZIMUTH_TOLERANCE + 5) * HEADING_MULTIPLIER)))) {
-        rotator(DEACTIVATE, CW);
-        rotator(DEACTIVATE, CCW);
-        az_state = IDLE;
-        az_request_queue_state = NONE;
-        #ifdef DEBUG_SERVICE_ROTATION
-        debug.print("service_rotation: IDLE");
-        #endif // DEBUG_SERVICE_ROTATION
+        delay(50);
+        read_azimuth(0);
+        if ((abs(raw_azimuth - target_raw_azimuth) < (AZIMUTH_TOLERANCE * HEADING_MULTIPLIER)) || ((raw_azimuth > target_raw_azimuth) && ((raw_azimuth - target_raw_azimuth) < ((AZIMUTH_TOLERANCE + 5) * HEADING_MULTIPLIER)))) {
+          rotator(DEACTIVATE, CW);
+          rotator(DEACTIVATE, CCW);
+          az_state = IDLE;
+          az_request_queue_state = NONE;
+          #ifdef DEBUG_SERVICE_ROTATION
+          debug.print("service_rotation: IDLE");
+          #endif // DEBUG_SERVICE_ROTATION
+        }
       }
-    }
-  } else {
-    if ((abs(raw_azimuth - target_raw_azimuth) < (AZIMUTH_TOLERANCE * HEADING_MULTIPLIER)) || ((raw_azimuth < target_raw_azimuth) && ((target_raw_azimuth - raw_azimuth) < ((AZIMUTH_TOLERANCE + 5) * HEADING_MULTIPLIER)))) {
-      delay(50);
+    } else {
       read_azimuth(0);
       if ((abs(raw_azimuth - target_raw_azimuth) < (AZIMUTH_TOLERANCE * HEADING_MULTIPLIER)) || ((raw_azimuth < target_raw_azimuth) && ((target_raw_azimuth - raw_azimuth) < ((AZIMUTH_TOLERANCE + 5) * HEADING_MULTIPLIER)))) {
-        rotator(DEACTIVATE, CW);
-        rotator(DEACTIVATE, CCW);
-        az_state = IDLE;
-        az_request_queue_state = NONE;
-        #ifdef DEBUG_SERVICE_ROTATION
-        debug.print("service_rotation: IDLE");
-        #endif // DEBUG_SERVICE_ROTATION
+        delay(50);
+        read_azimuth(0);
+        if ((abs(raw_azimuth - target_raw_azimuth) < (AZIMUTH_TOLERANCE * HEADING_MULTIPLIER)) || ((raw_azimuth < target_raw_azimuth) && ((target_raw_azimuth - raw_azimuth) < ((AZIMUTH_TOLERANCE + 5) * HEADING_MULTIPLIER)))) {
+          rotator(DEACTIVATE, CW);
+          rotator(DEACTIVATE, CCW);
+          az_state = IDLE;
+          az_request_queue_state = NONE;
+          #ifdef DEBUG_SERVICE_ROTATION
+          debug.print("service_rotation: IDLE");
+          #endif // DEBUG_SERVICE_ROTATION
+        }
       }
     }
   }
-}
 
-if (el_state == INITIALIZE_NORMAL_UP) {
-  update_el_variable_outputs(normal_el_speed_voltage);
-  rotator(ACTIVATE, UP);
-  el_state = NORMAL_UP;
-}
-
-if (el_state == INITIALIZE_NORMAL_DOWN) {
-  update_el_variable_outputs(normal_el_speed_voltage);
-  rotator(ACTIVATE, DOWN);
-  el_state = NORMAL_DOWN;
-}
-
-if (el_state == INITIALIZE_SLOW_START_UP) {
-  update_el_variable_outputs(EL_SLOW_START_STARTING_PWM);
-  rotator(ACTIVATE, UP);
-  el_slowstart_start_time = millis();
-  el_last_step_time = 0;
-  el_slow_start_step = 0;
-  el_state = SLOW_START_UP;
-  #ifdef DEBUG_SERVICE_ROTATION
-  debug.print("service_rotation: INITIALIZE_SLOW_START_UP -> SLOW_START_UP");
-  #endif // DEBUG_SERVICE_ROTATION
-}
-
-if (el_state == INITIALIZE_SLOW_START_DOWN) {
-  update_el_variable_outputs(EL_SLOW_START_STARTING_PWM);
-  rotator(ACTIVATE, DOWN);
-  el_slowstart_start_time = millis();
-  el_last_step_time = 0;
-  el_slow_start_step = 0;
-  el_state = SLOW_START_DOWN;
-  #ifdef DEBUG_SERVICE_ROTATION
-  debug.print("service_rotation: INITIALIZE_SLOW_START_DOWN -> SLOW_START_DOWN");
-  #endif // DEBUG_SERVICE_ROTATION
-}
-
-if (el_state == INITIALIZE_TIMED_SLOW_DOWN_UP) {
-  el_direction_change_flag = 0;
-  el_timed_slow_down_start_time = millis();
-  el_last_step_time = millis();
-  el_slow_down_step = EL_SLOW_DOWN_STEPS - 1;
-  el_state = TIMED_SLOW_DOWN_UP;
-}
-
-if (el_state == INITIALIZE_TIMED_SLOW_DOWN_DOWN) {
-  el_direction_change_flag = 0;
-  el_timed_slow_down_start_time = millis();
-  el_last_step_time = millis();
-  el_slow_down_step = EL_SLOW_DOWN_STEPS - 1;
-  el_state = TIMED_SLOW_DOWN_DOWN;
-}
-
-if (el_state == INITIALIZE_DIR_CHANGE_TO_UP) {
-  el_direction_change_flag = 1;
-  el_timed_slow_down_start_time = millis();
-  el_last_step_time = millis();
-  el_slow_down_step = EL_SLOW_DOWN_STEPS - 1;
-  el_state = TIMED_SLOW_DOWN_DOWN;
-}
-
-if (el_state == INITIALIZE_DIR_CHANGE_TO_DOWN) {
-  el_direction_change_flag = 1;
-  el_timed_slow_down_start_time = millis();
-  el_last_step_time = millis();
-  el_slow_down_step = EL_SLOW_DOWN_STEPS - 1;
-  el_state = TIMED_SLOW_DOWN_UP;
-}
-
-if ((el_state == SLOW_START_UP) || (el_state == SLOW_START_DOWN)) {
-  if ((millis() - el_slowstart_start_time) >= EL_SLOW_START_UP_TIME) {  // is it time to end slow start?
-    #ifdef DEBUG_SERVICE_ROTATION
-    debug.print("service_rotation: NORMAL_");
-    #endif // DEBUG_SERVICE_ROTATION
-    if (el_state == SLOW_START_UP) {
-      el_state = NORMAL_UP;
-      #ifdef DEBUG_SERVICE_ROTATION
-      debug.print("UP");
-      #endif // DEBUG_SERVICE_ROTATION
-    } else {
-      el_state = NORMAL_DOWN;
-      #ifdef DEBUG_SERVICE_ROTATION
-      debug.print("DOWN");
-      #endif // DEBUG_SERVICE_ROTATION
-    }
+  if (el_state == INITIALIZE_NORMAL_UP) {
     update_el_variable_outputs(normal_el_speed_voltage);
-  } else {  // it's not time to end slow start yet, but let's check if it's time to step up the speed voltage
-  if (((millis() - el_last_step_time) > (EL_SLOW_START_UP_TIME / EL_SLOW_START_STEPS)) && (normal_el_speed_voltage > EL_SLOW_START_STARTING_PWM)) {
-    #ifdef DEBUG_SERVICE_ROTATION
-    debug.print("service_rotation: step up: ");
-    debug.print(el_slow_start_step);
-    debug.print(" pwm: ");
-    debug.print((int)(EL_SLOW_START_STARTING_PWM + ((normal_el_speed_voltage - EL_SLOW_START_STARTING_PWM) * ((float)el_slow_start_step / (float)(EL_SLOW_START_STEPS - 1)))));
-    debug.println("");
-    #endif // DEBUG_SERVICE_ROTATION
-    update_el_variable_outputs((EL_SLOW_START_STARTING_PWM + ((normal_el_speed_voltage - EL_SLOW_START_STARTING_PWM) * ((float)el_slow_start_step / (float)(EL_SLOW_START_STEPS - 1)))));
-    el_last_step_time = millis();
-    el_slow_start_step++;
-  }
-}
-} // ((el_state == SLOW_START_UP) || (el_state == SLOW_START_DOWN))
-
-if (((el_state == TIMED_SLOW_DOWN_UP) || (el_state == TIMED_SLOW_DOWN_DOWN)) && ((millis() - el_last_step_time) >= (TIMED_SLOW_DOWN_TIME / EL_SLOW_DOWN_STEPS))) {
-  #ifdef DEBUG_SERVICE_ROTATION
-  debug.print("service_rotation: TIMED_SLOW_DOWN step down: ");
-  debug.print(el_slow_down_step);
-  debug.print(" pwm: ");
-  debug.print((int)(normal_el_speed_voltage * ((float)el_slow_down_step / (float)EL_SLOW_DOWN_STEPS)));
-  debug.println("");
-  #endif // DEBUG_SERVICE_ROTATION
-  update_el_variable_outputs((int)(normal_el_speed_voltage * ((float)el_slow_down_step / (float)EL_SLOW_DOWN_STEPS)));
-  el_last_step_time = millis();
-  if (el_slow_down_step > 0) {el_slow_down_step--;}
-
-  if (el_slow_down_step == 0) { // is it time to exit timed slow down?
-    #ifdef DEBUG_SERVICE_ROTATION
-    debug.print("service_rotation: TIMED_SLOW_DOWN->IDLE");
-    #endif // DEBUG_SERVICE_ROTATION
-    rotator(DEACTIVATE, UP);
-    rotator(DEACTIVATE, DOWN);
-    if (el_direction_change_flag) {
-      if (el_state == TIMED_SLOW_DOWN_UP) {
-        if (el_slowstart_active) {
-          el_state = INITIALIZE_SLOW_START_DOWN;
-        } else { el_state = NORMAL_DOWN; };
-        el_direction_change_flag = 0;
-      }
-      if (el_state == TIMED_SLOW_DOWN_DOWN) {
-        if (el_slowstart_active) {
-          el_state = INITIALIZE_SLOW_START_UP;
-        } else { el_state = NORMAL_UP; };
-        el_direction_change_flag = 0;
-      }
-    } else {
-      el_state = IDLE;
-      el_request_queue_state = NONE;
-    }
+    rotator(ACTIVATE, UP);
+    el_state = NORMAL_UP;
   }
 
-}  // ((el_state == TIMED_SLOW_DOWN_UP) || (el_state == TIMED_SLOW_DOWN_DOWN))
-
-if ((el_state == SLOW_DOWN_UP) || (el_state == SLOW_DOWN_DOWN)) {
-  // is it time to do another step down?
-  if (abs((target_elevation - elevation) / HEADING_MULTIPLIER) <= (((float)SLOW_DOWN_BEFORE_TARGET_EL * ((float)el_slow_down_step / (float)EL_SLOW_DOWN_STEPS)))) {
-    #ifdef DEBUG_SERVICE_ROTATION
-    debug.print("service_rotation: step down: ");
-    debug.print(el_slow_down_step);
-    debug.print(" pwm: ");
-    debug.print((int)(EL_SLOW_DOWN_PWM_STOP + ((el_initial_slow_down_voltage - EL_SLOW_DOWN_PWM_STOP) * ((float)el_slow_down_step / (float)EL_SLOW_DOWN_STEPS))));
-    debug.println("");
-    #endif // DEBUG_SERVICE_ROTATION
-    update_el_variable_outputs((EL_SLOW_DOWN_PWM_STOP + ((el_initial_slow_down_voltage - EL_SLOW_DOWN_PWM_STOP) * ((float)el_slow_down_step / (float)EL_SLOW_DOWN_STEPS))));
-    if (el_slow_down_step > 0) {el_slow_down_step--;}
-  }
-}  // ((el_state == SLOW_DOWN_UP) || (el_state == SLOW_DOWN_DOWN))
-
-if (((el_state == NORMAL_UP) || (el_state == SLOW_START_UP) || (el_state == NORMAL_DOWN) || (el_state == SLOW_START_DOWN)) &&
-(el_request_queue_state == IN_PROGRESS_TO_TARGET) && el_slowdown_active && (abs((target_elevation - elevation) / HEADING_MULTIPLIER) <= SLOW_DOWN_BEFORE_TARGET_EL)) {
-
-  byte el_state_was = el_state;
-
-  #ifdef DEBUG_SERVICE_ROTATION
-  debug.print("service_rotation: SLOW_DOWN_");
-  #endif // DEBUG_SERVICE_ROTATION
-  el_slow_down_step = EL_SLOW_DOWN_STEPS - 1;
-  if ((el_state == NORMAL_UP) || (el_state == SLOW_START_UP)) {
-    el_state = SLOW_DOWN_UP;
-    #ifdef DEBUG_SERVICE_ROTATION
-    debug.print("UP");
-    #endif // DEBUG_SERVICE_ROTATION
-  } else {
-    el_state = SLOW_DOWN_DOWN;
-    #ifdef DEBUG_SERVICE_ROTATION
-    debug.print("DOWN");
-    #endif // DEBUG_SERVICE_ROTATION
+  if (el_state == INITIALIZE_NORMAL_DOWN) {
+    update_el_variable_outputs(normal_el_speed_voltage);
+    rotator(ACTIVATE, DOWN);
+    el_state = NORMAL_DOWN;
   }
 
-  if ((el_state_was == SLOW_START_UP) || (el_state_was == SLOW_START_DOWN)){
-    el_initial_slow_down_voltage = EL_INITIALLY_IN_SLOW_DOWN_PWM;
-    update_el_variable_outputs(el_initial_slow_down_voltage);
-    #ifdef DEBUG_SERVICE_ROTATION
-    debug.print(" SLOW_START -> SLOW_DOWN el_initial_slow_down_voltage:");
-    debug.print(el_initial_slow_down_voltage);
-    debug.print(" ");
-    #endif // DEBUG_SERVICE_ROTATION
-  } else {
-    if (EL_SLOW_DOWN_PWM_START < current_el_speed_voltage) {
-      update_el_variable_outputs(EL_SLOW_DOWN_PWM_START);
-      el_initial_slow_down_voltage = EL_SLOW_DOWN_PWM_START;
-    } else {
-      el_initial_slow_down_voltage = current_el_speed_voltage;
-    }
-  }
-}
-
-if ((el_state != IDLE) && (el_request_queue_state == IN_PROGRESS_TO_TARGET) ) {
-  read_elevation(0);
-  if ((el_state == NORMAL_UP) || (el_state == SLOW_START_UP) || (el_state == SLOW_DOWN_UP)) {
-    if ((abs(elevation - target_elevation) < (ELEVATION_TOLERANCE * HEADING_MULTIPLIER)) || ((elevation > target_elevation) && ((elevation - target_elevation) < ((ELEVATION_TOLERANCE + 5) * HEADING_MULTIPLIER)))) {
-      #ifndef OPTION_NO_ELEVATION_CHECK_TARGET_DELAY
-      delay(50);
-      #endif //OPTION_NO_ELEVATION_CHECK_TARGET_DELAY
-      read_elevation(0);
-      if ((abs(elevation - target_elevation) < (ELEVATION_TOLERANCE * HEADING_MULTIPLIER)) || ((elevation > target_elevation) && ((elevation - target_elevation) < ((ELEVATION_TOLERANCE + 5) * HEADING_MULTIPLIER)))) {
-        rotator(DEACTIVATE, UP);
-        rotator(DEACTIVATE, DOWN);
-        el_state = IDLE;
-        el_request_queue_state = NONE;
-        #ifdef DEBUG_SERVICE_ROTATION
-        debug.print("service_rotation: IDLE");
-        #endif // DEBUG_SERVICE_ROTATION
-      }
-    }
-  } else {
+  if ((el_state != IDLE) && (el_request_queue_state == IN_PROGRESS_TO_TARGET) ) {
     read_elevation(0);
-    if ((abs(elevation - target_elevation) <= (ELEVATION_TOLERANCE * HEADING_MULTIPLIER)) || ((elevation < target_elevation) && ((target_elevation - elevation) < ((ELEVATION_TOLERANCE + 5) * HEADING_MULTIPLIER)))) {
-      #ifndef OPTION_NO_ELEVATION_CHECK_TARGET_DELAY
-      delay(50);
-      #endif //OPTION_NO_ELEVATION_CHECK_TARGET_DELAY
+    if (el_state == NORMAL_UP) {
+      if ((abs(elevation - target_elevation) < (ELEVATION_TOLERANCE * HEADING_MULTIPLIER)) || ((elevation > target_elevation) && ((elevation - target_elevation) < ((ELEVATION_TOLERANCE + 5) * HEADING_MULTIPLIER)))) {
+        #ifndef OPTION_NO_ELEVATION_CHECK_TARGET_DELAY
+        delay(50);
+        #endif //OPTION_NO_ELEVATION_CHECK_TARGET_DELAY
+        read_elevation(0);
+        if ((abs(elevation - target_elevation) < (ELEVATION_TOLERANCE * HEADING_MULTIPLIER)) || ((elevation > target_elevation) && ((elevation - target_elevation) < ((ELEVATION_TOLERANCE + 5) * HEADING_MULTIPLIER)))) {
+          rotator(DEACTIVATE, UP);
+          rotator(DEACTIVATE, DOWN);
+          el_state = IDLE;
+          el_request_queue_state = NONE;
+          #ifdef DEBUG_SERVICE_ROTATION
+          debug.print("service_rotation: IDLE");
+          #endif // DEBUG_SERVICE_ROTATION
+        }
+      }
+    } else {
       read_elevation(0);
       if ((abs(elevation - target_elevation) <= (ELEVATION_TOLERANCE * HEADING_MULTIPLIER)) || ((elevation < target_elevation) && ((target_elevation - elevation) < ((ELEVATION_TOLERANCE + 5) * HEADING_MULTIPLIER)))) {
-        rotator(DEACTIVATE, UP);
-        rotator(DEACTIVATE, DOWN);
-        el_state = IDLE;
-        el_request_queue_state = NONE;
-        #ifdef DEBUG_SERVICE_ROTATION
-        debug.print("service_rotation: IDLE");
-        #endif // DEBUG_SERVICE_ROTATION
+        #ifndef OPTION_NO_ELEVATION_CHECK_TARGET_DELAY
+        delay(50);
+        #endif //OPTION_NO_ELEVATION_CHECK_TARGET_DELAY
+        read_elevation(0);
+        if ((abs(elevation - target_elevation) <= (ELEVATION_TOLERANCE * HEADING_MULTIPLIER)) || ((elevation < target_elevation) && ((target_elevation - elevation) < ((ELEVATION_TOLERANCE + 5) * HEADING_MULTIPLIER)))) {
+          rotator(DEACTIVATE, UP);
+          rotator(DEACTIVATE, DOWN);
+          el_state = IDLE;
+          el_request_queue_state = NONE;
+          #ifdef DEBUG_SERVICE_ROTATION
+          debug.print("service_rotation: IDLE");
+          #endif // DEBUG_SERVICE_ROTATION
+        }
       }
     }
   }
-}
 
 } /* service_rotation */
 
