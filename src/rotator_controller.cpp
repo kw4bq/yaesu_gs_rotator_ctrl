@@ -2768,25 +2768,19 @@ void check_for_dirty_configuration() {
 } // check_for_dirty_configuration
 
 byte current_az_state() {
-
-  if ((az_state == SLOW_START_CW) || (az_state == NORMAL_CW) || (az_state == SLOW_DOWN_CW) || (az_state == TIMED_SLOW_DOWN_CW)) {
-    return ROTATING_CW;
+  switch (az_state) {
+    case NORMAL_CW: return ROTATING_CW; break;
+    case NORMAL_CCW: return ROTATING_CCW; break;
+    default: return NOT_DOING_ANYTHING; break;
   }
-  if ((az_state == SLOW_START_CCW) || (az_state == NORMAL_CCW) || (az_state == SLOW_DOWN_CCW) || (az_state == TIMED_SLOW_DOWN_CCW)) {
-    return ROTATING_CCW;
-  }
-  return NOT_DOING_ANYTHING;
-
 } // current_az_state
 
 byte current_el_state() {
-  if ((el_state == SLOW_START_UP) || (el_state == NORMAL_UP) || (el_state == SLOW_DOWN_UP) || (el_state == TIMED_SLOW_DOWN_UP)) {
-    return ROTATING_UP;
+  switch (az_state) {
+    case NORMAL_UP: return ROTATING_UP; break;
+    case NORMAL_DOWN: return ROTATING_DOWN; break;
+    default: return NOT_DOING_ANYTHING; break;
   }
-  if ((el_state == SLOW_START_DOWN) || (el_state == NORMAL_DOWN) || (el_state == SLOW_DOWN_DOWN) || (el_state == TIMED_SLOW_DOWN_DOWN)) {
-    return ROTATING_DOWN;
-  }
-  return NOT_DOING_ANYTHING;
 } // current_el_state
 
 byte get_analog_pin(byte pin_number) {
