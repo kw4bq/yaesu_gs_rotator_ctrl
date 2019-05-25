@@ -15,9 +15,9 @@
 // #define OPTION_C_COMMAND_SENDS_AZ_AND_EL   // uncomment this when using Yaesu emulation with Ham Radio Deluxe
 // #define OPTION_DELAY_C_CMD_OUTPUT          // uncomment this when using Yaesu emulation with Ham Radio Deluxe
 
-// #define FEATURE_AUTOCORRECT
-// #define FEATURE_AZIMUTH_CORRECTION        // correct the azimuth using a calibration table in rotator_settings.h
-// #define FEATURE_ELEVATION_CORRECTION      // correct the elevation using a calibration table in rotator_settings.h
+//#define FEATURE_AUTOCORRECT
+//#define FEATURE_AZIMUTH_CORRECTION        // correct the azimuth using a calibration table in rotator_settings.h
+//#define FEATURE_ELEVATION_CORRECTION      // correct the elevation using a calibration table in rotator_settings.h
 #define FEATURE_ONE_DECIMAL_PLACE_HEADINGS
 
 #define FEATURE_SUNFOUNDER_I2C_LCD
@@ -31,27 +31,25 @@
 
 // #define OPTION_BLINK_OVERLAP_LED
 
-#define DEFAULT_DEBUG_STATE 1 // 1 = activate debug mode at startup
+#define DEFAULT_DEBUG_STATE 0 // 1 = activate debug mode at startup
 
-#define DEBUG_DUMP
+//#define DEBUG_DUMP
 // #define DEBUG_LOOP
 // #define DEBUG_SERIAL
-#define DEBUG_SERVICE_REQUEST_QUEUE
-// #define DEBUG_EEPROM
-// #define DEBUG_AZ_SPEED_POT
-// #define DEBUG_AZ_PRESET_POT
+//#define DEBUG_SERVICE_REQUEST_QUEUE
+//#define DEBUG_EEPROM
 // #define DEBUG_BRAKE
-#define DEBUG_OVERLAP
+//#define DEBUG_OVERLAP
 // #define DEBUG_DISPLAY
 // #define DEBUG_AZ_CHECK_OPERATION_TIMEOUT
-#define DEBUG_TIMED_BUFFER
+//#define DEBUG_TIMED_BUFFER
 // #define DEBUG_EL_CHECK_OPERATION_TIMEOUT
 // #define DEBUG_VARIABLE_OUTPUTS
-#define DEBUG_ROTATOR
-#define DEBUG_SUBMIT_REQUEST
-#define DEBUG_SERVICE_ROTATION
+//#define DEBUG_ROTATOR
+//#define DEBUG_SUBMIT_REQUEST
+//#define DEBUG_SERVICE_ROTATION
 // #define DEBUG_HEADING_READING_TIME
 // #define DEBUG_ROTATION_INDICATION_PIN
-#define DEBUG_PARK
-#define DEBUG_PROCESS_YAESU
-#define DEBUG_AUTOCORRECT
+//#define DEBUG_PARK
+//#define DEBUG_PROCESS_YAESU
+//#define DEBUG_AUTOCORRECT

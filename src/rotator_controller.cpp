@@ -2,6 +2,8 @@
 
 void setup() {
   delay(1000);
+  //debug.print("*****INIT EEPROM*****\n");
+  //initialize_eeprom_with_defaults();
   initialize_serial();
   initialize_peripherals();
   read_settings_from_eeprom();
@@ -1128,7 +1130,7 @@ void initialize_eeprom_with_defaults() {
   configuration.last_el_incremental_encoder_position = 0;
   configuration.azimuth_offset = 0;
   configuration.elevation_offset = 0;
-  configuration.azimuth_starting_point = AZIMUTH_STARTING_POINT_DEFAULT;
+  configuration.azimuth_starting_point = 0; //AZIMUTH_STARTING_POINT_DEFAULT;
   configuration.azimuth_rotation_capability = AZIMUTH_ROTATION_CAPABILITY_DEFAULT;
   configuration.brake_az_disabled = 0; //(brake_az ? 1 : 0);
   configuration.clock_timezone_offset = 0;

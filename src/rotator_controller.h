@@ -34,7 +34,7 @@ int azimuth = 0;
 int raw_azimuth = 0;
 int target_azimuth = 0;
 int target_raw_azimuth = 0;
-int azimuth_starting_point = AZIMUTH_STARTING_POINT_DEFAULT;
+int azimuth_starting_point = 0; //AZIMUTH_STARTING_POINT_DEFAULT;
 int azimuth_rotation_capability = AZIMUTH_ROTATION_CAPABILITY_DEFAULT;
 
 byte control_port_buffer[COMMAND_BUFFER_SIZE];

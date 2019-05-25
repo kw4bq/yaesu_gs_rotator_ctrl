@@ -25,8 +25,8 @@ You can tweak these, but read the online documentation!
 */
 
 // analog voltage calibration - these are default values; you can either tweak these or set via the Yaesu O and F commands (and O2 and F2)....
-#define ANALOG_AZ_FULL_CCW 0
-#define ANALOG_AZ_FULL_CW 921
+#define ANALOG_AZ_FULL_CCW 3
+#define ANALOG_AZ_FULL_CW 923
 #define ANALOG_EL_0_DEGREES 4
 #define ANALOG_EL_MAX_ELEVATION 932  // maximum elevation is normally 180 degrees unless change below for ELEVATION_MAXIMUM_DEGREES
 
@@ -153,7 +153,7 @@ You can tweak these, but read the online documentation!
 #define BRAKE_ACTIVE_STATE HIGH
 #define BRAKE_INACTIVE_STATE LOW
 
-#define EEPROM_MAGIC_NUMBER 109
+#define EEPROM_MAGIC_NUMBER 110
 #define EEPROM_WRITE_DIRTY_CONFIG_TIME  30  //time in seconds
 
 
@@ -275,7 +275,7 @@ You can tweak these, but read the online documentation!
  */
 
  #define AZIMUTH_CALIBRATION_FROM_ARRAY {180,630}            /* these are in "raw" degrees, i.e. when going east past 360 degrees, add 360 degrees*/
- #define AZIMUTH_CALIBRATION_TO_ARRAY {0,450}
+ #define AZIMUTH_CALIBRATION_TO_ARRAY {167,617}
 
 // example: reverse rotation sensing
 //   #define AZIMUTH_CALIBRATION_FROM_ARRAY {0,359}
