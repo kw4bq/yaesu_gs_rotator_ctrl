@@ -43,10 +43,6 @@ void loop() {
 
   update_display();
 
-  check_az_speed_pot();
-
-  check_az_preset_potentiometer();
-
   output_debug();
 
   read_headings();
@@ -125,115 +121,13 @@ void check_for_reset_flag() {
 
 } // check_for_reset_flag
 
-void check_az_speed_pot() {
-
-  static unsigned long last_pot_check_time = 0;
-  int pot_read = 0;
-  byte new_azimuth_speed_voltage = 0;
-
-  if (az_speed_pot && ((millis() - last_pot_check_time) > 500)) {
-    pot_read = analogReadEnhanced(az_speed_pot);
-    new_azimuth_speed_voltage = map(pot_read, SPEED_POT_LOW, SPEED_POT_HIGH, SPEED_POT_LOW_MAP, SPEED_POT_HIGH_MAP);
-    if (new_azimuth_speed_voltage != normal_az_speed_voltage) {
-      #ifdef DEBUG_AZ_SPEED_POT
-      if (debug_mode) {
-        debug.print("check_az_speed_pot: normal_az_speed_voltage: ");
-        debug.print(normal_az_speed_voltage);
-        debug.print(" new_azimuth_speed_voltage:");
-        debug.print(new_azimuth_speed_voltage);
-        debug.println("");
-      }
-      #endif // DEBUG_AZ_SPEED_POT
-      normal_az_speed_voltage = new_azimuth_speed_voltage;
-      update_az_variable_outputs(normal_az_speed_voltage);
-      #if defined(OPTION_EL_SPEED_FOLLOWS_AZ_SPEED) && defined(FEATURE_ELEVATION_CONTROL)
-      normal_el_speed_voltage = new_azimuth_speed_voltage;
-      update_el_variable_outputs(normal_el_speed_voltage);
-      #endif // OPTION_EL_SPEED_FOLLOWS_AZ_SPEED
-    }
-    last_pot_check_time = millis();
-  }
-
-} // check_az_speed_pot
-
-void check_az_preset_potentiometer() {
-
-  byte check_pot = 0;
-  static unsigned long last_pot_check_time = 0;
-  static int last_pot_read = 9999;
-  int pot_read = 0;
-  int new_pot_azimuth = 0;
-  byte button_read = 0;
-  static byte pot_changed_waiting = 0;
-
-  if (az_preset_pot) {
-    if (last_pot_read == 9999) {  // initialize last_pot_read the first time we hit this subroutine
-      last_pot_read = analogReadEnhanced(az_preset_pot);
-    }
-
-    if (!pot_changed_waiting) {
-      if (preset_start_button) { // if we have a preset start button, check it
-        button_read = digitalReadEnhanced(preset_start_button);
-        if (button_read == BUTTON_ACTIVE_STATE) {
-          check_pot = 1;
-        }
-      } else {  // if not, check the pot every 500 mS
-        if ((millis() - last_pot_check_time) < 250) {
-          check_pot = 1;
-        }
-      }
-
-      if (check_pot) {
-        pot_read = analogReadEnhanced(az_preset_pot);
-        new_pot_azimuth = map(pot_read, AZ_PRESET_POT_FULL_CW, AZ_PRESET_POT_FULL_CCW, AZ_PRESET_POT_FULL_CW_MAP, AZ_PRESET_POT_FULL_CCW_MAP);
-        if ((abs(last_pot_read - pot_read) > 4) && (abs(new_pot_azimuth - (raw_azimuth / HEADING_MULTIPLIER)) > AZIMUTH_TOLERANCE)) {
-          pot_changed_waiting = 1;
-          #ifdef DEBUG_AZ_PRESET_POT
-          if (debug_mode) {
-            debug.println("check_az_preset_potentiometer: in pot_changed_waiting");
-          }
-          #endif // DEBUG_AZ_PRESET_POT
-          last_pot_read = pot_read;
-        }
-      }
-      last_pot_check_time = millis();
-    } else {  // we're in pot change mode
-    pot_read = analogReadEnhanced(az_preset_pot);
-    if (abs(pot_read - last_pot_read) > 3) {  // if the pot has changed, reset the timer
-      last_pot_check_time = millis();
-      last_pot_read = pot_read;
-    } else {
-      if ((millis() - last_pot_check_time) >= 250) {  // has it been awhile since the last pot change?
-        new_pot_azimuth = map(pot_read, AZ_PRESET_POT_FULL_CW, AZ_PRESET_POT_FULL_CCW, AZ_PRESET_POT_FULL_CW_MAP, AZ_PRESET_POT_FULL_CCW_MAP);
-        #ifdef DEBUG_AZ_PRESET_POT
-        if (debug_mode) {
-          debug.print("check_az_preset_potentiometer: pot change - current raw_azimuth: ");
-          debug.print(raw_azimuth / HEADING_MULTIPLIER,0);
-          debug.print(" new_azimuth: ");
-          debug.print(new_pot_azimuth);
-          debug.println("");
-        }
-        #endif // DEBUG_AZ_PRESET_POT
-        submit_request(AZ, REQUEST_AZIMUTH_RAW, new_pot_azimuth * HEADING_MULTIPLIER, 44);
-        pot_changed_waiting = 0;
-        last_pot_read = pot_read;
-        last_pot_check_time = millis();
-      }
-    }
-  }
-} // if (az_preset_pot)
-} // check_az_preset_potentiometer
-
 void check_brake_release() {
 
 
   static byte in_az_brake_release_delay = 0;
   static unsigned long az_brake_delay_start_time = 0;
-
-  #ifdef FEATURE_ELEVATION_CONTROL
   static byte in_el_brake_release_delay = 0;
   static unsigned long el_brake_delay_start_time = 0;
-  #endif // FEATURE_ELEVATION_CONTROL
 
   if ((az_state == IDLE) && (brake_az_engaged)) {
     if (in_az_brake_release_delay) {
@@ -249,7 +143,6 @@ void check_brake_release() {
 
   if ((az_state != IDLE) && (brake_az_engaged)) {in_az_brake_release_delay = 0;}
 
-  #ifdef FEATURE_ELEVATION_CONTROL
   if ((el_state == IDLE) && (brake_el_engaged)) {
     if (in_el_brake_release_delay) {
       if ((millis() - el_brake_delay_start_time) > EL_BRAKE_DELAY) {
@@ -263,7 +156,6 @@ void check_brake_release() {
   }
 
   if ((el_state != IDLE) && (brake_el_engaged)) {in_el_brake_release_delay = 0;}
-  #endif // FEATURE_ELEVATION_CONTROL
 
 } /* check_brake_release */
 
@@ -286,7 +178,6 @@ void brake_release(byte az_or_el, byte operation) {
       }
     }
   } else {
-    #ifdef FEATURE_ELEVATION_CONTROL
     if (brake_el) {
       if (operation == BRAKE_RELEASE_ON) {
         digitalWriteEnhanced(brake_el, BRAKE_ACTIVE_STATE);
@@ -302,7 +193,6 @@ void brake_release(byte az_or_el, byte operation) {
         #endif // DEBUG_BRAKE
       }
     }
-    #endif // FEATURE_ELEVATION_CONTROL
   }
 } // brake_release
 
@@ -316,7 +206,6 @@ void check_overlap() {
   #endif //OPTION_BLINK_OVERLAP_LED
 
   if ((overlap_led) && ((millis() - last_check_time) > 500)) {
-    // if ((analog_az > (500*HEADING_MULTIPLIER)) && (azimuth > (ANALOG_AZ_OVERLAP_DEGREES*HEADING_MULTIPLIER)) && (!overlap_led_status)) {
     if ((raw_azimuth > (ANALOG_AZ_OVERLAP_DEGREES * HEADING_MULTIPLIER)) && (!overlap_led_status)) {
       digitalWriteEnhanced(overlap_led, OVERLAP_LED_ACTIVE_STATE);
       overlap_led_status = 1;
@@ -328,7 +217,6 @@ void check_overlap() {
       debug.println("check_overlap: in overlap");
       #endif // DEBUG_OVERLAP
     } else {
-      // if (((analog_az < (500*HEADING_MULTIPLIER)) || (azimuth < (ANALOG_AZ_OVERLAP_DEGREES*HEADING_MULTIPLIER))) && (overlap_led_status)) {
       if ((raw_azimuth < (ANALOG_AZ_OVERLAP_DEGREES * HEADING_MULTIPLIER)) && (overlap_led_status)) {
         digitalWriteEnhanced(overlap_led, OVERLAP_LED_INACTIVE_STATE);
         overlap_led_status = 0;
@@ -1340,41 +1228,11 @@ void output_debug() {
     debug.print(CODE_VERSION);
     debug.print("\t\t");
 
-    #ifdef FEATURE_CLOCK
-    update_time();
-    if (configuration.clock_timezone_offset != 0){
-      sprintf(tempstring, "%s", timezone_modified_clock_string());
-      debug.print(tempstring);
-      debug.print("UTC");
-      if (configuration.clock_timezone_offset > 0){
-        debug.print("+");
-      }
-      if (configuration.clock_timezone_offset == int(configuration.clock_timezone_offset)){
-        debug.print(int(configuration.clock_timezone_offset));
-      } else {
-
-        debug.print(configuration.clock_timezone_offset);
-      }
-      debug.print("\t");
-      sprintf(tempstring, "%s", zulu_clock_string());
-      debug.print(tempstring);
-    } else {
-      sprintf(tempstring, "%s", zulu_clock_string());
-      debug.print(tempstring);
-    }
-    #else // FEATURE_CLOCK
-    dtostrf((millis() / 1000),0,0,tempstring);
-    debug.print(tempstring);
-    #endif // FEATURE_CLOCK
 
     debug.print("\t\t");
 
-    #ifdef FEATURE_YAESU_EMULATION
-    debug.print("GS-232");
-    #ifdef OPTION_GS_232B_EMULATION
-    debug.print("B");
-    #endif
-    #endif // FEATURE_YAESU_EMULATION
+    debug.print("GS-232B");
+
 
     debug.println("");
 

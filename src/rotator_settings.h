@@ -1,21 +1,21 @@
 
 /* -------------------------- rotation settings ---------------------------------------*/
 
-#define AZIMUTH_STARTING_POINT_DEFAULT 0      // the starting point in degrees of the azimuthal rotator - only used for initializing EEPROM the first time the code is run                                               
+#define AZIMUTH_STARTING_POINT_DEFAULT 0      // the starting point in degrees of the azimuthal rotator - only used for initializing EEPROM the first time the code is run
 #define AZIMUTH_ROTATION_CAPABILITY_DEFAULT 450 // the default rotation capability of the rotator in degrees - only used for initializing EEPROM the first time the code is run
 
-/* 
+/*
 
-  Use these commands to change the azimuth starting point and rotation capability if you have already ran the code one which would have 
+  Use these commands to change the azimuth starting point and rotation capability if you have already ran the code one which would have
   initialized the EEPROM:
 
             \Ix[x][x] - set az starting point
             \I - display the current az starting point
             \Jx[x][x] - set az rotation capability
             \J - display the current az rotation capability
-            \Q - Save settings in the EEPROM and restart            
-*/   
-                                                
+            \Q - Save settings in the EEPROM and restart
+*/
+
 #define ELEVATION_MAXIMUM_DEGREES 180           // change this to set the maximum elevation in degrees
 
 /* --------------------------- Settings ------------------------------------------------
@@ -25,16 +25,16 @@ You can tweak these, but read the online documentation!
 */
 
 // analog voltage calibration - these are default values; you can either tweak these or set via the Yaesu O and F commands (and O2 and F2)....
-#define ANALOG_AZ_FULL_CCW 4
-#define ANALOG_AZ_FULL_CW 1023
-#define ANALOG_EL_0_DEGREES 3
-#define ANALOG_EL_MAX_ELEVATION 1018  // maximum elevation is normally 180 degrees unless change below for ELEVATION_MAXIMUM_DEGREES
+#define ANALOG_AZ_FULL_CCW 0
+#define ANALOG_AZ_FULL_CW 921
+#define ANALOG_EL_0_DEGREES 4
+#define ANALOG_EL_MAX_ELEVATION 932  // maximum elevation is normally 180 degrees unless change below for ELEVATION_MAXIMUM_DEGREES
 
-#define ANALOG_AZ_OVERLAP_DEGREES 540         // if overlap_led above is enabled, turn on overlap led line if azimuth is greater than this setting
+#define ANALOG_AZ_OVERLAP_DEGREES 450         // if overlap_led above is enabled, turn on overlap led line if azimuth is greater than this setting
                                               // you must use raw azimuth (if the azimuth on the rotator crosses over to 0 degrees, add 360
                                               // for example, on a Yaesu 450 degree rotator with a starting point of 180 degrees, and an overlap LED
                                               // turning on when going CW and crossing 180, ANALOG_AZ_OVERLAP_DEGREES should be set for 540 (180 + 360)
-#define OPTION_OVERLAP_LED_BLINK_MS 100                                             
+#define OPTION_OVERLAP_LED_BLINK_MS 100
 
 // PWM speed voltage settings
 #define PWM_SPEED_VOLTAGE_X1  64         // 0 to 255
@@ -223,7 +223,7 @@ You can tweak these, but read the online documentation!
 #define MOON_AOS_ELEVATION_MIN 0
 #define MOON_AOS_ELEVATION_MAX 180
 
- 
+
 #define SUN_TRACKING_CHECK_INTERVAL 5000
 #define SUN_AOS_AZIMUTH_MIN 0
 #define SUN_AOS_AZIMUTH_MAX 360
@@ -266,14 +266,6 @@ You can tweak these, but read the online documentation!
 
 #define POWER_SWITCH_IDLE_TIMEOUT 15  // use with FEATURE_POWER_SWITCH; units are minutes
 
-#ifdef HARDWARE_EA4TX_ARS_USB
-#define BUTTON_ACTIVE_STATE HIGH
-#define BUTTON_INACTIVE_STATE LOW
-#else
-#define BUTTON_ACTIVE_STATE LOW
-#define BUTTON_INACTIVE_STATE HIGH
-#endif
-
 /*
  *
  * Azimuth and Elevation calibraton tables - use with FEATURE_AZIMUTH_CORRECTION and/or FEATURE_ELEVATION_CORRECTION
@@ -282,8 +274,8 @@ You can tweak these, but read the online documentation!
  *
  */
 
-#define AZIMUTH_CALIBRATION_FROM_ARRAY {0,450}            /* these are in "raw" degrees, i.e. when going east past 360 degrees, add 360 degrees*/
-#define AZIMUTH_CALIBRATION_TO_ARRAY {180,630}
+ #define AZIMUTH_CALIBRATION_FROM_ARRAY {180,630}            /* these are in "raw" degrees, i.e. when going east past 360 degrees, add 360 degrees*/
+ #define AZIMUTH_CALIBRATION_TO_ARRAY {0,450}
 
 // example: reverse rotation sensing
 //   #define AZIMUTH_CALIBRATION_FROM_ARRAY {0,359}
@@ -325,7 +317,7 @@ You can tweak these, but read the online documentation!
 #define AUTOCORRECT_TIME_MS_EL 1000
 
 #define PIN_LED_ACTIVE_STATE HIGH
-#define PIN_LED_INACTIVE_STATE LOW   
+#define PIN_LED_INACTIVE_STATE LOW
 
 #define AUDIBLE_ALERT_TYPE 1   // 1 = Logic high/low (set AUDIBLE_PIN_ACTIVE_STATE and AUDIBLE_PIN_INACTIVE_STATE below, 2 = tone (set AUDIBLE_PIN_TONE_FREQ below)
 #define AUDIBLE_ALERT_DURATION_MS 250
@@ -337,10 +329,8 @@ You can tweak these, but read the online documentation!
 #define AUDIBLE_ALERT_AT_EL_TARGET 1
 
 #define OVERLAP_LED_ACTIVE_STATE HIGH
-#define OVERLAP_LED_INACTIVE_STATE LOW  
+#define OVERLAP_LED_INACTIVE_STATE LOW
 
-#define PRESET_ENCODER_CHANGE_TIME_MS 2000 
+#define PRESET_ENCODER_CHANGE_TIME_MS 2000
 
 //#define SET_I2C_BUS_SPEED 800000L // Can set up to 800 kHz, depending on devices.  800000L = 800 khz, 400000L = 400 khz.  Default is 100 khz
-
-  

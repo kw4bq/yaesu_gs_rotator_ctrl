@@ -157,8 +157,6 @@ K3NGdisplay k3ngdisplay(LCD_COLUMNS, LCD_ROWS, LCD_UPDATE_TIME);
 void read_headings();
 void service_blink_led();
 void check_for_reset_flag();
-void check_az_speed_pot();
-void check_az_preset_potentiometer();
 void check_brake_release();
 void brake_release(byte az_or_el, byte operation);
 void check_overlap();

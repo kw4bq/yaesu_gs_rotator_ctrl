@@ -33,7 +33,7 @@
 
 #define DEFAULT_DEBUG_STATE 1 // 1 = activate debug mode at startup
 
-// #define DEBUG_DUMP
+#define DEBUG_DUMP
 // #define DEBUG_LOOP
 // #define DEBUG_SERIAL
 #define DEBUG_SERVICE_REQUEST_QUEUE
@@ -54,4 +54,4 @@
 // #define DEBUG_ROTATION_INDICATION_PIN
 #define DEBUG_PARK
 #define DEBUG_PROCESS_YAESU
-// #define DEBUG_AUTOCORRECT
+#define DEBUG_AUTOCORRECT
