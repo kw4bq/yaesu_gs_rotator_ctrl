@@ -369,11 +369,8 @@ void check_serial() {
   #endif // DEBUG_LOOP
 
   static unsigned long serial_led_time = 0;
-  float tempfloat = 0;
   char return_string[100] = "";
 
-  long place_multiplier = 0;
-  byte decimalplace = 0;
 
   #if defined(CONTROL_PROTOCOL_EMULATION)
 
@@ -2658,7 +2655,7 @@ break; // REQUEST_AZIMUTH_RAW
       push_lcd_update = 1;
     }
   }
-  
+
 } /* service_request_queue */
 
 
@@ -2880,7 +2877,6 @@ void clear_serial_buffer() {
 byte process_backslash_command(byte input_buffer[], int input_buffer_index, byte source_port, char * return_string) {
 
   strcpy(return_string,"");
-  static unsigned long serial_led_time = 0;
   float tempfloat = 0;
   float heading = 0;
   long place_multiplier = 0;
