@@ -2,16 +2,10 @@
 #ifndef _ROTATOR_DEBUG_h
 #define _ROTATOR_DEBUG_h
 
-#if defined(ARDUINO) && ARDUINO >= 100
-	#include "Arduino.h"
-#else
-	#include "WProgram.h"
-#endif
+#include "Arduino.h"
 
 #include "rotator.h"
 #include "rotator_features.h"
-
-#define SERIAL_PORT_CLASS HardwareSerial
 
 class DebugClass
 {
@@ -36,6 +30,6 @@ class DebugClass
 };
 
 extern uint8_t debug_mode;
-extern SERIAL_PORT_CLASS * control_port;
+extern HardwareSerial * control_port;
 
 #endif //_ROTATOR_DEBUG_h

@@ -7,14 +7,11 @@
 #include <math.h>
 #include <avr/wdt.h>
 
-#define SERIAL_PORT_CLASS HardwareSerial
-
 #define FEATURE_I2C_LCD
 #define FEATURE_LCD_DISPLAY
 #define FEATURE_WIRE_SUPPORT
 
 #include "rotator_features.h"
-#include "rotator_dependencies.h"
 
 #include <LiquidCrystal_I2C.h>
 #include "rotator_k3ngdisplay.h"
@@ -27,7 +24,7 @@
 #include "rotator_language.h"
 #include "rotator_debug.h"
 
-SERIAL_PORT_CLASS * control_port;
+HardwareSerial * control_port;
 
 byte incoming_serial_byte = 0;
 
@@ -155,7 +152,7 @@ unsigned long autocorrect_el_submit_time = 0;
 
 DebugClass debug;
 
-K3NGdisplay k3ngdisplay(LCD_COLUMNS,LCD_ROWS,LCD_UPDATE_TIME);
+K3NGdisplay k3ngdisplay(LCD_COLUMNS, LCD_ROWS, LCD_UPDATE_TIME);
 
 void read_headings();
 void service_blink_led();

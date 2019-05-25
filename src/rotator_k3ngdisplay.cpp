@@ -1,11 +1,7 @@
 #ifndef K3NG_DISPLAY_H
 #define K3NG_DISPLAY_H
 
-#if defined(ARDUINO) && ARDUINO >= 100
-  #include "Arduino.h"
-#else
-  #include "WProgram.h"
-#endif
+#include "Arduino.h"
 
 #include "rotator_k3ngdisplay.h"
 
@@ -36,53 +32,39 @@ uint8_t current_blink_state = 0;
 unsigned long next_blink_state_transition_time = TEXT_BLINK_MS;
 
 K3NGdisplay::K3NGdisplay(int _display_columns, int _display_rows, int _update_time = 1000) {
-
   display_columns = _display_columns;
   display_rows = _display_rows;
   update_time_ms = _update_time;
-
 }
 
 int K3NGdisplay::Xposition(int screen_buffer_index) {
-
   return(screen_buffer_index % display_columns);
 }
 
 int K3NGdisplay::Yposition(int screen_buffer_index) {
-
   return(screen_buffer_index / display_columns);
 }
 
 int K3NGdisplay::buffer_index_position(int x,int y) {
-
   return((y * display_columns) + x);
-
 }
 
 int K3NGdisplay::length(char * print_string) {
-
   int char_count = 0;
-
   for (int x = 0;x < (display_columns * display_rows);x++){
-	if (print_string[x] != 0){
-	  char_count++;
-	} else {
-	  x = display_columns * display_rows;
-	}
+    if (print_string[x] != 0){
+      char_count++;
+    } else {
+      x = display_columns * display_rows;
+    }
   }
-
   return char_count;
-
 }
 
 void K3NGdisplay::initialize() {
-
-  //lcd.begin(display_columns, display_rows);
   lcd.init();
   lcd.backlight();
-
   clear();
-
 }
 
 void K3NGdisplay::service(uint8_t force_update_flag = 0) {
@@ -121,12 +103,12 @@ void K3NGdisplay::service(uint8_t force_update_flag = 0) {
 
   // do we need to blink text?
   if (millis() >= next_blink_state_transition_time){
-  	if (current_blink_state){
+    if (current_blink_state){
       current_blink_state = 0;
-  	} else {
-  	  current_blink_state = 1;
-  	}
-  	next_blink_state_transition_time = millis() + TEXT_BLINK_MS;
+    } else {
+      current_blink_state = 1;
+    }
+    next_blink_state_transition_time = millis() + TEXT_BLINK_MS;
     redraw();  // TODO - check if there are actually any blink attributes, maybe separate out blink updates?
     return;
   }
@@ -158,10 +140,6 @@ void K3NGdisplay::clear() {
   }
 
   lcd.clear();
-
-  #ifdef FEATURE_4_BIT_LCD_DISPLAY
-    lcd.noCursor();
-  #endif
 
   current_print_row = 0;
   current_print_column = 0;
@@ -203,12 +181,12 @@ void K3NGdisplay::update() {
     } else {  // not a new character, do we have live character on the screen to blink?
       if (last_blink_state != current_blink_state) {
         if (screen_buffer_attributes_live[x] & ATTRIBUTE_BLINK) {
-        	lcd.setCursor(Xposition(x),Yposition(x));
-        	if (current_blink_state) {
-              lcd.print(screen_buffer_live[x]);
-      	    } else {
-      	      lcd.print(' ');
-      	    }
+          lcd.setCursor(Xposition(x),Yposition(x));
+          if (current_blink_state) {
+            lcd.print(screen_buffer_live[x]);
+          } else {
+            lcd.print(' ');
+          }
         }
       }
     }
@@ -250,13 +228,13 @@ void K3NGdisplay::print(char * print_string, int x, int y, uint8_t attribute) {
 void K3NGdisplay::print_attribute(char * print_string, int x, int y, uint8_t attribute) {
 
   for (int print_string_index = 0;print_string_index < (display_columns * display_rows);print_string_index++) {
-  	if (print_string[print_string_index] != 0) {
-  	  if (((buffer_index_position(x,y)+print_string_index)) < (display_columns * display_rows)) {
+    if (print_string[print_string_index] != 0) {
+      if (((buffer_index_position(x,y)+print_string_index)) < (display_columns * display_rows)) {
         screen_buffer_pending[buffer_index_position(x,y)+print_string_index] = print_string[print_string_index];
         screen_buffer_attributes_pending[buffer_index_position(x,y) + print_string_index] = attribute;
       }
     } else {
-    	print_string_index = display_columns * display_rows;
+      print_string_index = display_columns * display_rows;
     }
   }
 
@@ -365,7 +343,7 @@ void K3NGdisplay::print_center_screen(char * print_string,char * print_string2,c
 void K3NGdisplay::print_center_screen(char * print_string,char * print_string2,char * print_string3,char * print_string4) {
 
   if (display_rows == 4) {
-  	print_center(print_string,0);
+    print_center(print_string,0);
     print_center(print_string2,1);
     print_center(print_string3,2);
     print_center(print_string4,3);
@@ -380,12 +358,12 @@ void K3NGdisplay::print_center_screen(char * print_string,char * print_string2,c
 
 void K3NGdisplay::print_right(char * print_string,int y) {
 
-	print(print_string,display_columns-length(print_string),y);
+  print(print_string,display_columns-length(print_string),y);
 }
 
 void K3NGdisplay::print_left(char * print_string,int y) {
 
-	print(print_string,0,y);
+  print(print_string,0,y);
 }
 
 void K3NGdisplay::print_left_padded(char * print_string,int y,int padding) {
@@ -428,36 +406,36 @@ void K3NGdisplay::print_right_padded(char * print_string,int y,int padding) {
 
 void K3NGdisplay::print_top_right(char * print_string) {
 
-	print(print_string,display_columns-length(print_string),0);
+  print(print_string,display_columns-length(print_string),0);
 }
 
 void K3NGdisplay::print_top_left(char * print_string) {
 
-	print(print_string,0,0);
+  print(print_string,0,0);
 }
 
 void K3NGdisplay::print_bottom_right(char * print_string) {
 
-	print(print_string,display_columns-length(print_string),display_rows-1);
+  print(print_string,display_columns-length(print_string),display_rows-1);
 }
 
 void K3NGdisplay::print_bottom_left(char * print_string) {
 
-	print(print_string,0,display_rows-1);
+  print(print_string,0,display_rows-1);
 }
 
 void K3NGdisplay::row_scroll() {
 
   for (int x = 0; x < display_columns; x++) {
-  	for (int y = 0; y < display_rows; y++) {
+    for (int y = 0; y < display_rows; y++) {
       if (y < (display_rows-1)){
         screen_buffer_pending[buffer_index_position(x,y)] = screen_buffer_pending[buffer_index_position(x,y+1)];
         screen_buffer_attributes_pending[buffer_index_position(x,y)] = screen_buffer_attributes_pending[buffer_index_position(x,y+1)];
       } else {
-      	screen_buffer_pending[buffer_index_position(x,y)] = ' ';
-      	screen_buffer_attributes_pending[buffer_index_position(x,y)] = 0;
+        screen_buffer_pending[buffer_index_position(x,y)] = ' ';
+        screen_buffer_attributes_pending[buffer_index_position(x,y)] = 0;
       }
-  	}
+    }
   }
 
   screen_buffer_pending_dirty = 1;
@@ -485,30 +463,28 @@ void K3NGdisplay::println(char * print_string) {
 void K3NGdisplay::print_attribute(char * print_string, uint8_t text_attribute) {
 
   for (int print_string_index = 0;print_string_index < (display_columns * display_rows);print_string_index++) {
-  	switch (print_string[print_string_index]){
-      case 0: return; break;
-      case '\n':
+    switch (print_string[print_string_index]){
+      case 0: { return; break; }
+      case '\n': {
         current_print_column = display_columns;
+        break; }
+        default: {
+          if (current_print_column >= display_columns){
+            current_print_column = 0;
+            current_print_row++;
+            if (current_print_row >= display_rows){ // we're at the end of the display
+            row_scroll();
+            current_print_row--;
+          }
+        }
+        screen_buffer_pending[buffer_index_position(current_print_column,current_print_row)] = print_string[print_string_index];
+        screen_buffer_attributes_pending[buffer_index_position(current_print_column,current_print_row)] = text_attribute;
+        current_print_column++;
         break;
-      default:
-	      if (current_print_column >= display_columns){
-	        current_print_column = 0;
-	        current_print_row++;
-	      	if (current_print_row >= display_rows){ // we're at the end of the display
-	          row_scroll();
-	          current_print_row--;
-	      	}
-	      }
-	      screen_buffer_pending[buffer_index_position(current_print_column,current_print_row)] = print_string[print_string_index];
-	      screen_buffer_attributes_pending[buffer_index_position(current_print_column,current_print_row)] = text_attribute;
-	      current_print_column++;
-	      break;
+      }
     }
-
   }
-
   screen_buffer_pending_dirty = 1;
-
 }
 
 void K3NGdisplay::prepare_for_timed_screen(int ms_to_display) {
