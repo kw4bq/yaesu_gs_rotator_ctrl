@@ -378,6 +378,7 @@ char * azimuth_direction(int azimuth_in) {
 } // azimuth_direction
 
 void update_display() {
+
   byte force_display_update_now = 0;
   char workstring[32] = "";
   char workstring2[32] = "";
@@ -388,651 +389,100 @@ void update_display() {
   k3ngdisplay.clear_pending_buffer();
 
   #if defined(OPTION_DISPLAY_DIRECTION_STATUS)
-  strcpy(workstring,azimuth_direction(azimuth));  // TODO - add left/right/center
-  k3ngdisplay.print_center_fixed_field_size(workstring,LCD_DIRECTION_ROW-1,LCD_STATUS_FIELD_SIZE);
+    strcpy(workstring,azimuth_direction(azimuth));  // TODO - add left/right/center
+    k3ngdisplay.print_center_fixed_field_size(workstring,LCD_DIRECTION_ROW-1,LCD_STATUS_FIELD_SIZE);
   #endif //defined(OPTION_DISPLAY_DIRECTION_STATUS)
 
-  #if defined(OPTION_DISPLAY_HEADING)
-  #if !defined(FEATURE_ELEVATION_CONTROL)                    // ---------------- az only -----------------------------------
-  strcpy(workstring,AZIMUTH_STRING);
-  switch(configuration.azimuth_display_mode){
-    case AZ_DISPLAY_MODE_NORMAL:
-    case AZ_DISPLAY_MODE_OVERLAP_PLUS:
-    dtostrf(azimuth / LCD_HEADING_MULTIPLIER, 1, LCD_DECIMAL_PLACES, workstring2);
-    break;
-    case AZ_DISPLAY_MODE_RAW:
-    dtostrf(raw_azimuth / LCD_HEADING_MULTIPLIER, 1, LCD_DECIMAL_PLACES, workstring2);
-    break;
-  }
-  #ifdef OPTION_LCD_HEADING_FIELD_FIXED_DECIMAL_PLACE
-  switch(configuration.azimuth_display_mode){
-    case AZ_DISPLAY_MODE_NORMAL:
-    case AZ_DISPLAY_MODE_OVERLAP_PLUS:
-    if ((azimuth/ LCD_HEADING_MULTIPLIER) < 100){strcat(workstring," ");}
-    if ((azimuth/ LCD_HEADING_MULTIPLIER) < 10){strcat(workstring," ");}
-    break;
-    case AZ_DISPLAY_MODE_RAW:
-    if ((raw_azimuth/ LCD_HEADING_MULTIPLIER) < 100){strcat(workstring," ");}
-    if ((raw_azimuth/ LCD_HEADING_MULTIPLIER) < 10){strcat(workstring," ");}
-    break;
-  }
-  #endif //OPTION_LCD_HEADING_FIELD_FIXED_DECIMAL_PLACE
-  if ((configuration.azimuth_display_mode == AZ_DISPLAY_MODE_OVERLAP_PLUS) && ((raw_azimuth/LCD_HEADING_MULTIPLIER) > ANALOG_AZ_OVERLAP_DEGREES)){
-    strcat(workstring,"+");
-  }
-  strcat(workstring,workstring2);
-  strcat(workstring,DISPLAY_DEGREES_STRING);
-  k3ngdisplay.print_center_fixed_field_size(workstring,LCD_HEADING_ROW-1,LCD_HEADING_FIELD_SIZE);
-  #else                                                       // --------------------az & el---------------------------------
-  #if defined(FEATURE_ONE_DECIMAL_PLACE_HEADINGS) || defined(FEATURE_TWO_DECIMAL_PLACE_HEADINGS)
-  if ((azimuth >= 1000) && (elevation >= 1000)) {
-    strcpy(workstring,AZ_STRING);
-  } else {
-    strcpy(workstring,AZ_SPACE_STRING);
-  }
-  #else
-  strcpy(workstring,AZ_SPACE_STRING);
-  #endif // efined(FEATURE_ONE_DECIMAL_PLACE_HEADINGS) || defined(FEATURE_TWO_DECIMAL_PLACE_HEADINGS)
-  switch(configuration.azimuth_display_mode){
-    case AZ_DISPLAY_MODE_NORMAL:
-    case AZ_DISPLAY_MODE_OVERLAP_PLUS:
-    dtostrf(azimuth / LCD_HEADING_MULTIPLIER, 3, LCD_DECIMAL_PLACES, workstring2);
-    break;
-    case AZ_DISPLAY_MODE_RAW:
-    dtostrf(raw_azimuth / LCD_HEADING_MULTIPLIER, 3, LCD_DECIMAL_PLACES, workstring2);
-    break;
-  }
-  #ifdef OPTION_LCD_HEADING_FIELD_FIXED_DECIMAL_PLACE
-  switch(configuration.azimuth_display_mode){
-    case AZ_DISPLAY_MODE_NORMAL:
-    case AZ_DISPLAY_MODE_OVERLAP_PLUS:
-    if ((azimuth/ LCD_HEADING_MULTIPLIER) < 100){strcat(workstring," ");}
-    if ((azimuth/ LCD_HEADING_MULTIPLIER) < 10){strcat(workstring," ");}
-    break;
-    case AZ_DISPLAY_MODE_RAW:
-    if ((raw_azimuth/ LCD_HEADING_MULTIPLIER) < 100){strcat(workstring," ");}
-    if ((raw_azimuth/ LCD_HEADING_MULTIPLIER) < 10){strcat(workstring," ");}
-    break;
-  }
-  #endif //OPTION_LCD_HEADING_FIELD_FIXED_DECIMAL_PLACE
-  if ((configuration.azimuth_display_mode == AZ_DISPLAY_MODE_OVERLAP_PLUS) && ((raw_azimuth/LCD_HEADING_MULTIPLIER) > ANALOG_AZ_OVERLAP_DEGREES)){
-    strcat(workstring,"+");
-  }
-  strcat(workstring,workstring2);
-  #if !defined(FEATURE_ONE_DECIMAL_PLACE_HEADINGS) && !defined(FEATURE_TWO_DECIMAL_PLACE_HEADINGS)
-  if (LCD_COLUMNS > 14) {
-    strcat(workstring,DISPLAY_DEGREES_STRING);
-  }
-  #else
-  if ((LCD_COLUMNS > 18) || ((azimuth < 100) && (elevation < 100))) {
-    strcat(workstring,DISPLAY_DEGREES_STRING);
-  }
-  #endif
-  #if defined(FEATURE_ONE_DECIMAL_PLACE_HEADINGS) || defined(FEATURE_TWO_DECIMAL_PLACE_HEADINGS)
-  if ((elevation >= 1000) && (azimuth >= 1000)) {
-    strcat(workstring,SPACE_EL_STRING);
-  } else {
-    strcat(workstring,SPACE_EL_SPACE_STRING);
-  }
-  #else
-  strcat(workstring,SPACE_EL_SPACE_STRING);
-  #endif // defined(FEATURE_ONE_DECIMAL_PLACE_HEADINGS) || defined(FEATURE_TWO_DECIMAL_PLACE_HEADINGS)
-  dtostrf(elevation / LCD_HEADING_MULTIPLIER, 1, LCD_DECIMAL_PLACES, workstring2);
-  #ifdef OPTION_LCD_HEADING_FIELD_FIXED_DECIMAL_PLACE
-  if ((elevation/ LCD_HEADING_MULTIPLIER) < 100){strcat(workstring," ");}
-  if ((elevation/ LCD_HEADING_MULTIPLIER) < 10){strcat(workstring," ");}
-  #endif //OPTION_LCD_HEADING_FIELD_FIXED_DECIMAL_PLACE
-  strcat(workstring,workstring2);
-  #if !defined(FEATURE_ONE_DECIMAL_PLACE_HEADINGS) && !defined(FEATURE_TWO_DECIMAL_PLACE_HEADINGS)
-  if (LCD_COLUMNS > 14) {
-    strcat(workstring,DISPLAY_DEGREES_STRING);
-  }
-  #else
-  if ((LCD_COLUMNS > 18) || ((azimuth < 100) && (elevation < 100))) {
-    strcat(workstring,DISPLAY_DEGREES_STRING);
-  }
-  #endif
-  k3ngdisplay.print_center_fixed_field_size(workstring,LCD_HEADING_ROW-1,LCD_HEADING_FIELD_SIZE);
-  #endif // FEATURE_ELEVATION_CONTROL
-  #endif //defined(OPTION_DISPLAY_HEADING)
-
   #if defined(OPTION_DISPLAY_HEADING_AZ_ONLY)
-  strcpy(workstring,AZIMUTH_STRING);
-  switch(configuration.azimuth_display_mode){
-    case AZ_DISPLAY_MODE_NORMAL:
-    case AZ_DISPLAY_MODE_OVERLAP_PLUS:
-    dtostrf(azimuth / LCD_HEADING_MULTIPLIER, 1, LCD_DECIMAL_PLACES, workstring2);
-    break;
-    case AZ_DISPLAY_MODE_RAW:
-    dtostrf(raw_azimuth / LCD_HEADING_MULTIPLIER, 1, LCD_DECIMAL_PLACES, workstring2);
-    break;
-  }
-  #ifdef OPTION_LCD_HEADING_FIELD_FIXED_DECIMAL_PLACE
-  switch(configuration.azimuth_display_mode){
-    case AZ_DISPLAY_MODE_NORMAL:
-    case AZ_DISPLAY_MODE_OVERLAP_PLUS:
-    if ((azimuth/ LCD_HEADING_MULTIPLIER) < 100){strcat(workstring," ");}
-    if ((azimuth/ LCD_HEADING_MULTIPLIER) < 10){strcat(workstring," ");}
-    break;
-    case AZ_DISPLAY_MODE_RAW:
-    if ((raw_azimuth/ LCD_HEADING_MULTIPLIER) < 100){strcat(workstring," ");}
-    if ((raw_azimuth/ LCD_HEADING_MULTIPLIER) < 10){strcat(workstring," ");}
-    break;
-  }
-  #endif //OPTION_LCD_HEADING_FIELD_FIXED_DECIMAL_PLACE
-  if ((configuration.azimuth_display_mode == AZ_DISPLAY_MODE_OVERLAP_PLUS) && ((raw_azimuth/LCD_HEADING_MULTIPLIER) > ANALOG_AZ_OVERLAP_DEGREES)){
-    strcat(workstring,"+");
-  }
-  strcat(workstring,workstring2);
-  strcat(workstring,DISPLAY_DEGREES_STRING);
-  k3ngdisplay.print_center_fixed_field_size(workstring,LCD_AZ_ONLY_HEADING_ROW-1,LCD_AZ_ONLY_HEADING_FIELD_SIZE);
+    strcpy(workstring,AZIMUTH_STRING);
+    switch(configuration.azimuth_display_mode){
+      case AZ_DISPLAY_MODE_NORMAL:
+      case AZ_DISPLAY_MODE_OVERLAP_PLUS:
+        dtostrf(azimuth / LCD_HEADING_MULTIPLIER, 1, LCD_DECIMAL_PLACES, workstring2);
+        break;
+      case AZ_DISPLAY_MODE_RAW:
+        dtostrf(raw_azimuth / LCD_HEADING_MULTIPLIER, 1, LCD_DECIMAL_PLACES, workstring2);
+        break;
+    }
+
+    if ((configuration.azimuth_display_mode == AZ_DISPLAY_MODE_OVERLAP_PLUS) && ((raw_azimuth/LCD_HEADING_MULTIPLIER) > ANALOG_AZ_OVERLAP_DEGREES)){
+      strcat(workstring,"+");
+    }
+    strcat(workstring,workstring2);
+    strcat(workstring,DISPLAY_DEGREES_STRING);
+    k3ngdisplay.print_center_fixed_field_size(workstring,LCD_AZ_ONLY_HEADING_ROW-1,LCD_AZ_ONLY_HEADING_FIELD_SIZE);
   #endif //defined(OPTION_DISPLAY_HEADING_AZ_ONLY)
 
-  #if defined(OPTION_DISPLAY_HEADING_EL_ONLY) && defined(FEATURE_ELEVATION_CONTROL)
-  // #if defined(FEATURE_ONE_DECIMAL_PLACE_HEADINGS) || defined(FEATURE_TWO_DECIMAL_PLACE_HEADINGS)
-  // if ((elevation >= 1000)) {
-  // strcpy(workstring,SPACE_EL_STRING);
-  // } else {
-  // strcpy(workstring,SPACE_EL_SPACE_STRING);
-  // }
-  // #else
-  strcpy(workstring,ELEVATION_STRING);
-  // #endif // defined(FEATURE_ONE_DECIMAL_PLACE_HEADINGS) || defined(FEATURE_TWO_DECIMAL_PLACE_HEADINGS)
-  dtostrf(elevation / LCD_HEADING_MULTIPLIER, 1, LCD_DECIMAL_PLACES, workstring2);
-  #ifdef OPTION_LCD_HEADING_FIELD_FIXED_DECIMAL_PLACE
-  if ((elevation/ LCD_HEADING_MULTIPLIER) < 100){strcat(workstring," ");}
-  if ((elevation/ LCD_HEADING_MULTIPLIER) < 10){strcat(workstring," ");}
-  #endif //OPTION_LCD_HEADING_FIELD_FIXED_DECIMAL_PLACE
-  strcat(workstring,workstring2);
-  #if !defined(FEATURE_ONE_DECIMAL_PLACE_HEADINGS) && !defined(FEATURE_TWO_DECIMAL_PLACE_HEADINGS)
-  if (LCD_COLUMNS > 14) {
-    strcat(workstring,DISPLAY_DEGREES_STRING);
-  }
-  #else
-  if ((LCD_COLUMNS > 18) || (elevation < 100)) {
-    strcat(workstring,DISPLAY_DEGREES_STRING);
-  }
-  #endif
-  k3ngdisplay.print_center_fixed_field_size(workstring,LCD_EL_ONLY_HEADING_ROW-1,LCD_EL_ONLY_HEADING_FIELD_SIZE);
+  #if defined(OPTION_DISPLAY_HEADING_EL_ONLY)
+    strcpy(workstring,ELEVATION_STRING);
+    dtostrf(elevation / LCD_HEADING_MULTIPLIER, 1, LCD_DECIMAL_PLACES, workstring2);
+    strcat(workstring,workstring2);
+    if ((LCD_COLUMNS > 18) || (elevation < 100)) {
+      strcat(workstring,DISPLAY_DEGREES_STRING);
+    }
+    k3ngdisplay.print_center_fixed_field_size(workstring,LCD_EL_ONLY_HEADING_ROW-1,LCD_EL_ONLY_HEADING_FIELD_SIZE);
   #endif //defined(OPTION_DISPLAY_HEADING_EL_ONLY)
 
   #if defined(OPTION_DISPLAY_STATUS)
-
-  strcpy(workstring,"");
-  if (az_state != IDLE) {
-    if (az_request_queue_state == IN_PROGRESS_TO_TARGET) {
-      if (current_az_state() == ROTATING_CW) {
-        strcat(workstring,CW_STRING);
-      } else {
-        strcat(workstring,CCW_STRING);
-      }
-      strcat(workstring," ");
-      switch(configuration.azimuth_display_mode){
-        case AZ_DISPLAY_MODE_NORMAL:
-        case AZ_DISPLAY_MODE_OVERLAP_PLUS:
-        dtostrf(target_azimuth / LCD_HEADING_MULTIPLIER, 1, LCD_DECIMAL_PLACES, workstring2);
-        break;
-        case AZ_DISPLAY_MODE_RAW:
-        dtostrf(target_raw_azimuth / LCD_HEADING_MULTIPLIER, 1, LCD_DECIMAL_PLACES, workstring2);
-        break;
-      }
-      if ((configuration.azimuth_display_mode == AZ_DISPLAY_MODE_OVERLAP_PLUS) && ((raw_azimuth/LCD_HEADING_MULTIPLIER) > ANALOG_AZ_OVERLAP_DEGREES)){
-        strcat(workstring,"+");
-      }
-      strcat(workstring,workstring2);
-      strcat(workstring,DISPLAY_DEGREES_STRING);
-      row_override[LCD_STATUS_ROW] = 1;
-    } else {
-      if (current_az_state() == ROTATING_CW) {
-        strcpy(workstring,CW_STRING);
-      } else {
-        strcpy(workstring,CCW_STRING);
-      }
-    }
-  }
-  if (el_state != IDLE) {
-    if (az_state != IDLE){
-      strcat(workstring," ");
-    }
-    if (el_request_queue_state == IN_PROGRESS_TO_TARGET) {
-      if (current_el_state() == ROTATING_UP) {
-        strcat(workstring,UP_STRING);
-      } else {
-        strcat(workstring,DOWN_STRING);
-      }
-      strcat(workstring," ");
-      dtostrf(target_elevation / LCD_HEADING_MULTIPLIER, 1, LCD_DECIMAL_PLACES, workstring2);
-      strcat(workstring,workstring2);
-      strcat(workstring,DISPLAY_DEGREES_STRING);
-      row_override[LCD_STATUS_ROW] = 1;
-    } else {
-      if (current_el_state() == ROTATING_UP) {
-        strcat(workstring,UP_STRING);
-      } else {
-        strcat(workstring,DOWN_STRING);
-      }
-    }
-  }
-
-  if ((az_state != IDLE) || (el_state != IDLE)){
-    k3ngdisplay.print_center_fixed_field_size(workstring,LCD_STATUS_ROW-1,LCD_STATUS_FIELD_SIZE);
-  } //<added
-
-  #if defined(FEATURE_AZ_PRESET_ENCODER) && !defined(FEATURE_EL_PRESET_ENCODER)
-  float target = 0;
-  if (preset_encoders_state == ENCODER_AZ_PENDING) {
-    target = az_encoder_raw_degrees;
-    if (target > (359 * LCD_HEADING_MULTIPLIER)) {
-      target = target - (360 * LCD_HEADING_MULTIPLIER);
-    }
-    if (target > (359 * LCD_HEADING_MULTIPLIER)) {
-      target = target - (360 * LCD_HEADING_MULTIPLIER);
-    }
-    strcpy(workstring,TARGET_STRING);
-    dtostrf(target / LCD_HEADING_MULTIPLIER, 1, LCD_DECIMAL_PLACES, workstring2);
-    strcat(workstring,workstring2);
-    strcat(workstring,DISPLAY_DEGREES_STRING);
-    k3ngdisplay.print_center_fixed_field_size(workstring,LCD_STATUS_ROW-1,LCD_STATUS_FIELD_SIZE);
-    row_override[LCD_STATUS_ROW] = 1;
-  }
-  #endif //defined(FEATURE_AZ_PRESET_ENCODER) && !defined(FEATURE_EL_PRESET_ENCODER)
-
-  #if defined(FEATURE_AZ_PRESET_ENCODER) && defined(FEATURE_EL_PRESET_ENCODER)
-  float target = az_encoder_raw_degrees;
-  if (target > (359 * LCD_HEADING_MULTIPLIER)) {
-    target = target - (360 * LCD_HEADING_MULTIPLIER);
-  }
-  if (target > (359 * LCD_HEADING_MULTIPLIER)) {
-    target = target - (360 * LCD_HEADING_MULTIPLIER);
-  }
-
-  if (preset_encoders_state != ENCODER_IDLE) {
-    switch (preset_encoders_state) {
-      case ENCODER_AZ_PENDING:
-      strcpy(workstring,AZ_TARGET_STRING);
-      dtostrf(target / LCD_HEADING_MULTIPLIER, 1, LCD_DECIMAL_PLACES, workstring2);
-      strcat(workstring,workstring2);
-      strcat(workstring,DISPLAY_DEGREES_STRING);
-      k3ngdisplay.print_center_fixed_field_size(workstring,LCD_STATUS_ROW-1,LCD_STATUS_FIELD_SIZE);
-      row_override[LCD_STATUS_ROW] = 1;
-      break;
-      case ENCODER_EL_PENDING:
-      strcpy(workstring,EL_TARGET_STRING);
-      dtostrf(el_encoder_degrees / LCD_HEADING_MULTIPLIER, 1, LCD_DECIMAL_PLACES, workstring2);
-      strcat(workstring,workstring2);
-      strcat(workstring,DISPLAY_DEGREES_STRING);
-      k3ngdisplay.print_center_fixed_field_size(workstring,LCD_STATUS_ROW-1,LCD_STATUS_FIELD_SIZE);
-      row_override[LCD_STATUS_ROW] = 1;
-      break;
-      case ENCODER_AZ_EL_PENDING:
-      strcpy(workstring,TARGET_STRING);
-      dtostrf(target / LCD_HEADING_MULTIPLIER, 1, LCD_DECIMAL_PLACES, workstring2);
-      strcat(workstring,workstring2);
-      strcat(workstring,DISPLAY_DEGREES_STRING);
-      strcat(workstring," ");
-      dtostrf(el_encoder_degrees / LCD_HEADING_MULTIPLIER, 1, LCD_DECIMAL_PLACES, workstring2);
-      strcat(workstring,workstring2);
-      strcat(workstring,DISPLAY_DEGREES_STRING);
-      k3ngdisplay.print_center_fixed_field_size(workstring,LCD_STATUS_ROW-1,LCD_STATUS_FIELD_SIZE);
-      row_override[LCD_STATUS_ROW] = 1;
-      break;
-    } // switch
-  } //if (preset_encoders_state != ENCODER_IDLE)
-  #endif  //defined(FEATURE_AZ_PRESET_ENCODER) && !defined(FEATURE_EL_PRESET_ENCODER)
-
-  #endif //defined(OPTION_DISPLAY_STATUS)
-
-  #if defined(OPTION_DISPLAY_HHMMSS_CLOCK) && defined(FEATURE_CLOCK)
-
-  static int last_clock_seconds = 0;
-
-  if (!row_override[LCD_HHMMSS_CLOCK_ROW]){
-    update_time();
-    #ifdef OPTION_CLOCK_ALWAYS_HAVE_HOUR_LEADING_ZERO
-    if (local_clock_hours < 10) {
-      strcpy(workstring, "0");
-      dtostrf(local_clock_hours, 0, 0, workstring2);
-      strcat(workstring,workstring2);
-    } else {
-      dtostrf(local_clock_hours, 0, 0, workstring2);
-      strcpy(workstring,workstring2);
-    }
-    #else
-    dtostrf(local_clock_hours, 0, 0, workstring2);
-    strcpy(workstring,workstring2);
-    #endif //OPTION_CLOCK_ALWAYS_HAVE_HOUR_LEADING_ZERO
-    strcat(workstring,":");
-    if (local_clock_minutes < 10) {
-      strcat(workstring, "0");
-    }
-    dtostrf(local_clock_minutes, 0, 0, workstring2);
-    strcat(workstring,workstring2);
-    strcat(workstring,":");
-    if (local_clock_seconds < 10) {
-      strcat(workstring, "0");
-    }
-    dtostrf(local_clock_seconds, 0, 0, workstring2);
-    strcat(workstring,workstring2);
-    if (LCD_HHMMSS_CLOCK_POSITION == LEFT){
-      k3ngdisplay.print_left_fixed_field_size(workstring,LCD_HHMMSS_CLOCK_ROW-1,8);
-    }
-    if (LCD_HHMMSS_CLOCK_POSITION == RIGHT){
-      k3ngdisplay.print_right_fixed_field_size(workstring,LCD_HHMMSS_CLOCK_ROW-1,8);
-    }
-    if (LCD_HHMMSS_CLOCK_POSITION == CENTER){
-      k3ngdisplay.print_center_fixed_field_size(workstring,LCD_HHMMSS_CLOCK_ROW-1,8);
-    }
-    if (last_clock_seconds != clock_seconds) {force_display_update_now = 1;}
-    last_clock_seconds = clock_seconds;
-  }
-  #endif //defined(OPTION_DISPLAY_HHMMSS_CLOCK) && defined(FEATURE_CLOCK)
-
-  #if defined(OPTION_DISPLAY_HHMM_CLOCK) && defined(FEATURE_CLOCK)
-  if (!row_override[LCD_HHMM_CLOCK_ROW]){
-    update_time();
-    #ifdef OPTION_CLOCK_ALWAYS_HAVE_HOUR_LEADING_ZERO
-    if (local_clock_hours < 10) {
-      strcpy(workstring, "0");
-      dtostrf(local_clock_hours, 0, 0, workstring2);
-      strcat(workstring,workstring2);
-    } else {
-      dtostrf(local_clock_hours, 0, 0, workstring2);
-      strcpy(workstring,workstring2);
-    }
-    #else
-    dtostrf(local_clock_hours, 0, 0, workstring2);
-    strcpy(workstring,workstring2);
-    #endif //OPTION_CLOCK_ALWAYS_HAVE_HOUR_LEADING_ZERO
-    strcat(workstring,":");
-    if (local_clock_minutes < 10) {
-      strcat(workstring, "0");
-    }
-    dtostrf(local_clock_minutes, 0, 0, workstring2);
-    strcat(workstring,workstring2);
-    if (LCD_HHMM_CLOCK_POSITION == LEFT){
-      k3ngdisplay.print_left_fixed_field_size(workstring,LCD_HHMM_CLOCK_ROW-1,5);
-    }
-    if (LCD_HHMM_CLOCK_POSITION == RIGHT){
-      k3ngdisplay.print_right_fixed_field_size(workstring,LCD_HHMM_CLOCK_ROW-1,5);
-    }
-    if (LCD_HHMM_CLOCK_POSITION == CENTER){
-      k3ngdisplay.print_center_fixed_field_size(workstring,LCD_HHMM_CLOCK_ROW-1,5);
-    }
-  }
-  #endif //defined(OPTION_DISPLAY_HHMM_CLOCK) && defined(FEATURE_CLOCK)
-
-  #if defined(OPTION_DISPLAY_GPS_INDICATOR) && defined(FEATURE_GPS) && defined(FEATURE_CLOCK)
-  if (((clock_status == GPS_SYNC) || (clock_status == SLAVE_SYNC_GPS)) && (!row_override[LCD_GPS_INDICATOR_ROW])){
-    if (LCD_GPS_INDICATOR_POSITION == LEFT){
-      k3ngdisplay.print_left_fixed_field_size(GPS_STRING,LCD_GPS_INDICATOR_ROW-1,3);
-    }
-    if (LCD_GPS_INDICATOR_POSITION == RIGHT){
-      k3ngdisplay.print_right_fixed_field_size(GPS_STRING,LCD_GPS_INDICATOR_ROW-1,3);
-    }
-    if (LCD_GPS_INDICATOR_POSITION == CENTER){
-      k3ngdisplay.print_center_fixed_field_size(GPS_STRING,LCD_GPS_INDICATOR_ROW-1,3);
-    }
-  }
-  #endif //defined(OPTION_DISPLAY_GPS_INDICATOR) && defined(FEATURE_GPS)  && defined(FEATURE_CLOCK)
-
-  #if defined(OPTION_DISPLAY_MOON_TRACKING_CONTINUOUSLY) && defined(FEATURE_MOON_TRACKING)
-
-  // static unsigned long last_moon_tracking_check_time = 0;
-
-  if (!row_override[LCD_MOON_TRACKING_ROW]){
-    if (((millis()-last_moon_tracking_check_time) > LCD_MOON_TRACKING_UPDATE_INTERVAL)) {
-      update_moon_position();
-      last_moon_tracking_check_time = millis();
-    }
     strcpy(workstring,"");
-    if (moon_tracking_active){
-      if (moon_visible){
-        strcat(workstring,TRACKING_ACTIVE_CHAR);
-      } else {
-        strcat(workstring,TRACKING_INACTIVE_CHAR);
-      }
-    }
-    strcat(workstring,MOON_STRING);
-    dtostrf(moon_azimuth,0,LCD_DECIMAL_PLACES,workstring2);
-    strcat(workstring,workstring2);
-    if ((LCD_COLUMNS>16) && ((moon_azimuth < 100) || (abs(moon_elevation)<100))) {strcat(workstring,DISPLAY_DEGREES_STRING);}
-    strcat(workstring," ");
-    dtostrf(moon_elevation,0,LCD_DECIMAL_PLACES,workstring2);
-    strcat(workstring,workstring2);
-    if ((LCD_COLUMNS>16) && ((moon_azimuth < 100) || (abs(moon_elevation)<100))) {strcat(workstring,DISPLAY_DEGREES_STRING);}
-    if (moon_tracking_active){
-      if (moon_visible){
-        strcat(workstring,TRACKING_ACTIVE_CHAR);
-      } else {
-        strcat(workstring,TRACKING_INACTIVE_CHAR);
-      }
-    }
-    k3ngdisplay.print_center_fixed_field_size(workstring,LCD_MOON_TRACKING_ROW-1,LCD_COLUMNS);
-  } else {
-    #if defined(DEBUG_DISPLAY)
-    debug.println(F("update_display: OPTION_DISPLAY_MOON_TRACKING_CONTINUOUSLY row override"));
-    #endif
-  }
-  #endif //defined(OPTION_DISPLAY_MOON_TRACKING_CONTINUOUSLY) && defined(FEATURE_MOON_TRACKING)
-
-  #if defined(OPTION_DISPLAY_SUN_TRACKING_CONTINUOUSLY) && defined(FEATURE_SUN_TRACKING)
-
-  // static unsigned long last_sun_tracking_check_time = 0;
-
-  if (!row_override[LCD_SUN_TRACKING_ROW]){
-    if ((millis()-last_sun_tracking_check_time) > LCD_SUN_TRACKING_UPDATE_INTERVAL) {
-      update_sun_position();
-      last_sun_tracking_check_time = millis();
-    }
-    strcpy(workstring,"");
-    if (sun_tracking_active){
-      if (sun_visible){
-        strcat(workstring,TRACKING_ACTIVE_CHAR);
-      } else {
-        strcat(workstring,TRACKING_INACTIVE_CHAR);
-      }
-    }
-    strcat(workstring,SUN_STRING);
-    dtostrf(sun_azimuth,0,LCD_DECIMAL_PLACES,workstring2);
-    strcat(workstring,workstring2);
-    if ((LCD_COLUMNS>16) && ((sun_azimuth < 100) || (abs(sun_elevation)<100))) {strcat(workstring,DISPLAY_DEGREES_STRING);}
-    strcat(workstring," ");
-    dtostrf(sun_elevation,0,LCD_DECIMAL_PLACES,workstring2);
-    strcat(workstring,workstring2);
-    if ((LCD_COLUMNS>16) && ((sun_azimuth < 100) || (abs(sun_elevation)<100))) {strcat(workstring,DISPLAY_DEGREES_STRING);}
-    if (sun_tracking_active){
-      if (sun_visible){
-        strcat(workstring,TRACKING_ACTIVE_CHAR);
-      } else {
-        strcat(workstring,TRACKING_INACTIVE_CHAR);
-      }
-    }
-    k3ngdisplay.print_center_fixed_field_size(workstring,LCD_SUN_TRACKING_ROW-1,LCD_COLUMNS);
-  } else {
-    #if defined(DEBUG_DISPLAY)
-    debug.println(F("update_display: OPTION_DISPLAY_SUN_TRACKING_CONTINUOUSLY row override"));
-    #endif
-  }
-  #endif //defined(OPTION_DISPLAY_SUN_TRACKING_CONTINUOUSLY) && defined(FEATURE_SUN_TRACKING)
-
-  #if defined(OPTION_DISPLAY_ALT_HHMM_CLOCK_AND_MAIDENHEAD) && defined(FEATURE_CLOCK)
-
-  static byte displaying_clock = 1;
-  static unsigned long last_hhmm_clock_maidenhead_switch_time = 0;
-
-
-  if (!row_override[LCD_ALT_HHMM_CLOCK_AND_MAIDENHEAD_ROW]){
-    if ((millis()-last_hhmm_clock_maidenhead_switch_time) > 5000){
-      if (displaying_clock){
-        displaying_clock = 0;
-      } else {
-        displaying_clock = 1;
-      }
-      last_hhmm_clock_maidenhead_switch_time = millis();
-    }
-    if (displaying_clock){
-      update_time();
-      strcpy(workstring, "");
-      #ifdef OPTION_CLOCK_ALWAYS_HAVE_HOUR_LEADING_ZERO
-      if (local_clock_hours < 10) {
-        strcpy(workstring, "0");
-        dtostrf(local_clock_hours, 0, 0, workstring2);
+    if (az_state != IDLE) {
+      if (az_request_queue_state == IN_PROGRESS_TO_TARGET) {
+        if (current_az_state() == ROTATING_CW) {
+          strcat(workstring,CW_STRING);
+        } else {
+          strcat(workstring,CCW_STRING);
+        }
+        strcat(workstring," ");
+        switch(configuration.azimuth_display_mode){
+          case AZ_DISPLAY_MODE_NORMAL:
+          case AZ_DISPLAY_MODE_OVERLAP_PLUS:
+            dtostrf(target_azimuth / LCD_HEADING_MULTIPLIER, 1, LCD_DECIMAL_PLACES, workstring2);
+            break;
+          case AZ_DISPLAY_MODE_RAW:
+            dtostrf(target_raw_azimuth / LCD_HEADING_MULTIPLIER, 1, LCD_DECIMAL_PLACES, workstring2);
+            break;
+        }
+        if ((configuration.azimuth_display_mode == AZ_DISPLAY_MODE_OVERLAP_PLUS) && ((raw_azimuth/LCD_HEADING_MULTIPLIER) > ANALOG_AZ_OVERLAP_DEGREES)){
+          strcat(workstring,"+");
+        }
         strcat(workstring,workstring2);
+        strcat(workstring,DISPLAY_DEGREES_STRING);
+        row_override[LCD_STATUS_ROW] = 1;
       } else {
-        dtostrf(local_clock_hours, 0, 0, workstring2);
-        strcpy(workstring,workstring2);
-      }
-      #else
-      dtostrf(local_clock_hours, 0, 0, workstring2);
-      strcpy(workstring,workstring2);
-      #endif //OPTION_CLOCK_ALWAYS_HAVE_HOUR_LEADING_ZERO
-      strcat(workstring,":");
-      if (local_clock_minutes < 10) {
-        strcat(workstring, "0");
-      }
-      dtostrf(local_clock_minutes, 0, 0, workstring2);
-      strcat(workstring,workstring2);
-      switch (LCD_ALT_HHMM_CLOCK_AND_MAIDENHEAD_POSITION){
-        case LEFT: k3ngdisplay.print_left_fixed_field_size(workstring,LCD_ALT_HHMM_CLOCK_AND_MAIDENHEAD_ROW-1,6); break;
-        case RIGHT: k3ngdisplay.print_right_fixed_field_size(workstring,LCD_ALT_HHMM_CLOCK_AND_MAIDENHEAD_ROW-1,6); break;
-        case CENTER: k3ngdisplay.print_center_fixed_field_size(workstring,LCD_ALT_HHMM_CLOCK_AND_MAIDENHEAD_ROW-1,6); break;
-      }
-    } else {
-      switch (LCD_ALT_HHMM_CLOCK_AND_MAIDENHEAD_POSITION){
-        case LEFT: k3ngdisplay.print_left_fixed_field_size(coordinates_to_maidenhead(latitude,longitude),LCD_ALT_HHMM_CLOCK_AND_MAIDENHEAD_ROW-1,6); break;
-        case RIGHT: k3ngdisplay.print_right_fixed_field_size(coordinates_to_maidenhead(latitude,longitude),LCD_ALT_HHMM_CLOCK_AND_MAIDENHEAD_ROW-1,6); break;
-        case CENTER: k3ngdisplay.print_center_fixed_field_size(coordinates_to_maidenhead(latitude,longitude),LCD_ALT_HHMM_CLOCK_AND_MAIDENHEAD_ROW-1,6); break;
+        if (current_az_state() == ROTATING_CW) {
+          strcpy(workstring,CW_STRING);
+        } else {
+          strcpy(workstring,CCW_STRING);
+        }
       }
     }
-  }
-  #endif //defined(OPTION_DISPLAY_ALT_HHMM_CLOCK_AND_MAIDENHEAD) && defined(FEATURE_CLOCK)
-
-  #if defined(OPTION_DISPLAY_CONSTANT_HHMMSS_CLOCK_AND_MAIDENHEAD) && defined(FEATURE_CLOCK)
-
-  static int last_clock_seconds_clock_and_maidenhead = 0;
-
-  if (!row_override[LCD_CONSTANT_HHMMSS_CLOCK_AND_MAIDENHEAD_ROW]){
-    update_time();
-    #ifdef OPTION_CLOCK_ALWAYS_HAVE_HOUR_LEADING_ZERO
-    if (local_clock_hours < 10) {
-      strcpy(workstring, "0");
-      dtostrf(local_clock_hours, 0, 0, workstring2);
-      strcat(workstring,workstring2);
-    } else {
-      dtostrf(local_clock_hours, 0, 0, workstring2);
-      strcpy(workstring,workstring2);
+    if (el_state != IDLE) {
+      if (az_state != IDLE){
+        strcat(workstring," ");
+      }
+      if (el_request_queue_state == IN_PROGRESS_TO_TARGET) {
+        if (current_el_state() == ROTATING_UP) {
+          strcat(workstring,UP_STRING);
+        } else {
+          strcat(workstring,DOWN_STRING);
+        }
+        strcat(workstring," ");
+        dtostrf(target_elevation / LCD_HEADING_MULTIPLIER, 1, LCD_DECIMAL_PLACES, workstring2);
+        strcat(workstring,workstring2);
+        strcat(workstring,DISPLAY_DEGREES_STRING);
+        row_override[LCD_STATUS_ROW] = 1;
+      } else {
+        if (current_el_state() == ROTATING_UP) {
+          strcat(workstring,UP_STRING);
+        } else {
+          strcat(workstring,DOWN_STRING);
+        }
+      }
     }
-    #else
-    dtostrf(local_clock_hours, 0, 0, workstring2);
-    strcpy(workstring,workstring2);
-    #endif //OPTION_CLOCK_ALWAYS_HAVE_HOUR_LEADING_ZERO
-    strcat(workstring,":");
-    if (local_clock_minutes < 10) {
-      strcat(workstring, "0");
-    }
-    dtostrf(local_clock_minutes, 0, 0, workstring2);
-    strcat(workstring,workstring2);
-    strcat(workstring,":");
-    if (local_clock_seconds < 10) {
-      strcat(workstring, "0");
-    }
-    dtostrf(local_clock_seconds, 0, 0, workstring2);
-    strcat(workstring,workstring2);
-    strcat(workstring," ");
-    strcat(workstring,coordinates_to_maidenhead(latitude,longitude));
-    switch(LCD_CONSTANT_HHMMSS_CLOCK_AND_MAIDENHEAD_POSITION){
-      case LEFT: k3ngdisplay.print_left_fixed_field_size(workstring,LCD_CONSTANT_HHMMSS_CLOCK_AND_MAIDENHEAD_ROW-1,LCD_COLUMNS); break;
-      case RIGHT: k3ngdisplay.print_right_fixed_field_size(workstring,LCD_CONSTANT_HHMMSS_CLOCK_AND_MAIDENHEAD_ROW-1,LCD_COLUMNS); break;
-      case CENTER: k3ngdisplay.print_center_fixed_field_size(workstring,LCD_CONSTANT_HHMMSS_CLOCK_AND_MAIDENHEAD_ROW-1,LCD_COLUMNS); break;
-    }
-    if (last_clock_seconds_clock_and_maidenhead != local_clock_seconds) {force_display_update_now = 1;}
-    last_clock_seconds_clock_and_maidenhead = local_clock_seconds;
-  }
-
-  #endif //defined(OPTION_DISPLAY_CONSTANT_HHMMSS_CLOCK_AND_MAIDENHEAD) && defined(FEATURE_CLOCK)
-
-  #ifdef OPTION_DISPLAY_MOON_OR_SUN_TRACKING_CONDITIONAL
-
-  //  moon tracking ----
-  #ifdef FEATURE_MOON_TRACKING
-
-  // static unsigned long last_moon_tracking_check_time = 0;
-
-  if ((!row_override[LCD_MOON_OR_SUN_TRACKING_CONDITIONAL_ROW])  && (moon_tracking_active)) {
-    if (((millis()-last_moon_tracking_check_time) > LCD_MOON_TRACKING_UPDATE_INTERVAL)) {
-      update_moon_position();
-      last_moon_tracking_check_time = millis();
-    }
-    if (moon_visible){
-      strcpy(workstring,TRACKING_ACTIVE_CHAR);
-    } else {
-      strcpy(workstring,TRACKING_INACTIVE_CHAR);
-    }
-    strcat(workstring,MOON_STRING);
-    dtostrf(moon_azimuth,0,LCD_DECIMAL_PLACES,workstring2);
-    strcat(workstring,workstring2);
-    if ((LCD_COLUMNS>16) && ((moon_azimuth < 100) || (abs(moon_elevation)<100))) {strcat(workstring,DISPLAY_DEGREES_STRING);}
-    strcat(workstring," ");
-    dtostrf(moon_elevation,0,LCD_DECIMAL_PLACES,workstring2);
-    strcat(workstring,workstring2);
-    if ((LCD_COLUMNS>16) && ((moon_azimuth < 100) || (abs(moon_elevation)<100))) {strcat(workstring,DISPLAY_DEGREES_STRING);}
-    if (moon_visible){
-      strcat(workstring,TRACKING_ACTIVE_CHAR);
-    } else {
-      strcat(workstring,TRACKING_INACTIVE_CHAR);
-    }
-    k3ngdisplay.print_center_fixed_field_size(workstring,LCD_MOON_OR_SUN_TRACKING_CONDITIONAL_ROW-1,LCD_COLUMNS);
-  }
-  #endif //FEATURE_MOON_TRACKING
-
-
-  //  sun tracking ----
-  #ifdef FEATURE_SUN_TRACKING
-  // static unsigned long last_sun_tracking_check_time = 0;
-
-  if ((!row_override[LCD_MOON_OR_SUN_TRACKING_CONDITIONAL_ROW]) && (sun_tracking_active)){
-    if ((millis()-last_sun_tracking_check_time) > LCD_SUN_TRACKING_UPDATE_INTERVAL) {
-      update_sun_position();
-      last_sun_tracking_check_time = millis();
-    }
-    if (sun_visible){
-      strcpy(workstring,TRACKING_ACTIVE_CHAR);
-    } else {
-      strcpy(workstring,TRACKING_INACTIVE_CHAR);
-    }
-    strcat(workstring,SUN_STRING);
-    dtostrf(sun_azimuth,0,LCD_DECIMAL_PLACES,workstring2);
-    strcat(workstring,workstring2);
-    if ((LCD_COLUMNS>16) && ((sun_azimuth < 100) || (abs(sun_elevation)<100))) {strcat(workstring,DISPLAY_DEGREES_STRING);}
-    strcat(workstring," ");
-    dtostrf(sun_elevation,0,LCD_DECIMAL_PLACES,workstring2);
-    strcat(workstring,workstring2);
-    if ((LCD_COLUMNS>16) && ((sun_azimuth < 100) || (abs(sun_elevation)<100))) {strcat(workstring,DISPLAY_DEGREES_STRING);}
-    if (sun_visible){
-      strcat(workstring,TRACKING_ACTIVE_CHAR);
-    } else {
-      strcat(workstring,TRACKING_INACTIVE_CHAR);
-    }
-    k3ngdisplay.print_center_fixed_field_size(workstring,LCD_MOON_OR_SUN_TRACKING_CONDITIONAL_ROW-1,LCD_COLUMNS);
-  }
-
-  #endif //FEATURE_SUN_TRACKING
-
-  #endif //OPTION_DISPLAY_MOON_OR_SUN_TRACKING_CONDITIONAL
-
-  #if defined(OPTION_DISPLAY_BIG_CLOCK) && defined(FEATURE_CLOCK)
-
-  static byte big_clock_last_clock_seconds = 0;
-
-  if (!row_override[LCD_BIG_CLOCK_ROW]){
-    update_time();
-    k3ngdisplay.print_center_entire_row(timezone_modified_clock_string(),LCD_BIG_CLOCK_ROW-1,0);
-    if (big_clock_last_clock_seconds != clock_seconds) {
-      force_display_update_now = 1;
-      big_clock_last_clock_seconds = clock_seconds;
-    }
-  }
-  #endif //defined(OPTION_DISPLAY_BIG_CLOCK) && defined(FEATURE_CLOCK)
+    if ((az_state != IDLE) || (el_state != IDLE)){
+      k3ngdisplay.print_center_fixed_field_size(workstring,LCD_STATUS_ROW-1,LCD_STATUS_FIELD_SIZE);
+    } 
+  #endif //defined(OPTION_DISPLAY_STATUS)
 
   static unsigned long last_full_screen_redraw = 0;
 
@@ -1041,12 +491,7 @@ void update_display() {
     k3ngdisplay.redraw();
     last_full_screen_redraw = millis();
   } else {
-
-
-    // do it ! ************************************
     k3ngdisplay.service(force_display_update_now);
-    //force_display_update_now = 0;
-
   }
 
 } // update_display
